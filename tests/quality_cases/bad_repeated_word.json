@@ -1,0 +1,27 @@
+{
+  "case_id": "bad_repeated_word_001",
+  "description": "重复词应命中 repeated_word，并由字段级小修替换。",
+  "brief": {
+    "email_subject": "测试邮件",
+    "today_theme": "基层治理",
+    "featured_article": {
+      "title": "规范公共治理边界",
+      "rewritable_expression": "企业以以钓代捕为名参与公共治理，容易造成权责不清。"
+    },
+    "daily_question": {
+      "question": "某地公共治理项目存在争议，请提出处理建议。",
+      "candidate_answer": "我认为要先核查事实，再明确责任边界。"
+    },
+    "today_takeaway": {
+      "golden_sentences": ["治理要把权责边界说清楚。"]
+    },
+    "quick_reads": []
+  },
+  "plain_text": "企业以以钓代捕为名参与公共治理，容易造成权责不清。",
+  "html_body": "<html><body>企业以以钓代捕为名参与公共治理，容易造成权责不清。</body></html>",
+  "expected_issue_codes": ["repeated_word"],
+  "unexpected_issue_codes": ["authority_overclaim", "legal_overstatement", "html_plain_mismatch"],
+  "expect_changed": true,
+  "fixed_must_not_contain": ["以以"],
+  "fixed_must_contain": ["以钓代捕"]
+}

@@ -1,0 +1,25 @@
+{
+  "case_id": "bad_mobile_paragraph_too_long_001",
+  "description": "plain_text 单行过长应命中 mobile_paragraph_too_long。",
+  "brief": {
+    "email_subject": "测试邮件",
+    "today_theme": "公共服务",
+    "featured_article": {
+      "title": "公共服务改进",
+      "rewritable_expression": "公共服务改进要从群众最有感的环节入手。"
+    },
+    "daily_question": {
+      "question": "某地公共服务体验不佳，请提出建议。",
+      "candidate_answer": "我认为要先摸清群众不满意的环节，再分类推进整改。"
+    },
+    "today_takeaway": {
+      "golden_sentences": ["公共服务的质量，最终要由群众感受来检验。"]
+    },
+    "quick_reads": []
+  },
+  "plain_text": "公共服务改进不能只停留在窗口态度和流程压缩上，还要把群众最常遇到的堵点、部门之间最容易推诿的责任、基层一线最缺的资源和后续反馈最容易断开的环节一起纳入治理视野，真正让政策目标、办事流程、部门协同、结果反馈形成闭环，让群众不是只听到承诺，而是在一次次具体办事中看到变化、感到方便、愿意信任。具体推进时，还要同步关注线上线下渠道是否一致、老年人和外来务工人员是否能顺利办事、窗口人员是否有明确授权、跨部门事项是否有人牵头、办理结果是否能被群众追踪，否则流程看似优化，实际体验仍然可能停留在原地，也会让后续监督、复盘和改进缺少稳定依据。",
+  "html_body": "<html><body>公共服务改进不能只停留在窗口态度和流程压缩上，还要把群众最常遇到的堵点、部门之间最容易推诿的责任、基层一线最缺的资源和后续反馈最容易断开的环节一起纳入治理视野，真正让政策目标、办事流程、部门协同、结果反馈形成闭环，让群众不是只听到承诺，而是在一次次具体办事中看到变化、感到方便、愿意信任。具体推进时，还要同步关注线上线下渠道是否一致、老年人和外来务工人员是否能顺利办事、窗口人员是否有明确授权、跨部门事项是否有人牵头、办理结果是否能被群众追踪，否则流程看似优化，实际体验仍然可能停留在原地，也会让后续监督、复盘和改进缺少稳定依据。</body></html>",
+  "expected_issue_codes": ["mobile_paragraph_too_long"],
+  "unexpected_issue_codes": ["repeated_word", "authority_overclaim", "legal_overstatement", "html_plain_mismatch"],
+  "expect_changed": false
+}

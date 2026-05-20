@@ -1,0 +1,32 @@
+{
+  "case_id": "good_high_quality_email_001",
+  "description": "正常高质量表达不应被内容风险规则误杀。",
+  "brief": {
+    "email_subject": "测试邮件",
+    "today_theme": "基层公共服务",
+    "featured_article": {
+      "title": "把公共服务做到群众身边",
+      "one_sentence": "公共服务的质量，最终体现在群众办事是否更方便、生活是否更安心。",
+      "core_viewpoint": "公共服务不是简单增加投入，而是要让资源跟着真实需求走。",
+      "rewritable_expression": "公共服务要从群众最有感的环节入手，把责任、资源和反馈接起来。"
+    },
+    "daily_question": {
+      "question": "某地群众反映公共服务流程复杂、反馈慢，请提出改进建议。",
+      "candidate_answer": "我认为，首先要摸清群众最集中反映的问题，分清是流程问题、协同问题还是资源问题。其次，要把部门责任和办理时限公开，让群众知道找谁办、多久办、办到什么程度。最后，要建立反馈复盘机制，及时发现新堵点，推动服务持续改进。"
+    },
+    "today_takeaway": {
+      "golden_sentences": ["公共服务的温度，不在口号里，而在一次次具体办事的体验里。"]
+    },
+    "quick_reads": [
+      {
+        "title": "基层服务改进观察",
+        "one_sentence": "从群众反馈看服务流程优化。"
+      }
+    ]
+  },
+  "plain_text": "公共服务要从群众最有感的环节入手，把责任、资源和反馈接起来。我认为，首先要摸清群众最集中反映的问题，分清是流程问题、协同问题还是资源问题。",
+  "html_body": "<html><body><p>公共服务要从群众最有感的环节入手，把责任、资源和反馈接起来。</p><p>我认为，首先要摸清群众最集中反映的问题，分清是流程问题、协同问题还是资源问题。</p></body></html>",
+  "expected_issue_codes": [],
+  "unexpected_issue_codes": ["repeated_word", "authority_overclaim", "legal_overstatement", "policy_tone_too_heavy", "mobile_paragraph_too_long", "html_plain_mismatch"],
+  "expect_changed": false
+}

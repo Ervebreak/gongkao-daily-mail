@@ -1,0 +1,27 @@
+{
+  "case_id": "bad_legal_overstatement_001",
+  "description": "法律表述绝对化应命中 legal_overstatement，并改为审慎表达。",
+  "brief": {
+    "email_subject": "测试邮件",
+    "today_theme": "公共服务",
+    "featured_article": {
+      "title": "公共服务中的企业参与边界",
+      "rewritable_expression": "公共服务可以引入社会力量，但必须守住公共属性。"
+    },
+    "daily_question": {
+      "question": "某地引入企业参与公共服务后引发收费争议，请提出建议。",
+      "candidate_answer": "公共治理具有公共属性，严禁企业商业化运作，绝不允许以服务名义收费。"
+    },
+    "today_takeaway": {
+      "golden_sentences": ["公共服务可以引入力量，但不能转嫁治理成本。"]
+    },
+    "quick_reads": []
+  },
+  "plain_text": "公共治理具有公共属性，严禁企业商业化运作，绝不允许以服务名义收费。",
+  "html_body": "<html><body>公共治理具有公共属性，严禁企业商业化运作，绝不允许以服务名义收费。</body></html>",
+  "expected_issue_codes": ["legal_overstatement"],
+  "unexpected_issue_codes": ["repeated_word", "html_plain_mismatch"],
+  "expect_changed": true,
+  "fixed_must_not_contain": ["严禁企业商业化运作", "绝不允许"],
+  "fixed_must_contain": ["不得"]
+}

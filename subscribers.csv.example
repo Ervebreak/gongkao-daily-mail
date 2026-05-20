@@ -1,0 +1,4 @@
+email,status,nickname,source,created_at,remark
+your_test_email@qq.com,active,自己,测试,2026-05-02,测试邮箱
+user1@qq.com,active,用户1,小红书,2026-05-02,
+user2@163.com,inactive,用户2,暂停接收,2026-05-02,暂停发送

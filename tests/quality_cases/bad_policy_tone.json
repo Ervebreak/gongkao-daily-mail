@@ -1,0 +1,25 @@
+{
+  "case_id": "bad_policy_tone_001",
+  "description": "套话堆叠应命中 policy_tone_too_heavy，但不做机械自动修复。",
+  "brief": {
+    "email_subject": "测试邮件",
+    "today_theme": "基层治理",
+    "featured_article": {
+      "title": "基层治理能力提升",
+      "rewritable_expression": "要持续完善工作机制，切实提升治理效能，不断夯实基层基础，推动形成治理合力。"
+    },
+    "daily_question": {
+      "question": "某地推进基层治理，请提出建议。",
+      "candidate_answer": "我认为要先找准问题，再把责任和资源落到具体环节。"
+    },
+    "today_takeaway": {
+      "golden_sentences": ["基层治理要落到具体问题和具体责任。"]
+    },
+    "quick_reads": []
+  },
+  "plain_text": "要持续完善工作机制，切实提升治理效能，不断夯实基层基础，推动形成治理合力。",
+  "html_body": "<html><body>要持续完善工作机制，切实提升治理效能，不断夯实基层基础，推动形成治理合力。</body></html>",
+  "expected_issue_codes": ["policy_tone_too_heavy"],
+  "unexpected_issue_codes": ["repeated_word", "authority_overclaim", "legal_overstatement", "html_plain_mismatch"],
+  "expect_changed": false
+}

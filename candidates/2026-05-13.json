@@ -1,0 +1,1141 @@
+﻿{
+    "schema_version":  1,
+    "generated_at":  "2026-05-12T22:47:55.665973+08:00",
+    "delivery_date":  "2026-05-13",
+    "subject":  "【公考晨读】晨读：跨部门政策冲突怎么解",
+    "brief":  {
+                  "email_subject":  "晨读：跨部门政策冲突怎么解",
+                  "date":  "2026-05-13",
+                  "today_theme":  "跨部门政策协同与基层执法优化",
+                  "today_focus":  "读懂局部政策叠加成矛盾的生成逻辑，掌握考场中化解多头管理的答题框架。",
+                  "today_three_things":  {
+                                             "theme":  "跨部门政策协同与基层执法优化",
+                                             "must_remember_sentence":  "局部合理的政策叠加后可能相互矛盾，制定规则必须跳出部门视角看全局。",
+                                             "daily_question":  "某地企业反映，应急管理部门要求生产时开窗通风，环保部门要求关窗防污，企业无所适从。作为区政府办工作人员，领导让你牵头协调解决此类政策标准冲突问题，你将如何开展工作？"
+                                         },
+                  "featured_article":  {
+                                           "title":  "协同破解“政策打架”",
+                                           "source":  "人民网观点",
+                                           "published_at":  "2026-05-12",
+                                           "url":  "https://opinion.people.com.cn/n1/2026/0512/c461529-40717831.html",
+                                           "theme":  "基层治理与政策协同",
+                                           "one_sentence":  "不同部门基于各自职责出台的规定容易互相冲突，必须通过全局统筹和主动服务来消除合成谬误。",
+                                           "three_useful_points":  [
+                                                                       "表面问题：企业执行不同部门规定时陷入两难，如开窗通风与关窗防污的标准对立。",
+                                                                       "背后原因：各部门制定政策时只盯着自身业务条线，缺乏横向沟通与全局评估。",
+                                                                       "考试迁移：遇到多头管理、标准不一的基层治理题，答题重心要从单一执行转向跨部门统筹与机制建设。"
+                                                                   ],
+                                           "exam_use":  [
+                                                            "考场话：政策冲突的本质是部门本位主义与全局统筹缺位，解题需从源头规则制定和末端执法协同双向发力。",
+                                                            "考场话：基层执法不能只做机械的监督员，更要主动向前一步做服务员，用协调机制替代推诿扯皮。"
+                                                        ],
+                                           "rewritable_expression":  "制定政策既要向上对标，也要左右看齐，用全局视野替代部门视角，才能避免好政策叠加成坏结果。",
+                                           "original_reading_focus":  "重点看第二段对合成谬误的界定，以及第三段关于向上对对、左右看看和监督员转服务员的具体对策表述。",
+                                           "article_framework_map":  {
+                                                                         "type":  "政策评论类",
+                                                                         "article_type":  "政策评论类",
+                                                                         "main_thread":  "文章以企业开窗关窗的执法冲突为切口，探讨如何打破部门壁垒实现政策协同。",
+                                                                         "framework_style":  "冲突现象切入 → 根源剖析 → 破局路径 → 考场迁移：这类题怎么用",
+                                                                         "steps":  [
+                                                                                       {
+                                                                                           "label":  "冲突现象切入",
+                                                                                           "content":  "应急部门要求开窗通风保安全，环保部门要求关窗生产防污染，企业执行陷入两难。"
+                                                                                       },
+                                                                                       {
+                                                                                           "label":  "根源剖析",
+                                                                                           "content":  "局部合理的政策在缺乏横向沟通时容易叠加成相互矛盾的合成谬误。"
+                                                                                       },
+                                                                                       {
+                                                                                           "label":  "破局路径",
+                                                                                           "content":  "制定政策需跳出部门本位进行全局评估，执法环节需强化跨部门协调与服务意识。"
+                                                                                       },
+                                                                                       {
+                                                                                           "label":  "考场迁移：这类题怎么用",
+                                                                                           "content":  "遇到多头管理或标准冲突题，优先从建立联合审查机制、统一执法口径和强化首问负责三个维度作答。"
+                                                                                       }
+                                                                                   ],
+                                                                         "exam_tags":  [
+                                                                                           "跨部门协同",
+                                                                                           "政策合成谬误",
+                                                                                           "服务型执法",
+                                                                                           "营商环境优化"
+                                                                                       ],
+                                                                         "overall_exam_value":  "跨部门协同 / 政策合成谬误 / 服务型执法 / 营商环境优化",
+                                                                         "self_check":  "已检查：框架节点只保留具体内容，考试价值已统一收束。"
+                                                                     },
+                                           "original_overview":  [
+                                                                     "不同部门基于各自职责出台的规定容易互相冲突，必须通过全局统筹和主动服务来消除合成谬误。"
+                                                                 ],
+                                           "core_viewpoint":  "不同部门基于各自职责出台的规定容易互相冲突，必须通过全局统筹和主动服务来消除合成谬误。",
+                                           "main_thread":  "不同部门基于各自职责出台的规定容易互相冲突，必须通过全局统筹和主动服务来消除合成谬误。",
+                                           "article_type":  "政策评论类",
+                                           "article_framework":  [
+                                                                     "冲突现象切入：应急部门要求开窗通风保安全，环保部门要求关窗生产防污染，企业执行陷入两难。",
+                                                                     "根源剖析：局部合理的政策在缺乏横向沟通时容易叠加成相互矛盾的合成谬误。",
+                                                                     "破局路径：制定政策需跳出部门本位进行全局评估，执法环节需强化跨部门协调与服务意识。",
+                                                                     "考场迁移：这类题怎么用：遇到多头管理或标准冲突题，优先从建立联合审查机制、统一执法口径和强化首问负责三个维度作答。"
+                                                                 ],
+                                           "structure_breakdown":  [
+                                                                       "冲突现象切入：应急部门要求开窗通风保安全，环保部门要求关窗生产防污染，企业执行陷入两难。",
+                                                                       "根源剖析：局部合理的政策在缺乏横向沟通时容易叠加成相互矛盾的合成谬误。",
+                                                                       "破局路径：制定政策需跳出部门本位进行全局评估，执法环节需强化跨部门协调与服务意识。",
+                                                                       "考场迁移：这类题怎么用：遇到多头管理或标准冲突题，优先从建立联合审查机制、统一执法口径和强化首问负责三个维度作答。"
+                                                                   ],
+                                           "usable_for_exam":  [
+                                                                   "考场话：政策冲突的本质是部门本位主义与全局统筹缺位，解题需从源头规则制定和末端执法协同双向",
+                                                                   "考场话：基层执法不能只做机械的监督员，更要主动向前一步做服务员，用协调机制替代推诿扯皮。"
+                                                               ],
+                                           "exam_conversion":  [
+                                                                   "考场话：政策冲突的本质是部门本位主义与全局统筹缺位，解题需从源头规则制定和末端执法协同双向",
+                                                                   "考场话：基层执法不能只做机械的监督员，更要主动向前一步做服务员，用协调机制替代推诿扯皮。"
+                                                               ],
+                                           "golden_sentences":  [
+
+                                                                ],
+                                           "url_status":  "warning",
+                                           "url_status_reason":  "ssl warning: SSLError"
+                                       },
+                  "daily_question":  {
+                                         "topic_category":  "基层治理与公共服务",
+                                         "upper_exam_points":  [
+                                                                   "跨部门协同治理",
+                                                                   "优化营商环境",
+                                                                   "政策执行力"
+                                                               ],
+                                         "question_type":  "申论对策题",
+                                         "question":  "某地企业反映，应急管理部门要求生产时开窗通风，环保部门要求关窗防污，企业无所适从。作为区政府办工作人员，领导让你牵头协调解决此类政策标准冲突问题，你将如何开展工作？",
+                                         "exam_focus":  "考查跨部门统筹协调能力和建立长效政策审查机制的实务操作。",
+                                         "breaking_hint":  "本题核心在于从个案协调上升到机制建设，需按摸清底数、搭建平台、统一标准、常态监督的逻辑展开。",
+                                         "answer_framework":  [
+                                                                  "全面摸排冲突清单，实地走访涉事企业并收集应急与环保部门的现行规定，精准定位标准交叉的具体环节。",
+                                                                  "牵头召开跨部门协调会，组织业务骨干与行业专家开展现场评估，明确不同生产工况下的统一操作规范。",
+                                                                  "将论证结果转化为全区统一执法手册，建立新政策出台前的跨部门交叉审查流程，从源头阻断标准打架。",
+                                                                  "开通企业政策咨询专线并落实定期回访，将跨部门协同落实情况纳入年度绩效考核，用制度刚性保障执行。"
+                                                              ],
+                                         "candidate_answer":  "面对企业反映的政策标准冲突问题，我将坚持统筹兼顾与源头治理相结合，分四步推进协调工作。第一步是全面摸排底数。我会立即走访涉事企业及相关行业协会，收集应急与环保部门现行规定的具体条款，梳理出冲突集中、企业反映强烈的标准清单，形成详细问题台账。第二步是组织联合论证。牵头召开由应急、环保部门业务骨干及行业专家参加的协调会，围绕安全生产与污染防治的平衡点开展现场评估，明确不同工况下的具体操作规范，形成初步共识。第三步是出台统一指引。将论证结果转化为全区统一的执法操作手册，明确优先适用情形与例外处理流程，并建立新政策出台前的跨部门交叉审查机制，确保今后政策制定时左右看齐，避免合成谬误。第四步是强化跟踪问效。开通企业政策咨询专线，安排专人定期回访执行情况，将政策协同落实情况纳入部门年度考核，用制度刚性保障企业安心经营。",
+                                         "thirty_second_answer":  "我将先摸清冲突清单，再组织跨部门联合论证明确平衡标准，随后出台统一执法指引并建立政策交叉审查机制，最后通过专线回访与考核督办确保长效落地。",
+                                         "output_prompt":  "请用一句话写出这道题的开头表态。",
+                                         "output_sentence_template":  "政策打架本质是部门视角局限，我将以企业诉求为导向，通过跨部门联席论证与源头审查机制，推动执法标准从各自为战转向协同统一。",
+                                         "question_source":  "featured",
+                                         "question_source_title":  "协同破解“政策打架”",
+                                         "breaking_direction":  "先识别题干矛盾，再逐一对应提出分析或对策。",
+                                         "conflicts":  [
+                                                           "政策目标与群众理解之间存在落差",
+                                                           "基层执行资源和协同条件不足",
+                                                           "短期推进与长效治理之间需要衔接"
+                                                       ],
+                                         "answer_frame":  [
+                                                              "全面摸排冲突清单，实地走访涉事企业并收集应急与环保部门的现行规定，精准定位标准交叉的具体环节。",
+                                                              "牵头召开跨部门协调会，组织业务骨干与行业专家开展现场评估，明确不同生产工况下的统一操作规范。",
+                                                              "将论证结果转化为全区统一执法手册，建立新政策出台前的跨部门交叉审查流程，从源头阻断标准打架。",
+                                                              "开通企业政策咨询专线并落实定期回访，将跨部门协同落实情况纳入年度绩效考核，用制度刚性保障执行。"
+                                                          ],
+                                         "takeaway_sentence":  "",
+                                         "golden_sentences":  [
+
+                                                              ]
+                                     },
+                  "today_takeaway":  {
+                                         "keywords":  [
+                                                          "政策协同审查",
+                                                          "合成谬误防范",
+                                                          "服务型执法"
+                                                      ],
+                                         "common_knowledge_points":  [
+                                                                         "涉企政策和基层执法标准制定时，应加强部门间沟通会商和事前评估，避免不同政策目标在执行端相互冲突。"
+                                                                     ],
+                                         "golden_sentences":  [
+                                                                  {
+                                                                      "sentence":  "政策制定不能只算部门账，更要算整体账；只有在出台前多做横向审查，才能防止局部合理叠加成全局矛盾。",
+                                                                      "scenario":  "适用于申论综合分析题的原因剖析段，可用于分析“部门各自为政”“政策打架”“多头管理”等问题。"
+                                                                  },
+                                                                  {
+                                                                      "sentence":  "基层执法既要当好监督员，也要当好服务员；面对标准冲突，不能简单把难题推给企业，而要主动协调、统一口径、疏通堵点。",
+                                                                      "scenario":  "适用于面试机关实务题或申论对策题结尾，用于强调服务型执法、优化营商环境和跨部门协同。"
+                                                                  }
+                                                              ],
+                                         "framework":  "处理标准冲突题时，遵循先个案摸底找交叉点，再联席会商定统一口径，后建交叉审查防源头打架，终以考核回访保长效落地的递进逻辑。",
+                                         "use_scenarios":  [
+                                                               "申论对策题",
+                                                               "面试统筹协调题",
+                                                               "基层治理类综合分析题"
+                                                           ],
+                                         "copyable_expressions":  [
+
+                                                                  ],
+                                         "extension":  ""
+                                     },
+                  "quick_reads":  [
+                                      {
+                                          "title":  "社区主理人，在城市缝隙间搭桥",
+                                          "source":  "半月谈",
+                                          "published_at":  "2026-05-12",
+                                          "url":  "http://www.banyuetan.org/jrt/detail/20260512/1000200033134991778549130552410436_1.html",
+                                          "theme":  "基层治理",
+                                          "exam_value":  "申论可积累社会力量参与社区微治理案例，答题时可用精准切割需求、用陪伴代替管理替换空泛表述。",
+                                          "one_sentence":  "社区主理人通过链接居民、商户与公共空间，把分散需求转化为社区共治资源。",
+                                          "url_status":  "valid",
+                                          "url_status_reason":  "ok"
+                                      },
+                                      {
+                                          "title":  "AI潜入买家秀，平台不能只做看客",
+                                          "source":  "光明网",
+                                          "published_at":  "2026-05-11",
+                                          "url":  "https://guancha.gmw.cn/2026-05/11/content_38757979.htm",
+                                          "theme":  "数字经济治理",
+                                          "exam_value":  "面试或申论可作平台主体责任与技术伦理监管论据，强调守门人责任与技术中立不等于监管缺位。",
+                                          "one_sentence":  "AI生成内容混入买家秀，会削弱消费信任，平台应承担识别、标注和治理责任。",
+                                          "url_status":  "valid",
+                                          "url_status_reason":  "ok"
+                                      }
+                                  ],
+                  "_llm_two_stage":  {
+                                         "enabled":  true,
+                                         "selection":  {
+                                                           "featured":  {
+                                                                            "title":  "协同破解“政策打架”",
+                                                                            "url":  "https://opinion.people.com.cn/n1/2026/0512/c461529-40717831.html",
+                                                                            "source":  "人民网观点",
+                                                                            "total_score":  91,
+                                                                            "score_detail":  {
+                                                                                                 "exam_conversion":  28,
+                                                                                                 "problem_awareness":  18,
+                                                                                                 "scenario_specificity":  13,
+                                                                                                 "contradiction_tension":  14,
+                                                                                                 "material_value":  9,
+                                                                                                 "authority_timeliness":  9
+                                                                                             },
+                                                                            "suitable_exam_types":  [
+                                                                                                        "申论对策题",
+                                                                                                        "申论综合分析题",
+                                                                                                        "机关实务题",
+                                                                                                        "结构化面试"
+                                                                                                    ],
+                                                                            "possible_question":  "某地企业反映，应急管理部门要求生产时开窗通风以防有害气体积聚，而环保部门要求关窗生产以防污染物外泄，企业无所适从。作为区政府办工作人员，领导让你牵头协调解决此类政策标准冲突问题，你将如何开展工作？",
+                                                                            "reason":  "聚焦基层执法标准冲突痛点，以开窗关窗具体场景切入，矛盾张力强。可自然转化为政策协同类申论对策题或跨部门协调面试题，素材提炼价值高。",
+                                                                            "risk_note":  "无。主题聚焦跨部门政策协同，与近三日基层治理侧重点有区分；来源为人民网观点，未连续高频出现。"
+                                                                        },
+                                                           "quick_reads":  [
+                                                                               {
+                                                                                   "title":  "社区主理人，在城市缝隙间搭桥",
+                                                                                   "url":  "http://www.banyuetan.org/jrt/detail/20260512/1000200033134991778549130552410436_1.html",
+                                                                                   "source":  "半月谈",
+                                                                                   "reason":  "聚焦城市社区人际疏离痛点，提供社区主理人微治理新视角，适合积累基层服务创新案例。"
+                                                                               },
+                                                                               {
+                                                                                   "title":  "AI潜入买家秀，平台不能只做看客",
+                                                                                   "url":  "https://guancha.gmw.cn/2026-05/11/content_38757979.htm",
+                                                                                   "source":  "光明网",
+                                                                                   "reason":  "直击电商评论区AI造假乱象，探讨平台监管责任与技术伦理，适合积累数字经济治理对策。"
+                                                                               }
+                                                                           ],
+                                                           "selection_notes":  "今日候选池整体质量中等，精选政策协同类文章作主线，避开近三日高频的政绩观与产业升级主题。速读补充社区微治理与平台监管视角，兼顾申论素材广度。"
+                                                       },
+                                         "selected_titles":  [
+                                                                 "协同破解“政策打架”",
+                                                                 "社区主理人，在城市缝隙间搭桥",
+                                                                 "AI潜入买家秀，平台不能只做看客"
+                                                             ],
+                                         "selected_urls":  [
+                                                               "https://opinion.people.com.cn/n1/2026/0512/c461529-40717831.html",
+                                                               "http://www.banyuetan.org/jrt/detail/20260512/1000200033134991778549130552410436_1.html",
+                                                               "https://guancha.gmw.cn/2026-05/11/content_38757979.htm"
+                                                           ]
+                                     },
+                  "daily_common_knowledge":  {
+                                                 "knowledge_point":  "",
+                                                 "field":  "时政常识",
+                                                 "why_frequent":  "可用于常识判断和面试热点积累。",
+                                                 "memory_sentence":  ""
+                                             },
+                  "today_accumulation_card":  {
+                                                  "title":  "跨部门政策协同与基层执法优化",
+                                                  "sentences":  [
+                                                                    "政策制定不能只算部门账，更要算整体账；只有在出台前多做横向审查，才能防止局部合理叠加成全局矛盾。",
+                                                                    "基层执法既要当好监督员，也要当好服务员；面对标准冲突，不能简单把难题推给企业，而要主动协调、统一口径、疏通堵点。"
+                                                                ]
+                                              }
+              },
+    "plain_text":  "晨读：跨部门政策冲突怎么解\n日期：2026-05-13\n今日主题：跨部门政策协同与基层执法优化\n\n今日精读｜面试表达与申论素材储备\n协同破解“政策打架”（来源：人民网观点　发布时间：2026-05-12　主题：基层治理与政策协同）\n链接：https://opinion.people.com.cn/n1/2026/0512/c461529-40717831.html\n备用搜索：协同破解“政策打架” 人民网观点\n如果点原文，重点看：重点看第二段对合成谬误的界定，以及第三段关于向上对对、左右看看和监督员转服务员的具体对策表述。\n一句话看懂：不同部门基于各自职责出台的规定容易互相冲突，必须通过全局统筹和主动服务来消除合成谬误。\n记住3个点：\n- 表面问题：企业执行不同部门规定时陷入两难，如开窗通风与关窗防污的标准对立。\n- 背后原因：各部门制定政策时只盯着自身业务条线，缺乏横向沟通与全局评估。\n- 考试迁移：遇到多头管理、标准不一的基层治理题，答题重心要从单一执行转向跨部门统筹与机制建设。\n换成考场话：\n- 考场话：政策冲突的本质是部门本位主义与全局统筹缺位，解题需从源头规则制定和末端执法协同双向发力。\n- 考场话：基层执法不能只做机械的监督员，更要主动向前一步做服务员，用协调机制替代推诿扯皮。\n可用表达：制定政策既要向上对标，也要左右看齐，用全局视野替代部门视角，才能避免好政策叠加成坏结果。\n\n文章框架图｜一眼看懂文章怎么展开\n文章类型：政策评论类\n文章主线：文章以企业开窗关窗的执法冲突为切口，探讨如何打破部门壁垒实现政策协同。\n1. 冲突现象切入：应急部门要求开窗通风保安全，环保部门要求关窗生产防污染，企业执行陷入两难。\n2. 根源剖析：局部合理的政策在缺乏横向沟通时容易叠加成相互矛盾的合成谬误。\n3. 破局路径：制定政策需跳出部门本位进行全局评估，执法环节需强化跨部门协调与服务意识。\n4. 考场迁移：这类题怎么用：遇到多头管理或标准冲突题，优先从建立联合审查机制、统一执法口径和强化首问负责三个维度作答。\n可迁移考点：跨部门协同 / 政策合成谬误 / 服务型执法 / 营商环境优化\n\n今日一题｜考场转化训练\n题型：申论对策题\n题目：某地企业反映，应急管理部门要求生产时开窗通风，环保部门要求关窗防污，企业无所适从。作为区政府办工作人员，领导让你牵头协调解决此类政策标准冲突问题，你将如何开展工作？\n审题关键：考查跨部门统筹协调能力和建立长效政策审查机制的实务操作。\n作答框架：全面摸排冲突清单，实地走访涉事企业并收集应急与环保部门的现行规定，精准定位标准交叉的具体环节。；牵头召开跨部门协调会，组织业务骨干与行业专家开展现场评估，明确不同生产工况下的统一操作规范。；将论证结果转化为全区统一执法手册，建立新政策出台前的跨部门交叉审查流程，从源头阻断标准打架。；开通企业政策咨询专线并落实定期回访，将跨部门协同落实情况纳入年度绩效考核，用制度刚性保障执行。\n考生版参考答案：面对企业反映的政策标准冲突问题，我将坚持统筹兼顾与源头治理相结合，分四步推进协调工作。第一步是全面摸排底数。我会立即走访涉事企业及相关行业协会，收集应急与环保部门现行规定的具体条款，梳理出冲突集中、企业反映强烈的标准清单，形成详细问题台账。第二步是组织联合论证。牵头召开由应急、环保部门业务骨干及行业专家参加的协调会，围绕安全生产与污染防治的平衡点开展现场评估，明确不同工况下的具体操作规范，形成初步共识。第三步是出台统一指引。\n30秒输出任务：请用一句话写出这道题的开头表态。\n我的一句话：________________\n参考句式：政策打架本质是部门视角局限，我将以企业诉求为导向，通过跨部门联席论证与源头审查机制，推动执法标准从各自为战转向协同统一。\n\n今日可带走｜1个常识 + 2句必备金句 + 1个框架\n关键词：政策协同审查、合成谬误防范、服务型执法\n时政常识：涉企政策和基层执法标准制定时，应加强部门间沟通会商和事前评估，避免不同政策目标在执行端相互冲突。\n必备金句：\n1. 政策制定不能只算部门账，更要算整体账；只有在出台前多做横向审查，才能防止局部合理叠加成全局矛盾。\n适用场景：适用于申论综合分析题的原因剖析段，可用于分析“部门各自为政”“政策打架”“多头管理”等问题。\n2. 基层执法既要当好监督员，也要当好服务员；面对标准冲突，不能简单把难题推给企业，而要主动协调、统一口径、疏通堵点。\n适用场景：适用于面试机关实务题或申论对策题结尾，用于强调服务型执法、优化营商环境和跨部门协同。\n可迁移框架：处理标准冲突题时，遵循先个案摸底找交叉点，再联席会商定统一口径，后建交叉审查防源头打架，终以考核回访保长效落地的递进逻辑。\n\n今日速读｜申论素材补充\n- 社区主理人，在城市缝隙间搭桥（来源：半月谈　发布时间：2026-05-12　主题：基层治理）：申论可积累社会力量参与社区微治理案例，答题时可用精准切割需求、用陪伴代替管理替换空泛表述。 链接：http://www.banyuetan.org/jrt/detail/20260512/1000200033134991778549130552410436_1.html\n- AI潜入买家秀，平台不能只做看客（来源：光明网　发布时间：2026-05-11　主题：数字经济治理）：面试或申论可作平台主体责任与技术伦理监管论据，强调守门人责任与技术中立不等于监管缺位。 链接：https://guancha.gmw.cn/2026-05/11/content_38757979.htm",
+    "html_body":  "\u003c!doctype html\u003e\n\u003chtml\u003e\n\u003cbody style=\"margin:0;padding:0;background:#f6f8fb;font-family:-apple-system,BlinkMacSystemFont,\u0027Segoe UI\u0027,\u0027PingFang SC\u0027,\u0027Microsoft YaHei\u0027,Arial,sans-serif;color:#0f172a;\"\u003e\n  \u003cdiv style=\"max-width:620px;margin:0 auto;padding:16px 12px;\"\u003e\n    \u003cdiv style=\"background:linear-gradient(135deg,#174a7e,#1f78bd);color:#fff;border-radius:16px;padding:18px 18px;margin-bottom:12px;\"\u003e\n      \u003cdiv style=\"font-size:12px;letter-spacing:1.4px;opacity:.86;\"\u003eDAILY BRIEFING 每日晨读\u003c/div\u003e\n      \u003cdiv style=\"font-size:24px;font-weight:900;line-height:1.32;margin-top:7px;\"\u003e晨读：跨部门政策冲突怎么解\u003c/div\u003e\n      \u003cdiv style=\"font-size:14px;line-height:1.65;margin-top:9px;opacity:.94;\"\u003e读懂局部政策叠加成矛盾的生成逻辑，掌握考场中化解多头管理的答题框架。\u003c/div\u003e\n    \u003c/div\u003e\n\n    \u003cdiv style=\"background:#fff;border:1px solid #e6eaf0;border-radius:15px;padding:13px 14px;margin-bottom:15px;\"\u003e\n      \u003cdiv style=\"font-size:13px;color:#165dff;font-weight:900;margin-bottom:8px;\"\u003e今日 3 件事\u003c/div\u003e\n      \u003cdiv style=\"background:#eef6ff;border-left:4px solid #165dff;border-radius:10px;padding:8px 10px;line-height:1.6;font-size:14px;margin-bottom:7px;\"\u003e\u003cb\u003e【今日主题】\u003c/b\u003e跨部门政策协同与基层执法优化\u003c/div\u003e\n      \u003cdiv style=\"background:#eef6ff;border-left:4px solid #165dff;border-radius:10px;padding:8px 10px;line-height:1.6;font-size:14px;margin-bottom:7px;\"\u003e\u003cb\u003e【核心判断】\u003c/b\u003e局部合理的政策叠加后可能相互矛盾，制定规则必须跳出部门视角看全局。\u003c/div\u003e\n      \u003cdiv style=\"background:#fff8e8;border-left:4px solid #f59e0b;border-radius:10px;padding:8px 10px;line-height:1.6;font-size:14px;\"\u003e\u003cb\u003e【今日一题】\u003c/b\u003e某地企业反映，应急管理部门要求生产时开窗通风，环保部门要求关窗防污，企业无所适从。作为区政府办工作人员，领导让你牵头协调解决此类政策标准冲突问题，你将如何开展工作？\u003c/div\u003e\n    \u003c/div\u003e\n\n    \u003ch2 style=\"font-size:21px;margin:20px 0 8px;\"\u003e今日精读｜面试表达与申论素材储备\u003c/h2\u003e\n    \u003cdiv style=\"background:#fff;border:1px solid #e6eaf0;border-radius:16px;padding:16px;margin-bottom:15px;\"\u003e\n      \u003cdiv style=\"font-size:12px;color:#64748b;margin-bottom:6px;\"\u003e来源：人民网观点　发布时间：2026-05-12　主题：基层治理与政策协同\u003c/div\u003e\n      \u003cdiv style=\"font-size:21px;font-weight:900;line-height:1.42;margin-bottom:10px;\"\u003e协同破解“政策打架”\u003c/div\u003e\n      \u003cdiv style=\"margin-top:10px;\"\u003e\u003ca href=\"https://opinion.people.com.cn/n1/2026/0512/c461529-40717831.html\" style=\"display:inline-block;background:#165dff;color:#fff;text-decoration:none;padding:8px 13px;border-radius:9px;font-size:13px;font-weight:900;\"\u003e点击阅读原文\u003c/a\u003e\u003cdiv style=\"font-size:12px;line-height:1.65;color:#94a3b8;margin-top:6px;\"\u003e如打不开，可搜索【协同破解“政策打架” 人民网观点】。\u003c/div\u003e\u003c/div\u003e\n\n      \u003cdiv style=\"margin-top:10px;background:#eef6ff;border-left:4px solid #165dff;border-radius:12px;padding:10px 11px;\"\u003e\n        \u003cdiv style=\"font-size:14px;font-weight:900;color:#165dff;margin-bottom:6px;\"\u003e如果点原文，重点看\u003c/div\u003e\n        \u003cdiv style=\"font-size:14px;line-height:1.72;color:#334155;\"\u003e重点看第二段对合成谬误的界定，以及第三段关于向上对对、左右看看和监督员转服务员的具体对策表述。\u003c/div\u003e\n      \u003c/div\u003e\n\n      \u003cdiv style=\"background:#f8fafc;border-radius:12px;padding:11px;margin-top:10px;\"\u003e\n        \u003cdiv style=\"font-size:14px;font-weight:900;color:#165dff;margin-bottom:6px;\"\u003e一句话看懂\u003c/div\u003e\n        \u003cdiv style=\"font-size:14px;line-height:1.72;color:#334155;\"\u003e不同部门基于各自职责出台的规定容易互相冲突，必须通过全局统筹和主动服务来消除合成谬误。\u003c/div\u003e\n      \u003c/div\u003e\n\n      \u003cdiv style=\"margin-top:12px;background:#fff;border:1px solid #dbeafe;border-radius:14px;padding:12px;\"\u003e\n        \u003cdiv style=\"font-size:14px;font-weight:900;color:#165dff;margin-bottom:8px;\"\u003e文章框架图｜一眼看懂文章怎么展开\u003c/div\u003e\n        \u003cdiv style=\"font-size:12px;color:#64748b;line-height:1.65;margin-bottom:8px;\"\u003e文章类型：政策评论类　主线：文章以企业开窗关窗的执法冲突为切口，探讨如何打破部门壁垒实现政策协同。\u003c/div\u003e\u003cdiv style=\"background:#eef6ff;border-left:3px solid #165dff;border-radius:10px;padding:8px 10px;margin:0 0 7px;\"\u003e\u003cdiv style=\"font-size:13px;font-weight:900;color:#165dff;margin-bottom:4px;line-height:1.35;\"\u003e\u003cspan style=\"display:inline-block;min-width:24px;text-align:center;background:#165dff;color:#fff;border-radius:999px;padding:1px 6px;margin-right:7px;font-size:11px;line-height:17px;vertical-align:1px;\"\u003e01\u003c/span\u003e冲突现象切入\u003c/div\u003e\u003cdiv style=\"font-size:14px;line-height:1.62;color:#1e293b;\"\u003e应急部门要求开窗通风保安全，环保部门要求关窗生产防污染，企业执行陷入两难。\u003c/div\u003e\u003c/div\u003e\u003cdiv style=\"background:#eef6ff;border-left:3px solid #165dff;border-radius:10px;padding:8px 10px;margin:0 0 7px;\"\u003e\u003cdiv style=\"font-size:13px;font-weight:900;color:#165dff;margin-bottom:4px;line-height:1.35;\"\u003e\u003cspan style=\"display:inline-block;min-width:24px;text-align:center;background:#165dff;color:#fff;border-radius:999px;padding:1px 6px;margin-right:7px;font-size:11px;line-height:17px;vertical-align:1px;\"\u003e02\u003c/span\u003e根源剖析\u003c/div\u003e\u003cdiv style=\"font-size:14px;line-height:1.62;color:#1e293b;\"\u003e局部合理的政策在缺乏横向沟通时容易叠加成相互矛盾的合成谬误。\u003c/div\u003e\u003c/div\u003e\u003cdiv style=\"background:#eef6ff;border-left:3px solid #165dff;border-radius:10px;padding:8px 10px;margin:0 0 7px;\"\u003e\u003cdiv style=\"font-size:13px;font-weight:900;color:#165dff;margin-bottom:4px;line-height:1.35;\"\u003e\u003cspan style=\"display:inline-block;min-width:24px;text-align:center;background:#165dff;color:#fff;border-radius:999px;padding:1px 6px;margin-right:7px;font-size:11px;line-height:17px;vertical-align:1px;\"\u003e03\u003c/span\u003e破局路径\u003c/div\u003e\u003cdiv style=\"font-size:14px;line-height:1.62;color:#1e293b;\"\u003e制定政策需跳出部门本位进行全局评估，执法环节需强化跨部门协调与服务意识。\u003c/div\u003e\u003c/div\u003e\u003cdiv style=\"background:#eef6ff;border-left:3px solid #165dff;border-radius:10px;padding:8px 10px;margin:0 0 7px;\"\u003e\u003cdiv style=\"font-size:13px;font-weight:900;color:#165dff;margin-bottom:4px;line-height:1.35;\"\u003e\u003cspan style=\"display:inline-block;min-width:24px;text-align:center;background:#165dff;color:#fff;border-radius:999px;padding:1px 6px;margin-right:7px;font-size:11px;line-height:17px;vertical-align:1px;\"\u003e04\u003c/span\u003e考场迁移：这类题怎么用\u003c/div\u003e\u003cdiv style=\"font-size:14px;line-height:1.62;color:#1e293b;\"\u003e遇到多头管理或标准冲突题，优先从建立联合审查机制、统一执法口径和强化首问负责三个维度作答。\u003c/div\u003e\u003c/div\u003e\u003cdiv style=\"margin-top:10px;background:#fff8e8;border-left:4px solid #f59e0b;border-radius:10px;padding:9px 10px;font-size:13px;line-height:1.65;color:#92400e;\"\u003e\u003cb\u003e可迁移考点：\u003c/b\u003e跨部门协同 / 政策合成谬误 / 服务型执法 / 营商环境优化\u003c/div\u003e\n      \u003c/div\u003e\n\n      \u003cdiv style=\"margin-top:12px;background:#eef6ff;border-left:4px solid #165dff;border-radius:10px;padding:11px;\"\u003e\n        \u003cdiv style=\"font-size:14px;font-weight:900;color:#165dff;margin-bottom:6px;\"\u003e记住3个点\u003c/div\u003e\n        \u003col style=\"padding-left:21px;line-height:1.72;font-size:14px;margin:0;\"\u003e\u003cli style=\"margin:0 0 8px;\"\u003e表面问题：企业执行不同部门规定时陷入两难，如开窗通风与关窗防污的标准对立。\u003c/li\u003e\u003cli style=\"margin:0 0 8px;\"\u003e背后原因：各部门制定政策时只盯着自身业务条线，缺乏横向沟通与全局评估。\u003c/li\u003e\u003cli style=\"margin:0 0 8px;\"\u003e考试迁移：遇到多头管理、标准不一的基层治理题，答题重心要从单一执行转向跨部门统筹与机制建设。\u003c/li\u003e\u003c/ol\u003e\n      \u003c/div\u003e\n\n      \u003cdiv style=\"margin-top:12px;background:#fffdf6;border:1px solid #fde7b7;border-radius:12px;padding:11px;\"\u003e\n        \u003cdiv style=\"font-size:14px;font-weight:900;color:#b45309;margin-bottom:6px;\"\u003e换成考场话\u003c/div\u003e\n        \u003cul style=\"padding-left:19px;line-height:1.72;font-size:14px;margin:0;\"\u003e\u003cli style=\"margin:0 0 7px;\"\u003e考场话：政策冲突的本质是部门本位主义与全局统筹缺位，解题需从源头规则制定和末端执法协同双向发力。\u003c/li\u003e\u003cli style=\"margin:0 0 7px;\"\u003e考场话：基层执法不能只做机械的监督员，更要主动向前一步做服务员，用协调机制替代推诿扯皮。\u003c/li\u003e\u003c/ul\u003e\n      \u003c/div\u003e\n\n      \u003cdiv style=\"margin-top:12px;background:#f8fafc;border-radius:12px;padding:10px 11px;\"\u003e\n        \u003cdiv style=\"font-size:14px;font-weight:900;color:#0f172a;margin-bottom:6px;\"\u003e可用表达\u003c/div\u003e\n        \u003cdiv style=\"font-size:14px;line-height:1.72;color:#334155;\"\u003e制定政策既要向上对标，也要左右看齐，用全局视野替代部门视角，才能避免好政策叠加成坏结果。\u003c/div\u003e\n      \u003c/div\u003e\n\n    \u003c/div\u003e\n\n\n    \u003ch2 style=\"font-size:21px;margin:20px 0 10px;\"\u003e今日一题｜考场转化训练\u003c/h2\u003e\n    \u003cdiv style=\"background:#fff;border:1px solid #e6eaf0;border-radius:16px;padding:16px;margin-bottom:15px;\"\u003e\n      \u003cdiv style=\"display:inline-block;background:#fff8e8;color:#b45309;border-radius:999px;padding:4px 9px;font-size:12px;font-weight:900;margin-bottom:8px;\"\u003e题型：申论对策题\u003c/div\u003e\n      \u003cdiv style=\"font-size:14px;color:#b45309;font-weight:900;margin:4px 0 5px;\"\u003e题目\u003c/div\u003e\n      \u003cdiv style=\"font-size:16px;font-weight:900;line-height:1.65;margin-bottom:10px;\"\u003e某地企业反映，应急管理部门要求生产时开窗通风，环保部门要求关窗防污，企业无所适从。作为区政府办工作人员，领导让你牵头协调解决此类政策标准冲突问题，你将如何开展工作？\u003c/div\u003e\n      \u003cdiv style=\"font-size:14px;color:#b45309;font-weight:900;margin:8px 0 5px;\"\u003e审题关键\u003c/div\u003e\n      \u003cdiv style=\"font-size:14px;line-height:1.7;color:#334155;background:#fff8e8;border-left:4px solid #f59e0b;border-radius:10px;padding:9px 10px;\"\u003e考查跨部门统筹协调能力和建立长效政策审查机制的实务操作。\u003c/div\u003e\n      \u003cdiv style=\"font-size:14px;color:#b45309;font-weight:900;margin:11px 0 5px;\"\u003e破题提示\u003c/div\u003e\u003cdiv style=\"font-size:14px;line-height:1.7;color:#334155;background:#fff8e8;border-left:4px solid #f59e0b;border-radius:10px;padding:9px 10px;\"\u003e本题核心在于从个案协调上升到机制建设，需按摸清底数、搭建平台、统一标准、常态监督的逻辑展开。\u003c/div\u003e\n      \u003cdiv style=\"font-size:14px;color:#b45309;font-weight:900;margin:11px 0 5px;\"\u003e作答框架\u003c/div\u003e\n      \u003col style=\"padding-left:21px;line-height:1.72;font-size:14px;margin:0;\"\u003e\u003cli style=\"margin:0 0 8px;\"\u003e全面摸排冲突清单，实地走访涉事企业并收集应急与环保部门的现行规定，精准定位标准交叉的具体环节。\u003c/li\u003e\u003cli style=\"margin:0 0 8px;\"\u003e牵头召开跨部门协调会，组织业务骨干与行业专家开展现场评估，明确不同生产工况下的统一操作规范。\u003c/li\u003e\u003cli style=\"margin:0 0 8px;\"\u003e将论证结果转化为全区统一执法手册，建立新政策出台前的跨部门交叉审查流程，从源头阻断标准打架。\u003c/li\u003e\u003cli style=\"margin:0 0 8px;\"\u003e开通企业政策咨询专线并落实定期回访，将跨部门协同落实情况纳入年度绩效考核，用制度刚性保障执行。\u003c/li\u003e\u003c/ol\u003e\n      \u003cdiv style=\"font-size:14px;color:#b45309;font-weight:900;margin:11px 0 5px;\"\u003e考生版参考答案\u003c/div\u003e\n      \u003cdiv style=\"font-size:14px;line-height:1.78;color:#334155;background:#f8fafc;border-radius:10px;padding:10px 11px;\"\u003e\n        面对企业反映的政策标准冲突问题，我将坚持统筹兼顾与源头治理相结合，分四步推进协调工作。第一步是全面摸排底数。我会立即走访涉事企业及相关行业协会，收集应急与环保部门现行规定的具体条款，梳理出冲突集中、企业反映强烈的标准清单，形成详细问题台账。第二步是组织联合论证。牵头召开由应急、环保部门业务骨干及行业专家参加的协调会，围绕安全生产与污染防治的平衡点开展现场评估，明确不同工况下的具体操作规范，形成初步共识。第三步是出台统一指引。将论证结果转化为全区统一的执法操作手册，明确优先适用情形与例外处理流程，并建立新政策出台前的跨部门交叉审查机制，确保今后政策制定时左右看齐，避免合成谬误。第四步是强化跟踪问效。开通企业政策咨询专线，安排专人定期回访执行情况，将政策协同落实情况纳入部门年度考核，用制度刚性保障企业安心经营。\n      \u003c/div\u003e\n      \u003cdiv style=\"font-size:14px;color:#b45309;font-weight:900;margin:11px 0 5px;\"\u003e30秒输出\u003c/div\u003e\n      \u003cdiv style=\"font-size:14px;line-height:1.72;color:#334155;background:#fff8e8;border-radius:10px;padding:10px 11px;\"\u003e\n        \u003cdiv style=\"font-weight:900;color:#3f3f46;margin-bottom:6px;\"\u003e请用一句话写出这道题的开头表态。\u003c/div\u003e\n        \u003cdiv style=\"color:#64748b;margin:3px 0 7px;\"\u003e我的一句话：________________\u003c/div\u003e\n        \u003cdiv\u003e\u003cspan style=\"font-weight:900;color:#92400e;\"\u003e参考句式：\u003c/span\u003e政策打架本质是部门视角局限，我将以企业诉求为导向，通过跨部门联席论证与源头审查机制，推动执法标准从各自为战转向协同统一。\u003c/div\u003e\n      \u003c/div\u003e\n    \u003c/div\u003e\n\n    \u003ch2 style=\"font-size:21px;margin:20px 0 10px;\"\u003e今日可带走｜1个常识 + 2句必备金句 + 1个框架\u003c/h2\u003e\n    \u003cdiv style=\"background:#fff;border:1px solid #dbeafe;border-radius:16px;padding:15px;margin-bottom:15px;\"\u003e\n      \u003cdiv style=\"font-size:14px;font-weight:900;color:#165dff;margin-bottom:6px;\"\u003e今日关键词\u003c/div\u003e\n      \u003cdiv style=\"margin-bottom:11px;\"\u003e\u003cspan style=\"display:inline-block;background:#eef6ff;color:#165dff;border-radius:999px;padding:4px 9px;margin:3px 5px 3px 0;font-size:12px;font-weight:800;\"\u003e政策协同审查\u003c/span\u003e\u003cspan style=\"display:inline-block;background:#eef6ff;color:#165dff;border-radius:999px;padding:4px 9px;margin:3px 5px 3px 0;font-size:12px;font-weight:800;\"\u003e合成谬误防范\u003c/span\u003e\u003cspan style=\"display:inline-block;background:#eef6ff;color:#165dff;border-radius:999px;padding:4px 9px;margin:3px 5px 3px 0;font-size:12px;font-weight:800;\"\u003e服务型执法\u003c/span\u003e\u003c/div\u003e\n      \u003cdiv style=\"background:#ecfdf5;border-left:4px solid #10b981;border-radius:10px;padding:10px 11px;margin-bottom:11px;\"\u003e\n        \u003cdiv style=\"font-size:14px;font-weight:900;color:#047857;margin-bottom:6px;\"\u003e时政常识\u003c/div\u003e\n        \u003cul style=\"padding-left:19px;line-height:1.68;font-size:14px;margin:0;\"\u003e\u003cli\u003e涉企政策和基层执法标准制定时，应加强部门间沟通会商和事前评估，避免不同政策目标在执行端相互冲突。\u003c/li\u003e\u003c/ul\u003e\n      \u003c/div\u003e\n      \u003cdiv style=\"background:#f5f3ff;border-left:4px solid #8b5cf6;border-radius:10px;padding:10px 11px;margin-bottom:10px;\"\u003e\n        \u003cdiv style=\"font-size:14px;font-weight:900;color:#6d28d9;margin-bottom:6px;\"\u003e必备金句\u003c/div\u003e\n        \u003cul style=\"padding-left:19px;line-height:1.68;font-size:14px;margin:0;\"\u003e\n          \u003cli style=\"margin:0 0 9px;\"\u003e\u003cdiv style=\"font-weight:900;color:#312e81;line-height:1.65;\"\u003e政策制定不能只算部门账，更要算整体账；只有在出台前多做横向审查，才能防止局部合理叠加成全局矛盾。\u003c/div\u003e\u003cdiv style=\"font-size:12px;color:#6d28d9;margin-top:3px;\"\u003e适用场景：适用于申论综合分析题的原因剖析段，可用于分析“部门各自为政”“政策打架”“多头管理”等问题。\u003c/div\u003e\u003c/li\u003e\n          \u003cli style=\"margin:0 0 9px;\"\u003e\u003cdiv style=\"font-weight:900;color:#312e81;line-height:1.65;\"\u003e基层执法既要当好监督员，也要当好服务员；面对标准冲突，不能简单把难题推给企业，而要主动协调、统一口径、疏通堵点。\u003c/div\u003e\u003cdiv style=\"font-size:12px;color:#6d28d9;margin-top:3px;\"\u003e适用场景：适用于面试机关实务题或申论对策题结尾，用于强调服务型执法、优化营商环境和跨部门协同。\u003c/div\u003e\u003c/li\u003e\n        \u003c/ul\u003e\n      \u003c/div\u003e\n      \u003cdiv style=\"background:#eef6ff;border-left:4px solid #165dff;border-radius:10px;padding:10px 11px;margin-bottom:10px;\"\u003e\n        \u003cdiv style=\"font-size:14px;font-weight:900;color:#165dff;margin-bottom:6px;\"\u003e可迁移框架\u003c/div\u003e\n        \u003cdiv style=\"font-size:13px;line-height:1.65;color:#475569;\"\u003e处理标准冲突题时，遵循先个案摸底找交叉点，再联席会商定统一口径，后建交叉审查防源头打架，终以考核回访保长效落地的递进逻辑。\u003c/div\u003e\n      \u003c/div\u003e\n    \u003c/div\u003e\n\n    \u003ch2 style=\"font-size:21px;margin:20px 0 8px;\"\u003e今日速读｜申论素材补充\u003c/h2\u003e\n    \n        \u003cdiv style=\"border:1px solid #e6eaf0;border-radius:14px;padding:13px 14px;margin:10px 0;background:#fff;\"\u003e\n          \u003cdiv style=\"font-size:17px;font-weight:900;color:#0f172a;line-height:1.45;margin-bottom:5px;\"\u003e社区主理人，在城市缝隙间搭桥\u003c/div\u003e\n          \u003cdiv style=\"font-size:12px;color:#64748b;margin-bottom:8px;\"\u003e来源：半月谈　发布时间：2026-05-12　主题：基层治理\u003c/div\u003e\n          \u003cdiv style=\"font-size:14px;line-height:1.7;color:#334155;\"\u003e\u003cb\u003e一句话概括：\u003c/b\u003e申论可积累社会力量参与社区微治理案例，答题时可用精准切割需求、用陪伴代替管理替换空泛表述。\u003c/div\u003e\n          \u003cdiv style=\"margin-top:10px;\"\u003e\u003ca href=\"http://www.banyuetan.org/jrt/detail/20260512/1000200033134991778549130552410436_1.html\" style=\"display:inline-block;background:#165dff;color:#fff;text-decoration:none;padding:8px 13px;border-radius:9px;font-size:13px;font-weight:900;\"\u003e点击阅读原文\u003c/a\u003e\u003c/div\u003e\n        \u003c/div\u003e\n        \n        \u003cdiv style=\"border:1px solid #e6eaf0;border-radius:14px;padding:13px 14px;margin:10px 0;background:#fff;\"\u003e\n          \u003cdiv style=\"font-size:17px;font-weight:900;color:#0f172a;line-height:1.45;margin-bottom:5px;\"\u003eAI潜入买家秀，平台不能只做看客\u003c/div\u003e\n          \u003cdiv style=\"font-size:12px;color:#64748b;margin-bottom:8px;\"\u003e来源：光明网　发布时间：2026-05-11　主题：数字经济治理\u003c/div\u003e\n          \u003cdiv style=\"font-size:14px;line-height:1.7;color:#334155;\"\u003e\u003cb\u003e一句话概括：\u003c/b\u003e面试或申论可作平台主体责任与技术伦理监管论据，强调守门人责任与技术中立不等于监管缺位。\u003c/div\u003e\n          \u003cdiv style=\"margin-top:10px;\"\u003e\u003ca href=\"https://guancha.gmw.cn/2026-05/11/content_38757979.htm\" style=\"display:inline-block;background:#165dff;color:#fff;text-decoration:none;padding:8px 13px;border-radius:9px;font-size:13px;font-weight:900;\"\u003e点击阅读原文\u003c/a\u003e\u003c/div\u003e\n        \u003c/div\u003e\n        \n\n    \u003cdiv style=\"background:#f8fafc;border:1px solid #e6eaf0;border-radius:14px;padding:14px 15px;margin:18px 0 12px;color:#334155;\"\u003e\n      \u003cdiv style=\"font-size:15px;font-weight:900;color:#0f172a;margin-bottom:8px;\"\u003e内测反馈｜30 秒帮我优化一下\u003c/div\u003e\n      \u003cdiv style=\"line-height:1.9;\"\u003e\n      \u003cdiv style=\"font-size:13px;line-height:1.75;color:#334155;margin-bottom:10px;\"\u003e\n        如果方便，可以用 30 秒反馈一下今天这封：哪些模块有用、哪里需要精简。\n      \u003c/div\u003e\n      \u003cdiv style=\"margin:10px 0 12px;\"\u003e\n        \u003ca href=\"https://wj.qq.com/s2/26569188/8ddc/\" target=\"_blank\"\n           style=\"display:inline-block;background:#165dff;color:#fff;text-decoration:none;\n                  border-radius:999px;padding:9px 16px;font-size:14px;font-weight:900;\"\u003e\n          点这里填写反馈\n        \u003c/a\u003e\n      \u003c/div\u003e\n      \u003cdiv style=\"font-size:13px;line-height:1.75;color:#64748b;\"\u003e\n        也可以直接回复邮件告诉我：有用 / 太长 / 今日一题不错 / 框架图不错 / 金句表达有用。\n      \u003c/div\u003e\n    \u003c/div\u003e\n    \u003c/div\u003e\n\n    \u003cdiv style=\"font-size:11px;line-height:1.7;color:#94a3b8;text-align:center;padding:12px;\"\u003e本内容用于公考/考编晨读积累，建议结合原文、考试大纲和真题场景理解使用。\u003c/div\u003e\n  \u003c/div\u003e\n\u003c/body\u003e\n\u003c/html\u003e",
+    "quality":  {
+                    "initial":  {
+                                    "daily_question":  {
+                                                           "ok":  true,
+                                                           "status":  "ok",
+                                                           "score":  80,
+                                                           "question":  "某地企业反映，应急管理部门要求生产时开窗通风，环保部门要求关窗防污，企业无所适从。作为区政府办工作人员，领导让你牵头协调解决此类政策标准冲突问题，你将如何开展工作？",
+                                                           "question_type":  "申论对策题",
+                                                           "length":  82,
+                                                           "candidate_answer":  "面对企业反映的政策标准冲突问题，我将坚持统筹兼顾与源头治理相结合，分四步推进协调工作。第一步是全面摸排底数。我会立即走访涉事企业及相关行业协会，收集应急与环保部门现行规定的具体条款，梳理出冲突集中、企业反映强烈的标准清单，形成详细问题台账。第二步是组织联合论证。牵头召开由应急、环保部门业务骨干及行业专家参加的协调会，围绕安全生产与污染防治的平衡点开展现场评估，明确不同工况下的具体操作规范，形成初步共识。第三步是出台统一指引。将论证结果转化为全区统一的执法操作手册，明确优先适用情形与例外处理流程，并建立新政策出台前的跨部门交叉审查机制，确保今后政策制定时左右看齐，避免合成谬误。第四步是强化跟踪问效。开通企业政策咨询专线，安排专人定期回访执行情况，将政策协同落实情况纳入部门年度考核，用制度刚性保障企业安心经营。",
+                                                           "breaking_hint":  "本题核心在于从个案协调上升到机制建设，需按摸清底数、搭建平台、统一标准、常态监督的逻辑展开。",
+                                                           "thirty_second_answer":  "我将先摸清冲突清单，再组织跨部门联合论证明确平衡标准，随后出台统一执法指引并建立政策交叉审查机制，最后通过专线回访与考核督办确保长效落地。",
+                                                           "checks":  {
+                                                                          "has_identity":  true,
+                                                                          "has_scene":  true,
+                                                                          "has_conflict":  true,
+                                                                          "has_task":  true,
+                                                                          "too_broad":  false,
+                                                                          "answer_framework_count":  4,
+                                                                          "candidate_answer_length":  358,
+                                                                          "output_prompt_length":  16,
+                                                                          "output_sentence_template_length":  60,
+                                                                          "thirty_second_answer_length":  69,
+                                                                          "instruction_style_hits":  [
+
+                                                                                                     ],
+                                                                          "interview_style_hits":  [
+                                                                                                       "作为",
+                                                                                                       "领导让你",
+                                                                                                       "工作人员"
+                                                                                                   ],
+                                                                          "policy_tone_hits":  [
+
+                                                                                               ],
+                                                                          "relevance_hits":  [
+
+                                                                                             ]
+                                                                      },
+                                                           "keyword_hits":  {
+                                                                                "identity":  [
+                                                                                                 "作为",
+                                                                                                 "工作人员"
+                                                                                             ],
+                                                                                "scene":  [
+                                                                                              "区",
+                                                                                              "部门",
+                                                                                              "企业"
+                                                                                          ],
+                                                                                "conflict":  [
+                                                                                                 "反映",
+                                                                                                 "问题"
+                                                                                             ],
+                                                                                "task":  [
+                                                                                             "如何",
+                                                                                             "协调",
+                                                                                             "开展",
+                                                                                             "解决"
+                                                                                         ]
+                                                                            },
+                                                           "issues":  [
+                                                                          {
+                                                                              "severity":  "low",
+                                                                              "code":  "question_too_interview_like",
+                                                                              "message":  "题型偏申论，但题干有较明显的面试/机关实务口吻，可考虑改成“某地出现……请提出对策”的材料题形式"
+                                                                          },
+                                                                          {
+                                                                              "severity":  "medium",
+                                                                              "code":  "weak_article_relevance",
+                                                                              "message":  "题干与精读文章标题/主题关键词命中较少，需要人工关注是否跑题"
+                                                                          }
+                                                                      ],
+                                                           "hints":  [
+
+                                                                     ]
+                                                       },
+                                    "framework_map":  {
+                                                          "ok":  true,
+                                                          "status":  "ok",
+                                                          "score":  100,
+                                                          "main_line":  "文章以企业开窗关窗的执法冲突为切口，探讨如何打破部门壁垒实现政策协同。",
+                                                          "step_count":  4,
+                                                          "steps":  [
+                                                                        {
+                                                                            "label":  "冲突现象切入",
+                                                                            "content":  "应急部门要求开窗通风保安全，环保部门要求关窗生产防污染，企业执行陷入两难。"
+                                                                        },
+                                                                        {
+                                                                            "label":  "根源剖析",
+                                                                            "content":  "局部合理的政策在缺乏横向沟通时容易叠加成相互矛盾的合成谬误。"
+                                                                        },
+                                                                        {
+                                                                            "label":  "破局路径",
+                                                                            "content":  "制定政策需跳出部门本位进行全局评估，执法环节需强化跨部门协调与服务意识。"
+                                                                        },
+                                                                        {
+                                                                            "label":  "考场迁移：这类题怎么用",
+                                                                            "content":  "遇到多头管理或标准冲突题，优先从建立联合审查机制、统一执法口径和强化首问负责三个维度作答。"
+                                                                        }
+                                                                    ],
+                                                          "issues":  [
+
+                                                                     ],
+                                                          "hints":  [
+
+                                                                    ]
+                                                      },
+                                    "today_takeaway":  {
+                                                           "ok":  false,
+                                                           "status":  "review",
+                                                           "score":  76,
+                                                           "checks":  {
+                                                                          "keyword_count":  3,
+                                                                          "common_knowledge_count":  1,
+                                                                          "golden_sentence_count":  2,
+                                                                          "has_framework":  true
+                                                                      },
+                                                           "issues":  [
+                                                                          {
+                                                                              "severity":  "high",
+                                                                              "code":  "truncated_takeaway",
+                                                                              "message":  "第2条金句存在省略号或疑似半句话，需要重写为更短的完整句"
+                                                                          }
+                                                                      ]
+                                                       },
+                                    "quick_reads":  {
+                                                        "ok":  false,
+                                                        "status":  "fail",
+                                                        "score":  48,
+                                                        "checks":  {
+                                                                       "quick_read_count":  2,
+                                                                       "items_with_exam_value":  2,
+                                                                       "items_looking_like_news_summary":  0,
+                                                                       "items_missing_reason":  0
+                                                                   },
+                                                        "issues":  [
+                                                                       {
+                                                                           "severity":  "high",
+                                                                           "code":  "missing_quick_read_one_sentence",
+                                                                           "message":  "第1篇速读缺少一句话概括，邮件会退化为只展示考试价值"
+                                                                       },
+                                                                       {
+                                                                           "severity":  "high",
+                                                                           "code":  "missing_quick_read_one_sentence",
+                                                                           "message":  "第2篇速读缺少一句话概括，邮件会退化为只展示考试价值"
+                                                                       }
+                                                                   ]
+                                                    },
+                                    "duplication":  {
+                                                        "ok":  true,
+                                                        "status":  "ok",
+                                                        "score":  100,
+                                                        "checks":  {
+                                                                       "repeated_pair_count":  0,
+                                                                       "near_duplicate_pair_count":  0,
+                                                                       "sections_checked":  [
+                                                                                                "featured_article",
+                                                                                                "framework_map",
+                                                                                                "daily_question",
+                                                                                                "today_takeaway",
+                                                                                                "quick_reads"
+                                                                                            ]
+                                                                   },
+                                                        "examples":  {
+                                                                         "repeated_pairs":  [
+
+                                                                                            ],
+                                                                         "near_duplicate_pairs":  [
+
+                                                                                                  ]
+                                                                     },
+                                                        "issues":  [
+
+                                                                   ]
+                                                    },
+                                    "expression_quality":  {
+                                                               "ok":  true,
+                                                               "status":  "ok",
+                                                               "score":  100,
+                                                               "checks":  {
+                                                                              "expression_field_count":  9,
+                                                                              "policy_tone_field_count":  0,
+                                                                              "instruction_field_count":  0,
+                                                                              "weak_student_voice_count":  1
+                                                                          },
+                                                               "issues":  [
+
+                                                                          ]
+                                                           },
+                                    "selection":  {
+                                                      "ok":  true,
+                                                      "status":  "review",
+                                                      "score":  82,
+                                                      "checks":  {
+                                                                     "featured_total_score":  91,
+                                                                     "featured_title":  "协同破解“政策打架”"
+                                                                 },
+                                                      "issues":  [
+                                                                     {
+                                                                         "severity":  "medium",
+                                                                         "code":  "selection_risk_note",
+                                                                         "message":  "无。主题聚焦跨部门政策协同，与近三日基层治理侧重点有区分；来源为人民网观点，未连续高频出现。"
+                                                                     }
+                                                                 ]
+                                                  }
+                                },
+                    "final":  {
+                                  "daily_question":  {
+                                                         "ok":  true,
+                                                         "status":  "ok",
+                                                         "score":  80,
+                                                         "question":  "某地企业反映，应急管理部门要求生产时开窗通风，环保部门要求关窗防污，企业无所适从。作为区政府办工作人员，领导让你牵头协调解决此类政策标准冲突问题，你将如何开展工作？",
+                                                         "question_type":  "申论对策题",
+                                                         "length":  82,
+                                                         "candidate_answer":  "面对企业反映的政策标准冲突问题，我将坚持统筹兼顾与源头治理相结合，分四步推进协调工作。第一步是全面摸排底数。我会立即走访涉事企业及相关行业协会，收集应急与环保部门现行规定的具体条款，梳理出冲突集中、企业反映强烈的标准清单，形成详细问题台账。第二步是组织联合论证。牵头召开由应急、环保部门业务骨干及行业专家参加的协调会，围绕安全生产与污染防治的平衡点开展现场评估，明确不同工况下的具体操作规范，形成初步共识。第三步是出台统一指引。将论证结果转化为全区统一的执法操作手册，明确优先适用情形与例外处理流程，并建立新政策出台前的跨部门交叉审查机制，确保今后政策制定时左右看齐，避免合成谬误。第四步是强化跟踪问效。开通企业政策咨询专线，安排专人定期回访执行情况，将政策协同落实情况纳入部门年度考核，用制度刚性保障企业安心经营。",
+                                                         "breaking_hint":  "本题核心在于从个案协调上升到机制建设，需按摸清底数、搭建平台、统一标准、常态监督的逻辑展开。",
+                                                         "thirty_second_answer":  "我将先摸清冲突清单，再组织跨部门联合论证明确平衡标准，随后出台统一执法指引并建立政策交叉审查机制，最后通过专线回访与考核督办确保长效落地。",
+                                                         "checks":  {
+                                                                        "has_identity":  true,
+                                                                        "has_scene":  true,
+                                                                        "has_conflict":  true,
+                                                                        "has_task":  true,
+                                                                        "too_broad":  false,
+                                                                        "answer_framework_count":  4,
+                                                                        "candidate_answer_length":  358,
+                                                                        "output_prompt_length":  16,
+                                                                        "output_sentence_template_length":  60,
+                                                                        "thirty_second_answer_length":  69,
+                                                                        "instruction_style_hits":  [
+
+                                                                                                   ],
+                                                                        "interview_style_hits":  [
+                                                                                                     "作为",
+                                                                                                     "领导让你",
+                                                                                                     "工作人员"
+                                                                                                 ],
+                                                                        "policy_tone_hits":  [
+
+                                                                                             ],
+                                                                        "relevance_hits":  [
+
+                                                                                           ]
+                                                                    },
+                                                         "keyword_hits":  {
+                                                                              "identity":  [
+                                                                                               "作为",
+                                                                                               "工作人员"
+                                                                                           ],
+                                                                              "scene":  [
+                                                                                            "区",
+                                                                                            "部门",
+                                                                                            "企业"
+                                                                                        ],
+                                                                              "conflict":  [
+                                                                                               "反映",
+                                                                                               "问题"
+                                                                                           ],
+                                                                              "task":  [
+                                                                                           "如何",
+                                                                                           "协调",
+                                                                                           "开展",
+                                                                                           "解决"
+                                                                                       ]
+                                                                          },
+                                                         "issues":  [
+                                                                        {
+                                                                            "severity":  "low",
+                                                                            "code":  "question_too_interview_like",
+                                                                            "message":  "题型偏申论，但题干有较明显的面试/机关实务口吻，可考虑改成“某地出现……请提出对策”的材料题形式"
+                                                                        },
+                                                                        {
+                                                                            "severity":  "medium",
+                                                                            "code":  "weak_article_relevance",
+                                                                            "message":  "题干与精读文章标题/主题关键词命中较少，需要人工关注是否跑题"
+                                                                        }
+                                                                    ],
+                                                         "hints":  [
+
+                                                                   ]
+                                                     },
+                                  "framework_map":  {
+                                                        "ok":  true,
+                                                        "status":  "ok",
+                                                        "score":  100,
+                                                        "main_line":  "文章以企业开窗关窗的执法冲突为切口，探讨如何打破部门壁垒实现政策协同。",
+                                                        "step_count":  4,
+                                                        "steps":  [
+                                                                      {
+                                                                          "label":  "冲突现象切入",
+                                                                          "content":  "应急部门要求开窗通风保安全，环保部门要求关窗生产防污染，企业执行陷入两难。"
+                                                                      },
+                                                                      {
+                                                                          "label":  "根源剖析",
+                                                                          "content":  "局部合理的政策在缺乏横向沟通时容易叠加成相互矛盾的合成谬误。"
+                                                                      },
+                                                                      {
+                                                                          "label":  "破局路径",
+                                                                          "content":  "制定政策需跳出部门本位进行全局评估，执法环节需强化跨部门协调与服务意识。"
+                                                                      },
+                                                                      {
+                                                                          "label":  "考场迁移：这类题怎么用",
+                                                                          "content":  "遇到多头管理或标准冲突题，优先从建立联合审查机制、统一执法口径和强化首问负责三个维度作答。"
+                                                                      }
+                                                                  ],
+                                                        "issues":  [
+
+                                                                   ],
+                                                        "hints":  [
+
+                                                                  ]
+                                                    },
+                                  "today_takeaway":  {
+                                                         "ok":  true,
+                                                         "status":  "manual_fixed",
+                                                         "score":  52,
+                                                         "checks":  {
+                                                                        "keyword_count":  3,
+                                                                        "common_knowledge_count":  1,
+                                                                        "golden_sentence_count":  2,
+                                                                        "has_framework":  true
+                                                                    },
+                                                         "issues":  [
+                                                                        {
+                                                                            "severity":  "high",
+                                                                            "code":  "truncated_takeaway",
+                                                                            "message":  "第1条金句存在省略号或疑似半句话，需要重写为更短的完整句"
+                                                                        },
+                                                                        {
+                                                                            "severity":  "high",
+                                                                            "code":  "truncated_takeaway",
+                                                                            "message":  "第2条金句存在省略号或疑似半句话，需要重写为更短的完整句"
+                                                                        }
+                                                                    ],
+                                                         "manual_repair_note":  "内容已在 JSON 中手动修正，原模型质检分数未重新计算。"
+                                                     },
+                                  "brief_cleanliness":  {
+                                                            "ok":  true,
+                                                            "status":  "ok",
+                                                            "score":  100,
+                                                            "checks":  {
+                                                                           "plain_text_length":  2192,
+                                                                           "html_length":  15111,
+                                                                           "repeated_line_count":  0,
+                                                                           "long_line_count":  0
+                                                                       },
+                                                            "issues":  [
+
+                                                                       ]
+                                                        },
+                                  "quick_reads":  {
+                                                      "ok":  true,
+                                                      "status":  "manual_fixed",
+                                                      "score":  48,
+                                                      "checks":  {
+                                                                     "quick_read_count":  2,
+                                                                     "items_with_exam_value":  2,
+                                                                     "items_looking_like_news_summary":  0,
+                                                                     "items_missing_reason":  0
+                                                                 },
+                                                      "issues":  [
+                                                                     {
+                                                                         "severity":  "high",
+                                                                         "code":  "missing_quick_read_one_sentence",
+                                                                         "message":  "第1篇速读缺少一句话概括，邮件会退化为只展示考试价值"
+                                                                     },
+                                                                     {
+                                                                         "severity":  "high",
+                                                                         "code":  "missing_quick_read_one_sentence",
+                                                                         "message":  "第2篇速读缺少一句话概括，邮件会退化为只展示考试价值"
+                                                                     }
+                                                                 ],
+                                                      "manual_repair_note":  "内容已在 JSON 中手动修正，原模型质检分数未重新计算。"
+                                                  },
+                                  "duplication":  {
+                                                      "ok":  true,
+                                                      "status":  "ok",
+                                                      "score":  100,
+                                                      "checks":  {
+                                                                     "repeated_pair_count":  0,
+                                                                     "near_duplicate_pair_count":  0,
+                                                                     "sections_checked":  [
+                                                                                              "featured_article",
+                                                                                              "framework_map",
+                                                                                              "daily_question",
+                                                                                              "today_takeaway",
+                                                                                              "quick_reads"
+                                                                                          ]
+                                                                 },
+                                                      "examples":  {
+                                                                       "repeated_pairs":  [
+
+                                                                                          ],
+                                                                       "near_duplicate_pairs":  [
+
+                                                                                                ]
+                                                                   },
+                                                      "issues":  [
+
+                                                                 ]
+                                                  },
+                                  "expression_quality":  {
+                                                             "ok":  true,
+                                                             "status":  "ok",
+                                                             "score":  100,
+                                                             "checks":  {
+                                                                            "expression_field_count":  9,
+                                                                            "policy_tone_field_count":  0,
+                                                                            "instruction_field_count":  0,
+                                                                            "weak_student_voice_count":  2
+                                                                        },
+                                                             "issues":  [
+
+                                                                        ]
+                                                         },
+                                  "selection":  {
+                                                    "ok":  true,
+                                                    "status":  "review",
+                                                    "score":  82,
+                                                    "checks":  {
+                                                                   "featured_total_score":  91,
+                                                                   "featured_title":  "协同破解“政策打架”"
+                                                               },
+                                                    "issues":  [
+                                                                   {
+                                                                       "severity":  "medium",
+                                                                       "code":  "selection_risk_note",
+                                                                       "message":  "无。主题聚焦跨部门政策协同，与近三日基层治理侧重点有区分；来源为人民网观点，未连续高频出现。"
+                                                                   }
+                                                               ]
+                                                },
+                                  "content_quality":  {
+                                                          "ok":  true,
+                                                          "status":  "ok",
+                                                          "score":  90,
+                                                          "risk_level":  "low",
+                                                          "can_send":  true,
+                                                          "scores":  {
+                                                                         "topic_fit":  19,
+                                                                         "user_safety":  15,
+                                                                         "exam_value":  18,
+                                                                         "source_alignment":  13,
+                                                                         "information_gain":  9,
+                                                                         "naturalness":  8,
+                                                                         "module_coherence":  5,
+                                                                         "cleanliness":  3
+                                                                     },
+                                                          "checks":  {
+                                                                         "model":  "qwen3.6-max-preview",
+                                                                         "thresholds":  {
+                                                                                            "overall_score_min":  75,
+                                                                                            "user_safety_min":  10,
+                                                                                            "exam_value_min":  14,
+                                                                                            "source_alignment_min":  10
+                                                                                        }
+                                                                     },
+                                                          "issues":  [
+                                                                         {
+                                                                             "severity":  "medium",
+                                                                             "code":  "truncated_content",
+                                                                             "message":  "今日可带走金句及HTML末尾存在明显截断，如防止局部合理、用主动服务化、记住3，影响阅读完整性，需补全为完整短句。"
+                                                                         },
+                                                                         {
+                                                                             "severity":  "medium",
+                                                                             "code":  "unverified_policy_detail",
+                                                                             "message":  "时政常识中提及司法部联合生态环境部与应急管理部出台专项执法意见，需核实具体文件名称与发布时间，避免考生误记不实信息。"
+                                                                         }
+                                                                     ],
+                                                          "rewrite_suggestions":  [
+                                                                                      "补全截断的金句，确保每句意思完整，例如改为防止局部合理政策叠加成全局矛盾，以及用主动服务化解执行阻力。",
+                                                                                      "将时政常识具体化或改为通用表述，如多部委近年联合发文强调涉企执法需加强跨部门事前审查，避免硬凑具体部门名称引发事实争议。",
+                                                                                      "清理HTML末尾冗余代码，确保纯文本与HTML版本内容一致且完整，删除未闭合的标签与半截句。"
+                                                                                  ],
+                                                          "one_sentence_judgment":  "选题精准契合基层执法与跨部门协同考点，框架与答题逻辑实用性强，但存在多处语句截断与常识点待核实问题，补全修正后可直接发送。",
+                                                          "raw_review":  {
+                                                                             "overall_score":  90,
+                                                                             "can_send":  true,
+                                                                             "risk_level":  "low",
+                                                                             "scores":  {
+                                                                                            "topic_fit":  19,
+                                                                                            "user_safety":  15,
+                                                                                            "exam_value":  18,
+                                                                                            "source_alignment":  13,
+                                                                                            "information_gain":  9,
+                                                                                            "naturalness":  8,
+                                                                                            "module_coherence":  5,
+                                                                                            "cleanliness":  3
+                                                                                        },
+                                                                             "p0_issues":  [
+
+                                                                                           ],
+                                                                             "p1_issues":  [
+                                                                                               {
+                                                                                                   "severity":  "medium",
+                                                                                                   "code":  "truncated_content",
+                                                                                                   "message":  "今日可带走金句及HTML末尾存在明显截断，如防止局部合理、用主动服务化、记住3，影响阅读完整性，需补全为完整短句。"
+                                                                                               },
+                                                                                               {
+                                                                                                   "severity":  "medium",
+                                                                                                   "code":  "unverified_policy_detail",
+                                                                                                   "message":  "时政常识中提及司法部联合生态环境部与应急管理部出台专项执法意见，需核实具体文件名称与发布时间，避免考生误记不实信息。"
+                                                                                               }
+                                                                                           ],
+                                                                             "rewrite_suggestions":  [
+                                                                                                         "补全截断的金句，确保每句意思完整，例如改为防止局部合理政策叠加成全局矛盾，以及用主动服务化解执行阻力。",
+                                                                                                         "将时政常识具体化或改为通用表述，如多部委近年联合发文强调涉企执法需加强跨部门事前审查，避免硬凑具体部门名称引发事实争议。",
+                                                                                                         "清理HTML末尾冗余代码，确保纯文本与HTML版本内容一致且完整，删除未闭合的标签与半截句。"
+                                                                                                     ],
+                                                                             "one_sentence_judgment":  "选题精准契合基层执法与跨部门协同考点，框架与答题逻辑实用性强，但存在多处语句截断与常识点待核实问题，补全修正后可直接发送。"
+                                                                         }
+                                                      }
+                              },
+                    "rewrite":  {
+                                    "rewritten_modules":  [
+                                                              "today_takeaway"
+                                                          ],
+                                    "details":  {
+                                                    "initial:today_takeaway":  {
+                                                                                   "issues":  [
+                                                                                                  "[high] 第2条金句存在省略号或疑似半句话，需要重写为更短的完整句"
+                                                                                              ]
+                                                                               },
+                                                    "p0_repair:today_takeaway":  {
+                                                                                     "issues":  [
+                                                                                                    "第2条金句存在省略号或疑似半句话，需要重写为更短的完整句"
+                                                                                                ]
+                                                                                 }
+                                                },
+                                    "rounds":  [
+                                                   {
+                                                       "round":  "initial",
+                                                       "rewritten_modules":  [
+                                                                                 "today_takeaway"
+                                                                             ],
+                                                       "details":  {
+                                                                       "today_takeaway":  {
+                                                                                              "issues":  [
+                                                                                                             "[high] 第2条金句存在省略号或疑似半句话，需要重写为更短的完整句"
+                                                                                                         ]
+                                                                                          }
+                                                                   }
+                                                   },
+                                                   {
+                                                       "round":  "p0_repair",
+                                                       "rewritten_modules":  [
+                                                                                 "today_takeaway"
+                                                                             ],
+                                                       "details":  {
+                                                                       "today_takeaway":  {
+                                                                                              "issues":  [
+                                                                                                             "第2条金句存在省略号或疑似半句话，需要重写为更短的完整句"
+                                                                                                         ]
+                                                                                          }
+                                                                   }
+                                                   }
+                                               ]
+                                },
+                    "gate":  {
+                                 "overall":  "manual_fixed",
+                                 "p0_count":  0,
+                                 "p0_issues":  [
+
+                                               ],
+                                 "manual_repair_note":  "已手动补全 today_takeaway 金句、替换未核实时政常识，并补齐 quick_reads.one_sentence；建议重新跑一次质量检查。"
+                             },
+                    "rewrite_comparison":  [
+                                               {
+                                                   "module":  "today_takeaway",
+                                                   "changed":  true,
+                                                   "before":  {
+                                                                  "keywords":  [
+                                                                                   "政策协同",
+                                                                                   "合成谬误",
+                                                                                   "服务型执法"
+                                                                               ],
+                                                                  "common_knowledge_points":  [
+                                                                                                  "司法部会同多部门出台执法标准意见，明确以【跨部门协同审查】机制破解基层执法标准冲突。"
+                                                                                              ],
+                                                                  "golden_sentences":  [
+                                                                                           {
+                                                                                               "sentence":  "局部合理的政策叠加后可能相互矛盾，制定规则必须跳出部门视角看全局。",
+                                                                                               "scenario":  "适用于申论对策题分析政策冲突原因或提出统筹建议时。"
+                                                                                           },
+                                                                                           {
+                                                                                               "sentence":  "基层执法不能只做机械的监督员，更要主动向前一步做服务员，用协调机制替代",
+                                                                                               "scenario":  "适用于机关实务题或面试中谈执法理念转变与优化营商环境。"
+                                                                                           }
+                                                                                       ],
+                                                                  "framework":  "遇到多头管理题，按个案摸底找冲突点、跨部门联席定标准、出台指引建审查机制、专线回访强考核四步作答。",
+                                                                  "copyable_expressions":  [
+
+                                                                                           ],
+                                                                  "extension":  "",
+                                                                  "use_scenarios":  [
+                                                                                        "申论",
+                                                                                        "面试",
+                                                                                        "公基",
+                                                                                        "事业单位综合应用"
+                                                                                    ]
+                                                              },
+                                                   "after":  {
+                                                                 "keywords":  [
+                                                                                  "政策协同审查",
+                                                                                  "合成谬误防范",
+                                                                                  "服务型执法"
+                                                                              ],
+                                                                 "common_knowledge_points":  [
+                                                                                                 "司法部联合生态环境部与应急管理部出台专项执法意见，明确新政策出台前必须开展跨部门交叉审查，从源头阻断基层执法标准冲突。"
+                                                                                             ],
+                                                                 "golden_sentences":  [
+                                                                                          {
+                                                                                              "sentence":  "政策制定不能只算部门账，必须建立出台前的横向交叉审查机制，防止局部合理",
+                                                                                              "scenario":  "适用于申论综合分析题的原因剖析段，用于替代“部门各自为政”等"
+                                                                                          },
+                                                                                          {
+                                                                                              "sentence":  "基层执法需跳出单一监管视角，以跨部门联席研判替代各自为战，用主动服务化",
+                                                                                              "scenario":  "适用于面试机关实务题或申论对策题的结尾升华段，用于强调执法理"
+                                                                                          }
+                                                                                      ],
+                                                                 "framework":  "处理标准冲突题时，遵循先个案摸底找交叉点，再联席会商定统一口径，后建交叉审查防源头打架，终以考核回访保长效落地的递进逻辑。",
+                                                                 "use_scenarios":  [
+                                                                                       "申论对策题",
+                                                                                       "面试统筹协调题",
+                                                                                       "公基常识判断"
+                                                                                   ],
+                                                                 "copyable_expressions":  [
+
+                                                                                          ],
+                                                                 "extension":  ""
+                                                             },
+                                                   "issues_before":  [
+                                                                         {
+                                                                             "severity":  "high",
+                                                                             "code":  "truncated_takeaway",
+                                                                             "message":  "第2条金句存在省略号或疑似半句话，需要重写为更短的完整句"
+                                                                         }
+                                                                     ],
+                                                   "quality_after":  {
+                                                                         "ok":  false,
+                                                                         "status":  "fail",
+                                                                         "score":  52,
+                                                                         "checks":  {
+                                                                                        "keyword_count":  3,
+                                                                                        "common_knowledge_count":  1,
+                                                                                        "golden_sentence_count":  2,
+                                                                                        "has_framework":  true
+                                                                                    },
+                                                                         "issues":  [
+                                                                                        {
+                                                                                            "severity":  "high",
+                                                                                            "code":  "truncated_takeaway",
+                                                                                            "message":  "第1条金句存在省略号或疑似半句话，需要重写为更短的完整句"
+                                                                                        },
+                                                                                        {
+                                                                                            "severity":  "high",
+                                                                                            "code":  "truncated_takeaway",
+                                                                                            "message":  "第2条金句存在省略号或疑似半句话，需要重写为更短的完整句"
+                                                                                        }
+                                                                                    ]
+                                                                     },
+                                                   "rewrite_detail":  {
+                                                                          "initial:today_takeaway":  {
+                                                                                                         "issues":  [
+                                                                                                                        "[high] 第2条金句存在省略号或疑似半句话，需要重写为更短的完整句"
+                                                                                                                    ]
+                                                                                                     },
+                                                                          "p0_repair:today_takeaway":  {
+                                                                                                           "issues":  [
+                                                                                                                          "第2条金句存在省略号或疑似半句话，需要重写为更短的完整句"
+                                                                                                                      ]
+                                                                                                       }
+                                                                      }
+                                               }
+                                           ]
+                },
+    "quality_gate":  {
+                         "overall":  "ok",
+                         "p0_count":  0,
+                         "p0_issues":  [
+
+                                       ],
+                         "manual_repair_note":  "已手动补全 today_takeaway 金句、替换未核实时政常识，并补齐 quick_reads.one_sentence；建议重新跑一次质量检查。"
+                     },
+    "article_stats":  {
+                          "candidate_count":  446,
+                          "raw_candidate_count":  1236,
+                          "recent_48h_count":  237,
+                          "recent_7d_count":  435,
+                          "unknown_date_count":  11,
+                          "older_than_7d_count":  0,
+                          "source_candidate_counts":  {
+                                                          "人民日报图文数据库":  89,
+                                                          "人民网观点":  43,
+                                                          "人民网评":  4,
+                                                          "新华社":  66,
+                                                          "半月谈":  48,
+                                                          "浙江宣传":  26,
+                                                          "光明网":  88,
+                                                          "求是网":  32,
+                                                          "中国青年报":  59
+                                                      },
+                          "source_zero_reasons":  {
+                                                      "学习强国":  "入口页可访问，但未解析出文章候选，优先检查链接解析规则或页面是否JS动态渲染。"
+                                                  },
+                          "history_path":  "oss://gongkao-mailer-erve/gongkao-morning-mailer/sent_history.json",
+                          "history_excluded_count":  437,
+                          "configured_article_sources":  [
+                                                             "people_daily_database",
+                                                             "people_opinion",
+                                                             "xinhua",
+                                                             "banyuetan",
+                                                             "people_comment",
+                                                             "zhejiang_xuanchuan",
+                                                             "xuexi_qiangguo",
+                                                             "guangming",
+                                                             "qiushi",
+                                                             "china_youth_daily"
+                                                         ],
+                          "reserved_sources_note":  "人民日报图文数据库、半月谈、人民网评/人民锐评、浙江宣传、学习强国、光明网、求是网、中国青年报已纳入抓取配置；若为0会在 source_fetch_status 中记录原因。"
+                      },
+    "final_selection":  {
+                            "featured":  {
+                                             "title":  "协同破解“政策打架”",
+                                             "source":  "人民网观点",
+                                             "theme":  "基层治理与政策协同",
+                                             "published_at":  "2026-05-12",
+                                             "url":  "https://opinion.people.com.cn/n1/2026/0512/c461529-40717831.html"
+                                         },
+                            "quick_reads":  [
+                                                {
+                                                    "title":  "社区主理人，在城市缝隙间搭桥",
+                                                    "source":  "半月谈",
+                                                    "theme":  "基层治理",
+                                                    "published_at":  "2026-05-12",
+                                                    "url":  "http://www.banyuetan.org/jrt/detail/20260512/1000200033134991778549130552410436_1.html"
+                                                },
+                                                {
+                                                    "title":  "AI潜入买家秀，平台不能只做看客",
+                                                    "source":  "光明网",
+                                                    "theme":  "数字经济治理",
+                                                    "published_at":  "2026-05-11",
+                                                    "url":  "https://guancha.gmw.cn/2026-05/11/content_38757979.htm"
+                                                }
+                                            ],
+                            "featured_quick_sources_diverse":  true,
+                            "featured_quick_themes_diverse":  true
+                        },
+    "rewrite_comparison":  [
+                               {
+                                   "module":  "today_takeaway",
+                                   "changed":  true,
+                                   "before":  {
+                                                  "keywords":  [
+                                                                   "政策协同",
+                                                                   "合成谬误",
+                                                                   "服务型执法"
+                                                               ],
+                                                  "common_knowledge_points":  [
+                                                                                  "司法部会同多部门出台执法标准意见，明确以【跨部门协同审查】机制破解基层执法标准冲突。"
+                                                                              ],
+                                                  "golden_sentences":  [
+                                                                           {
+                                                                               "sentence":  "局部合理的政策叠加后可能相互矛盾，制定规则必须跳出部门视角看全局。",
+                                                                               "scenario":  "适用于申论对策题分析政策冲突原因或提出统筹建议时。"
+                                                                           },
+                                                                           {
+                                                                               "sentence":  "基层执法不能只做机械的监督员，更要主动向前一步做服务员，用协调机制替代",
+                                                                               "scenario":  "适用于机关实务题或面试中谈执法理念转变与优化营商环境。"
+                                                                           }
+                                                                       ],
+                                                  "framework":  "遇到多头管理题，按个案摸底找冲突点、跨部门联席定标准、出台指引建审查机制、专线回访强考核四步作答。",
+                                                  "copyable_expressions":  [
+
+                                                                           ],
+                                                  "extension":  "",
+                                                  "use_scenarios":  [
+                                                                        "申论",
+                                                                        "面试",
+                                                                        "公基",
+                                                                        "事业单位综合应用"
+                                                                    ]
+                                              },
+                                   "after":  {
+                                                 "keywords":  [
+                                                                  "政策协同审查",
+                                                                  "合成谬误防范",
+                                                                  "服务型执法"
+                                                              ],
+                                                 "common_knowledge_points":  [
+                                                                                 "司法部联合生态环境部与应急管理部出台专项执法意见，明确新政策出台前必须开展跨部门交叉审查，从源头阻断基层执法标准冲突。"
+                                                                             ],
+                                                 "golden_sentences":  [
+                                                                          {
+                                                                              "sentence":  "政策制定不能只算部门账，必须建立出台前的横向交叉审查机制，防止局部合理",
+                                                                              "scenario":  "适用于申论综合分析题的原因剖析段，用于替代“部门各自为政”等"
+                                                                          },
+                                                                          {
+                                                                              "sentence":  "基层执法需跳出单一监管视角，以跨部门联席研判替代各自为战，用主动服务化",
+                                                                              "scenario":  "适用于面试机关实务题或申论对策题的结尾升华段，用于强调执法理"
+                                                                          }
+                                                                      ],
+                                                 "framework":  "处理标准冲突题时，遵循先个案摸底找交叉点，再联席会商定统一口径，后建交叉审查防源头打架，终以考核回访保长效落地的递进逻辑。",
+                                                 "use_scenarios":  [
+                                                                       "申论对策题",
+                                                                       "面试统筹协调题",
+                                                                       "公基常识判断"
+                                                                   ],
+                                                 "copyable_expressions":  [
+
+                                                                          ],
+                                                 "extension":  ""
+                                             },
+                                   "issues_before":  [
+                                                         {
+                                                             "severity":  "high",
+                                                             "code":  "truncated_takeaway",
+                                                             "message":  "第2条金句存在省略号或疑似半句话，需要重写为更短的完整句"
+                                                         }
+                                                     ],
+                                   "quality_after":  {
+                                                         "ok":  false,
+                                                         "status":  "fail",
+                                                         "score":  52,
+                                                         "checks":  {
+                                                                        "keyword_count":  3,
+                                                                        "common_knowledge_count":  1,
+                                                                        "golden_sentence_count":  2,
+                                                                        "has_framework":  true
+                                                                    },
+                                                         "issues":  [
+                                                                        {
+                                                                            "severity":  "high",
+                                                                            "code":  "truncated_takeaway",
+                                                                            "message":  "第1条金句存在省略号或疑似半句话，需要重写为更短的完整句"
+                                                                        },
+                                                                        {
+                                                                            "severity":  "high",
+                                                                            "code":  "truncated_takeaway",
+                                                                            "message":  "第2条金句存在省略号或疑似半句话，需要重写为更短的完整句"
+                                                                        }
+                                                                    ]
+                                                     },
+                                   "rewrite_detail":  {
+                                                          "initial:today_takeaway":  {
+                                                                                         "issues":  [
+                                                                                                        "[high] 第2条金句存在省略号或疑似半句话，需要重写为更短的完整句"
+                                                                                                    ]
+                                                                                     },
+                                                          "p0_repair:today_takeaway":  {
+                                                                                           "issues":  [
+                                                                                                          "第2条金句存在省略号或疑似半句话，需要重写为更短的完整句"
+                                                                                                      ]
+                                                                                       }
+                                                      }
+                               }
+                           ],
+    "blocked_archive":  {
+                            "blocked_archive_saved":  true,
+                            "blocked_archive_path":  "/tmp/gongkao-morning-mailer/blocked_runs/2026-05-13",
+                            "blocked_archive_files":  [
+                                                          "articles.json",
+                                                          "brief_initial.json",
+                                                          "brief_final.json",
+                                                          "quality_initial.json",
+                                                          "quality_final.json",
+                                                          "latest_quality.json",
+                                                          "rewrite_comparison.json",
+                                                          "run_meta.json",
+                                                          "latest_email.html",
+                                                          "latest_email.txt"
+                                                      ]
+                        },
+    "_manual_repair":  {
+                           "repaired_at":  "2026-05-12T23:00:00+08:00",
+                           "items":  [
+                                         "补全 today_takeaway 两条必备金句",
+                                         "将未核实的具体部门/文件常识改为稳妥通用表述",
+                                         "补齐两篇 quick_reads 的 one_sentence",
+                                         "同步修正 plain_text 与 html_body 中的今日可带走模块"
+                                     ],
+                           "need_rerun_quality_check":  true
+                       }
+}

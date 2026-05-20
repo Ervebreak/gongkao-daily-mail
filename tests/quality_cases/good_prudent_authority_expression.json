@@ -1,0 +1,25 @@
+{
+  "case_id": "good_prudent_authority_expression_001",
+  "description": "审慎的依法核查、分类处置表达不应被误判为权限过满。",
+  "brief": {
+    "email_subject": "测试邮件",
+    "today_theme": "基层治理",
+    "featured_article": {
+      "title": "规范治理收费边界",
+      "rewritable_expression": "遇到公共治理收费争议，重点不是简单否定企业参与，而是依法核查、分类处置、厘清权责边界。"
+    },
+    "daily_question": {
+      "question": "某地治理项目出现收费争议，请提出处理建议。",
+      "candidate_answer": "我认为，要会同有关部门依法核查收费依据、服务内容和责任边界，对违规收费依法整改，对合法服务明确标准。"
+    },
+    "today_takeaway": {
+      "golden_sentences": ["治理边界清楚，群众才知道谁负责、钱从哪里来、问题找谁解决。"]
+    },
+    "quick_reads": []
+  },
+  "plain_text": "遇到公共治理收费争议，重点不是简单否定企业参与，而是依法核查、分类处置、厘清权责边界。",
+  "html_body": "<html><body>遇到公共治理收费争议，重点不是简单否定企业参与，而是依法核查、分类处置、厘清权责边界。</body></html>",
+  "expected_issue_codes": [],
+  "unexpected_issue_codes": ["authority_overclaim", "legal_overstatement", "repeated_word", "html_plain_mismatch"],
+  "expect_changed": false
+}
