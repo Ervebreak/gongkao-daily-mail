@@ -562,6 +562,34 @@
 
 ---
 
+### Check 8.6：表达字段是否角色重叠或啰嗦
+
+新增 `module_redundancy_quality.py` 专门检查以下字段之间是否重复：
+
+- `featured_article.exam_use`
+- `featured_article.rewritable_expression`
+- `today_takeaway.golden_sentences`
+- `today_takeaway.framework`
+- `daily_question.answer_framework`
+- `daily_question.candidate_answer`
+- `article_framework_map.steps`
+
+检查规则：
+
+1. 如果两个模块出现完全相同句子，输出 `repeated_expression_across_modules`。若涉及金句，severity 为 high；否则为 medium。
+2. 如果两个模块语义高度相似，或连续出现相同核心短语超过 12 字，输出 `near_duplicate_expression`，severity 为 medium。
+3. 如果“作答框架”每点超过 35 字，或写成完整答案句，输出 `answer_framework_too_verbose`，severity 为 medium。
+4. 如果“换成考场话 / 可用表达 / 必备金句”三者中有两者表达同一意思，输出 `module_role_overlap`，severity 为 medium；连续出现 2 处以上升为 high。
+5. 如果同一组表达反复出现“不能只……而要……”“不是……而是……”超过 3 次，输出 `rhetorical_pattern_repetition`，severity 为 low 或 medium。
+
+门禁规则：
+
+- high 级 `repeated_expression_across_modules` 和 `module_role_overlap` 进入 `quality_gate`。
+- medium 问题进入管理员报告和质量包，不一定阻断发送。
+- 修复优先改写重复字段，而不是重写整封邮件。
+
+---
+
 ## 9. 今日速读检查项
 
 ### Check 9.1：是否只有摘要，没有考试价值

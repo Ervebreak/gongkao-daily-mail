@@ -156,6 +156,7 @@
 相关代码：
 
 - `duplication_quality.py`
+- `module_redundancy_quality.py`
 - `scripts/validate_daily_brief.py`
 
 必须确认：

@@ -219,6 +219,7 @@ def build_quality_gate(
     quick_reads_quality: dict[str, Any] | None = None,
     duplication_quality: dict[str, Any] | None = None,
     expression_quality: dict[str, Any] | None = None,
+    module_redundancy_quality: dict[str, Any] | None = None,
     content_risk_quality: dict[str, Any] | None = None,
     selection_quality: dict[str, Any] | None = None,
     content_quality: dict[str, Any] | None = None,
@@ -257,6 +258,8 @@ def build_quality_gate(
         "sensitive_topic_needs_review",
         "dev_marker_repeated",
         "abnormal_copy_duplication",
+        "repeated_expression_across_modules",
+        "module_role_overlap",
         "expression_dev_marker",
         "expression_truncated",
         "label_leaked_in_expression",
@@ -281,6 +284,7 @@ def build_quality_gate(
         ("quick_reads", quick_reads_quality or {}),
         ("duplication", duplication_quality or {}),
         ("expression_quality", expression_quality or {}),
+        ("module_redundancy", module_redundancy_quality or {}),
         ("content_risk", content_risk_quality or {}),
         ("selection", selection_quality or {}),
         ("content_quality", content_quality or {}),
@@ -899,6 +903,7 @@ def evaluate_candidate_with_current_quality(
     from email_renderer import render_email_html, render_plain_text
     from expression_quality import evaluate_expression_quality
     from framework_quality import evaluate_framework_map
+    from module_redundancy_quality import evaluate_module_redundancy
     from question_quality import evaluate_daily_question
     from quick_reads_quality import evaluate_quick_reads
     from takeaway_quality import evaluate_takeaway
@@ -930,6 +935,7 @@ def evaluate_candidate_with_current_quality(
     quick_reads_quality = evaluate_quick_reads(brief)
     duplication_quality = evaluate_duplication(brief)
     expression_quality = evaluate_expression_quality(brief)
+    module_redundancy_quality = evaluate_module_redundancy(brief)
     content_risk_quality = evaluate_content_risks(brief, plain_text, html_body)
     selection_quality = evaluate_selection_quality(brief)
     content_quality = evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation)
@@ -941,6 +947,7 @@ def evaluate_candidate_with_current_quality(
         quick_reads_quality,
         duplication_quality,
         expression_quality,
+        module_redundancy_quality,
         content_risk_quality,
         selection_quality,
         content_quality,
@@ -961,6 +968,7 @@ def evaluate_candidate_with_current_quality(
                 "quick_reads": quick_reads_quality,
                 "duplication": duplication_quality,
                 "expression_quality": expression_quality,
+                "module_redundancy": module_redundancy_quality,
                 "content_risk": content_risk_quality,
                 "selection": selection_quality,
                 "content_quality": content_quality,
@@ -1185,6 +1193,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
         set_llm_trace_hook,
     )
     from minor_auto_fixer import apply_minor_auto_fixes, merge_minor_fixes_into_rewrite
+    from module_redundancy_quality import evaluate_module_redundancy
     from question_quality import evaluate_daily_question
     from quick_reads_quality import evaluate_quick_reads
     from takeaway_quality import evaluate_takeaway
@@ -1276,6 +1285,8 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
     logger.info("duplication quality", **initial_duplication_quality)
     initial_expression_quality = evaluate_expression_quality(brief)
     logger.info("expression quality", **initial_expression_quality)
+    initial_module_redundancy_quality = evaluate_module_redundancy(brief)
+    logger.info("module redundancy quality", **initial_module_redundancy_quality)
     initial_content_risk_quality = evaluate_content_risks(brief)
     logger.info("content risk quality", **initial_content_risk_quality)
     rewrite_result = None
@@ -1288,6 +1299,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
     quick_reads_quality = initial_quick_reads_quality
     duplication_quality = initial_duplication_quality
     expression_quality = initial_expression_quality
+    module_redundancy_quality = initial_module_redundancy_quality
     content_risk_quality = initial_content_risk_quality
     selection_quality = initial_selection_quality
     if settings.quality_rewrite_enabled and settings.quality_rewrite_max_rounds > 0 and (
@@ -1323,6 +1335,8 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                 logger.info("duplication quality after rewrite", **duplication_quality)
                 expression_quality = evaluate_expression_quality(brief)
                 logger.info("expression quality after rewrite", **expression_quality)
+                module_redundancy_quality = evaluate_module_redundancy(brief)
+                logger.info("module redundancy quality after rewrite", **module_redundancy_quality)
                 content_risk_quality = evaluate_content_risks(brief)
                 logger.info("content risk quality after rewrite", **content_risk_quality)
         except Exception as exc:
@@ -1351,6 +1365,8 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
     logger.info("duplication quality final", **duplication_quality)
     expression_quality = evaluate_expression_quality(brief)
     logger.info("expression quality final", **expression_quality)
+    module_redundancy_quality = evaluate_module_redundancy(brief)
+    logger.info("module redundancy quality final", **module_redundancy_quality)
     content_risk_quality = evaluate_content_risks(brief, plain_text, html_body)
     logger.info("content risk quality final", **content_risk_quality)
     if settings.quality_rewrite_enabled:
@@ -1388,6 +1404,8 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                 logger.info("duplication quality after minor auto fixes", **duplication_quality)
                 expression_quality = evaluate_expression_quality(brief)
                 logger.info("expression quality after minor auto fixes", **expression_quality)
+                module_redundancy_quality = evaluate_module_redundancy(brief)
+                logger.info("module redundancy quality after minor auto fixes", **module_redundancy_quality)
                 content_risk_quality = evaluate_content_risks(brief, plain_text, html_body)
                 logger.info("content risk quality after minor auto fixes", **content_risk_quality)
         except Exception as exc:
@@ -1429,6 +1447,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                 quick_reads_quality = evaluate_quick_reads(brief)
                 duplication_quality = evaluate_duplication(brief)
                 expression_quality = evaluate_expression_quality(brief)
+                module_redundancy_quality = evaluate_module_redundancy(brief)
                 content_risk_quality = evaluate_content_risks(brief, plain_text, html_body)
                 content_quality = evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation)
                 logger.info("content quality after content minor fixes", **content_quality)
@@ -1447,6 +1466,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                     "quick_reads_quality": quick_reads_quality,
                     "duplication_quality": duplication_quality,
                     "expression_quality": expression_quality,
+                    "module_redundancy_quality": module_redundancy_quality,
                     "content_risk_quality": content_risk_quality,
                     "selection_quality": selection_quality,
                     "content_quality": content_quality,
@@ -1487,6 +1507,8 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                 logger.info("duplication quality after content issue rewrite", **duplication_quality)
                 expression_quality = evaluate_expression_quality(brief)
                 logger.info("expression quality after content issue rewrite", **expression_quality)
+                module_redundancy_quality = evaluate_module_redundancy(brief)
+                logger.info("module redundancy quality after content issue rewrite", **module_redundancy_quality)
                 content_risk_quality = evaluate_content_risks(brief, plain_text, html_body)
                 logger.info("content risk quality after content issue rewrite", **content_risk_quality)
                 content_quality = evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation)
@@ -1510,6 +1532,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                     quick_reads_quality = before_content_issue_rewrite["quick_reads_quality"]
                     duplication_quality = before_content_issue_rewrite["duplication_quality"]
                     expression_quality = before_content_issue_rewrite["expression_quality"]
+                    module_redundancy_quality = before_content_issue_rewrite["module_redundancy_quality"]
                     content_risk_quality = before_content_issue_rewrite["content_risk_quality"]
                     selection_quality = before_content_issue_rewrite["selection_quality"]
                     content_quality = before_content_issue_rewrite["content_quality"]
@@ -1525,6 +1548,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
         quick_reads_quality,
         duplication_quality,
         expression_quality,
+        module_redundancy_quality,
         content_risk_quality,
         selection_quality,
         content_quality,
@@ -1534,7 +1558,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
         try:
             p0_issues = quality_gate.get("p0_issues") or []
             p0_modules = {str(issue.get("module") or "") for issue in p0_issues if isinstance(issue, dict)}
-            force_all_content_modules = bool({"brief_cleanliness", "duplication", "expression_quality"} & p0_modules)
+            force_all_content_modules = bool({"brief_cleanliness", "duplication", "expression_quality", "module_redundancy"} & p0_modules)
             p0_question_quality = _quality_for_p0_repair(question_quality, "daily_question", p0_issues, force=force_all_content_modules)
             p0_framework_quality = _quality_for_p0_repair(framework_quality, "framework_map", p0_issues, force=force_all_content_modules)
             p0_takeaway_quality = _quality_for_p0_repair(takeaway_quality, "today_takeaway", p0_issues, force=force_all_content_modules)
@@ -1585,6 +1609,8 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                 logger.info("duplication quality after p0 repair", **duplication_quality)
                 expression_quality = evaluate_expression_quality(brief)
                 logger.info("expression quality after p0 repair", **expression_quality)
+                module_redundancy_quality = evaluate_module_redundancy(brief)
+                logger.info("module redundancy quality after p0 repair", **module_redundancy_quality)
                 content_risk_quality = evaluate_content_risks(brief, plain_text, html_body)
                 logger.info("content risk quality after p0 repair", **content_risk_quality)
                 content_quality = evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation)
@@ -1597,6 +1623,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                     quick_reads_quality,
                     duplication_quality,
                     expression_quality,
+                    module_redundancy_quality,
                     content_risk_quality,
                     selection_quality,
                     content_quality,
@@ -1629,6 +1656,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
             "quick_reads": initial_quick_reads_quality,
             "duplication": initial_duplication_quality,
             "expression_quality": initial_expression_quality,
+            "module_redundancy": initial_module_redundancy_quality,
             "content_risk": initial_content_risk_quality,
             "selection": initial_selection_quality,
         },
@@ -1640,6 +1668,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
             "quick_reads": quick_reads_quality,
             "duplication": duplication_quality,
             "expression_quality": expression_quality,
+            "module_redundancy": module_redundancy_quality,
             "content_risk": content_risk_quality,
             "selection": selection_quality,
             "content_quality": content_quality,
