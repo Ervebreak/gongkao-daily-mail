@@ -20,6 +20,20 @@ python -c "import dashscope; print('dashscope ok')"
 
 ## 2. 发布包检查
 
+Windows 本地打包推荐直接运行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build_fc_package.ps1
+```
+
+默认输出：
+
+```text
+C:\edgeDownlods\公考真题\邮件产品\_release\gongkao-morning-mailer.zip
+```
+
+该脚本会安装阿里云 FC Python 3.10 Linux x86_64 兼容依赖，并自动检查入口文件、题库兜底 CSV、Windows `.pyd`、`__pycache__` / `.pyc`。
+
 发布包不得包含：
 
 - `__pycache__`
