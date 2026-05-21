@@ -35,6 +35,32 @@
 
 ## 最新改动
 
+### 2026-05-21｜沉淀今日一题三层边界到长文档
+
+**改动原因**
+
+专项规则文件已经建立，但长期维护还需要同步进入模块 Skill 和质量检查清单。否则后续只阅读 `daily_question_skill.md` 或 `quality_checks.md` 时，仍可能遗漏“审题关键 / 作答主线 / 作答框架”的边界要求。
+
+**已改文件**
+
+- `content_harness/daily_question_skill.md`
+- `content_harness/quality_checks.md`
+- `CHANGELOG_HARNESS.md`
+
+**最新版行为**
+
+- `daily_question_skill.md` 已把输出链路改为“题目场景 → 审题关键 → 作答主线 → 作答框架 → 考生表达”。
+- `daily_question_skill.md` 已明确 `exam_focus` / `review_key`、`breaking_hint`、`answer_framework` / `answer_frame` 的字段含义和展示关系。
+- `daily_question_skill.md` 已新增“三层边界”章节、合格/不合格示例和自检项。
+- `quality_checks.md` 已新增 `Check 7.7：审题关键、作答主线、作答框架是否边界清楚`。
+- `quality_checks.md` 已把今日一题完整结构从“审题关键 + 作答框架”升级为“审题关键 + 作答主线 + 作答框架”。
+- `quality_checks.md` 已列出建议质检 code：`exam_focus_too_answer_like`、`breaking_hint_too_framework_like`、`breaking_hint_duplicates_framework`。
+
+**后续建议补齐**
+
+1. Codex 完成 `prompt_templates.py`、`email_renderer.py`、`question_quality.py` 后，在本文件追加代码层改动记录。
+2. 后续如新增今日一题好/坏样例，应优先覆盖“三层边界重复”的回归样例。
+
 ### 2026-05-21｜同步 Harness 索引中的阅读顺序和今日一题边界规则
 
 **改动原因**
