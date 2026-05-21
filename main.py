@@ -1036,25 +1036,11 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
         return {"status": "blocked", "reason": "candidate_date_mismatch", "delivery_date": delivery_date, "candidate_date": candidate_date, "log": str(log_path)}
 
     if candidate.get("candidate_type") != "weekly_pdf":
-        previous_quality_gate = quality_gate
-        current_quality = evaluate_candidate_with_current_quality(candidate, delivery_date, test_invocation=test_invocation)
-        current_quality_gate = current_quality.get("quality_gate") if isinstance(current_quality.get("quality_gate"), dict) else {}
-        quality_gate = apply_manual_quality_override(previous_quality_gate, current_quality_gate)
-        candidate = {
-            **candidate,
-            "brief": current_quality.get("brief") or candidate.get("brief"),
-            "plain_text": current_quality.get("plain_text") or candidate.get("plain_text"),
-            "html_body": current_quality.get("html_body") or candidate.get("html_body"),
-            "subject": current_quality.get("subject") or candidate.get("subject"),
-            "quality": current_quality.get("quality") or candidate.get("quality"),
-            "quality_gate": quality_gate,
-        }
         logger.info(
-            "candidate current quality gate",
+            "candidate send using stored quality gate",
             quality_gate=quality_gate,
-            current_quality_gate=current_quality_gate,
-            schema_warnings=current_quality.get("schema_warnings", []),
-            previous_quality_gate=previous_quality_gate,
+            candidate_recheck_skipped=True,
+            reason="trust_nightly_candidate_quality_gate",
         )
     if quality_gate.get("overall") != "ok":
         logger.info("candidate send blocked", reason="quality_gate_fail", quality_gate=quality_gate)
