@@ -35,6 +35,42 @@
 
 ## 最新改动
 
+### 2026-05-21｜检查今日一题代码层边界改动
+
+**改动原因**
+
+Codex 已完成今日一题三层边界相关代码修改，需要将代码层检查结果同步到变更记录，方便后续接手时区分“已完成”和“待小修”的内容。
+
+**已检查文件**
+
+- `prompt_templates.py`
+- `email_renderer.py`
+- `question_quality.py`
+- `CHANGELOG_HARNESS.md`
+
+**检查结果**
+
+- `prompt_templates.py` 已将 `exam_focus` 改为“只拆题，不写作答路线或具体对策”。
+- `prompt_templates.py` 已将 `breaking_hint` 改为“1句话作答主线”，并要求不得列完整分点、不得和作答框架重复。
+- `email_renderer.py` 已将 HTML 展示标题从“破题提示”改为“作答主线”，底层字段仍读取 `breaking_hint` / `breaking_direction` / `review_key`。
+- `question_quality.py` 已新增 `ANSWER_ROUTE_TERMS`，并加入以下边界质检：
+  - `exam_focus_too_answer_like`
+  - `breaking_hint_duplicates_framework`
+  - `breaking_hint_too_framework_like`
+
+**发现的待小修问题**
+
+- `prompt_templates.py` 中 `answer_framework` 字段说明写成“每条不超过45字”，但当前规则、Skill、质检仍统一要求“每条不超过35字”。后续应把该处从 45 字改回 35 字，保持生成侧与质检侧一致。
+- `question_quality.py` 中缺少作答主线时的提示语仍写“缺少破题提示”，后续建议改成“缺少作答主线”。该问题不影响功能，但会影响管理员报告口径一致性。
+
+**最新版行为**
+
+代码层已经基本完成“审题关键 / 作答主线 / 作答框架”边界改造；但在正式视为闭环前，建议完成上述两个小修，并重新运行：
+
+```powershell
+python -m py_compile prompt_templates.py question_quality.py email_renderer.py
+```
+
 ### 2026-05-21｜沉淀今日一题三层边界到长文档
 
 **改动原因**
