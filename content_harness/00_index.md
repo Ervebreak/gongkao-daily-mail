@@ -1,24 +1,28 @@
 # Content Harness Index
 
-本文件串联 `content_harness/` 下的产品、规则、技能、工作流和评估文档。AI Coding 工具修改项目前，应先读根目录 `AGENTS.md`，再按本索引读取对应文档。
+本文件串联 `content_harness/` 下的产品、规则、技能、工作流和评估文档。AI Coding 工具修改项目前，应先读根目录 `CHANGELOG_HARNESS.md`，再读根目录 `AGENTS.md`，最后按本索引读取对应文档。
 
 ## 1. 总览顺序
 
 建议阅读顺序：
 
-1. `product_spec.md`：产品定位、用户价值、模块边界。
-2. `content_rules.md`：所有正式内容必须遵守的红线。
-3. `workflow.md`：文章抓取、生成、质检、候选、发送、归档的完整链路。
-4. `quality_checks.md`：质检层级、阻断标准、修复原则。
-5. `runtime_prompt_rules.md`：运行时注入模型的短规则。
-6. `display_rules.md`、`fact_safety_rules.md`、`deployment_rules.md`、`p0_repair_workflow.md`：展示边界、事实安全、部署和 P0 修复闭环。
-7. 各模块 Skill：今日一题、框架图、今日可带走。
-8. `knowledge/README.md`：项目正反例和题型转换方法索引。
+1. `../CHANGELOG_HARNESS.md`：确认最近改了什么、当前最新版行为是什么、还有哪些待补项。
+2. `../AGENTS.md`：确认项目运行边界、禁止行为、核心文件地图和验证要求。
+3. `product_spec.md`：产品定位、用户价值、模块边界。
+4. `content_rules.md`：所有正式内容必须遵守的红线。
+5. `workflow.md`：文章抓取、生成、质检、候选、发送、归档的完整链路。
+6. `quality_checks.md`：质检层级、阻断标准、修复原则。
+7. `runtime_prompt_rules.md`：运行时注入模型的短规则。
+8. `display_rules.md`、`fact_safety_rules.md`、`deployment_rules.md`、`p0_repair_workflow.md`：展示边界、事实安全、部署和 P0 修复闭环。
+9. 各模块 Skill：今日一题、框架图、今日可带走。
+10. `knowledge/README.md`：项目正反例和题型转换方法索引。
 
 ## 2. 文档职责
 
 | 文件 | 作用 |
 | --- | --- |
+| `../CHANGELOG_HARNESS.md` | 定义当前最新版行为、最近改动、后续待补项；所有修改前必须先读 |
+| `../AGENTS.md` | 定义 AI Coding 工具接手项目时的入口、禁止行为、核心文件地图和验证要求 |
 | `product_spec.md` | 定义项目是什么、服务谁、为什么不是普通新闻摘要 |
 | `content_rules.md` | 定义长期内容红线和表达规则 |
 | `workflow.md` | 定义从抓取到发送、归档、复盘的系统工作流 |
@@ -31,6 +35,7 @@
 | `article_selection_prompt.md` | 定义选文固定 Prompt：考题转化度、问题意识、场景具体度、矛盾张力、降权规则和输出字段 |
 | `question_bank_skill.md` | 定义申论真题题库轻接入、隐藏参考、fail-open 和材料依赖边界 |
 | `daily_question_skill.md` | 定义“今日一题”的目标、结构、合格标准 |
+| `daily_question_boundary_rules.md` | 定义“审题关键 / 作答主线 / 作答框架”的三层边界 |
 | `framework_map_skill.md` | 定义“文章框架图”的目标、结构、合格标准 |
 | `takeaway_expression_skill.md` | 定义“今日可带走/表达沉淀”的目标、结构、合格标准 |
 | `../knowledge/README.md` | 定义正反例、题型方法和每周样例沉淀规则 |
@@ -41,6 +46,7 @@
 
 必读：
 
+- `../CHANGELOG_HARNESS.md`
 - `product_spec.md`
 - `content_rules.md`
 - `workflow.md`
@@ -55,6 +61,7 @@
 
 必读：
 
+- `../CHANGELOG_HARNESS.md`
 - `article_selection_prompt.md`
 - `workflow.md`
 - `content_rules.md`
@@ -77,6 +84,8 @@
 
 必读：
 
+- `../CHANGELOG_HARNESS.md`
+- `daily_question_boundary_rules.md`
 - `daily_question_skill.md`
 - `question_bank_skill.md`
 - `quality_checks.md`
@@ -92,10 +101,18 @@
 - `question_bank.py`
 - `scripts/validate_daily_brief.py`
 
+必须确认：
+
+- 审题关键只拆题，不写作答路线。
+- `breaking_hint` 底层字段不改，但展示语义是“作答主线”。
+- 作答主线只给一句总路线，不写成第二套框架。
+- 作答框架才正式分点，每条不超过 35 字。
+
 ### 文章框架图
 
 必读：
 
+- `../CHANGELOG_HARNESS.md`
 - `framework_map_skill.md`
 - `quality_checks.md`
 - `content_rules.md`
@@ -113,6 +130,7 @@
 
 必读：
 
+- `../CHANGELOG_HARNESS.md`
 - `takeaway_expression_skill.md`
 - `quality_checks.md`
 - `content_rules.md`
@@ -130,6 +148,7 @@
 
 必读：
 
+- `../CHANGELOG_HARNESS.md`
 - `product_spec.md`
 - `content_rules.md`
 - `quality_checks.md`
@@ -150,6 +169,7 @@
 
 必读：
 
+- `../CHANGELOG_HARNESS.md`
 - `content_rules.md`
 - `quality_checks.md`
 
@@ -168,8 +188,10 @@
 
 必读：
 
+- `../CHANGELOG_HARNESS.md`
 - `content_rules.md`
 - `takeaway_expression_skill.md`
+- `daily_question_boundary_rules.md`
 - `daily_question_skill.md`
 - `display_rules.md`
 - `../knowledge/good_examples/today_takeaway.md`
@@ -191,6 +213,7 @@
 
 必读：
 
+- `../CHANGELOG_HARNESS.md`
 - `content_rules.md`
 - `quality_checks.md`
 - `runtime_prompt_rules.md`
@@ -207,6 +230,7 @@
 
 必读：
 
+- `../CHANGELOG_HARNESS.md`
 - `workflow.md`
 - `quality_checks.md`
 - `p0_repair_workflow.md`
@@ -228,6 +252,7 @@
 
 必读：
 
+- `../CHANGELOG_HARNESS.md`
 - `workflow.md`
 - `quality_checks.md`
 - `p0_repair_workflow.md`
@@ -250,6 +275,7 @@
 
 必读：
 
+- `../CHANGELOG_HARNESS.md`
 - `workflow.md`
 
 相关代码：
@@ -269,9 +295,11 @@
 
 必读：
 
+- `../CHANGELOG_HARNESS.md`
 - `quality_checks.md`
 - `content_rules.md`
 - `runtime_prompt_rules.md`
+- `daily_question_boundary_rules.md`
 - `p0_repair_workflow.md`
 - `../knowledge/README.md`
 - `../knowledge/quality_issues.jsonl`
@@ -299,6 +327,7 @@
 
 必读：
 
+- `../CHANGELOG_HARNESS.md`
 - `../knowledge/README.md`
 - `../knowledge/weekly_log.md`
 - `../knowledge/good_examples/`
@@ -332,6 +361,7 @@
 
 必读：
 
+- `../CHANGELOG_HARNESS.md`
 - `scripts/weekly_quality_review.py`
 - `harness_metrics.py`
 - `../knowledge/README.md`
