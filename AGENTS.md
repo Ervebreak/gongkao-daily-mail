@@ -1,6 +1,14 @@
 # AGENTS.md
 
-本文件是 Codex、OpenClaw、Cursor 等 AI Coding 工具接手本项目时的第一入口。先读本文件，再按修改类型读取 `content_harness/00_index.md` 指向的必读文档。
+本文件是 Codex、OpenClaw、Cursor 等 AI Coding 工具接手本项目时的入口说明。接手项目前必须先读根目录 `CHANGELOG_HARNESS.md`，确认当前最新版行为和最近改动，再读本文件，并按修改类型读取 `content_harness/00_index.md` 指向的必读文档。
+
+## 0. 必读顺序
+
+1. `CHANGELOG_HARNESS.md`：先确认最近改了什么、当前最新版行为是什么、还有哪些待补项。
+2. `AGENTS.md`：再确认项目运行边界、禁止行为、核心文件地图和验证要求。
+3. `content_harness/00_index.md`：最后按具体修改类型读取对应规则、Skill、质检和工作流文档。
+
+任何规则、Prompt、质检、渲染、发送链路、归档链路或部署配置的行为变化，都必须同步追加到 `CHANGELOG_HARNESS.md`。
 
 ## 1. 项目目标
 
@@ -17,24 +25,24 @@
 
 | 修改类型 | 必读文件 |
 | --- | --- |
-| 产品定位、模块增删 | `content_harness/product_spec.md`, `content_harness/content_rules.md` |
-| 今日一题 | `content_harness/daily_question_skill.md`, `content_harness/quality_checks.md` |
-| 框架图 | `content_harness/framework_map_skill.md`, `content_harness/quality_checks.md` |
-| 今日可带走、金句表达 | `content_harness/takeaway_expression_skill.md`, `content_harness/quality_checks.md` |
-| 速读、重复、考生表达质检 | `content_harness/00_index.md`, `quick_reads_quality.py`, `duplication_quality.py`, `expression_quality.py` |
-| Prompt、生成规则 | `content_harness/runtime_prompt_rules.md`, `content_harness/article_selection_prompt.md`, `prompt_templates.py` |
-| 质检、门禁、自动修复 | `content_harness/quality_checks.md`, `scripts/validate_daily_brief.py`, `brief_quality.py` |
-| 展示重复、标签泄漏、三版本同步 | `content_harness/display_rules.md`, `email_renderer.py`, `duplication_quality.py`, `expression_quality.py` |
-| 事实安全、时政常识风险 | `content_harness/fact_safety_rules.md`, `takeaway_quality.py`, `content_quality_reviewer.py` |
-| P0 修复闭环 | `content_harness/p0_repair_workflow.md`, `main.py`, `llm_client.py`, `harness_audit.py` |
-| 发布部署、FC 依赖 | `content_harness/deployment_rules.md`, `requirements.txt`, `README.md` |
-| 晚上候选件 | `content_harness/workflow.md`, `candidate_store.py`, `main.py` |
-| 早晨发送链路 | `content_harness/workflow.md`, `main.py`, `email_sender.py`, `history.py` |
-| 归档、历史去重、OSS | `content_harness/workflow.md`, `daily_archive.py`, `history.py`, `candidate_store.py` |
-| 管理员质检报告 | `admin_report.py`, `harness_audit.py`, `harness_metrics.py` |
-| Harness 指标统计 | `harness_metrics.py`, `README.md` 的 Harness 指标统计段落 |
-| 知识库样例沉淀 | `knowledge/README.md`, `knowledge/weekly_log.md`, `knowledge/good_examples/`, `knowledge/bad_examples/`, `knowledge/exam_patterns/` |
-| 周度质量复盘 | `scripts/weekly_quality_review.py`, `harness_metrics.py`, `knowledge/README.md` |
+| 产品定位、模块增删 | `CHANGELOG_HARNESS.md`, `content_harness/product_spec.md`, `content_harness/content_rules.md` |
+| 今日一题 | `CHANGELOG_HARNESS.md`, `content_harness/daily_question_skill.md`, `content_harness/quality_checks.md` |
+| 框架图 | `CHANGELOG_HARNESS.md`, `content_harness/framework_map_skill.md`, `content_harness/quality_checks.md` |
+| 今日可带走、金句表达 | `CHANGELOG_HARNESS.md`, `content_harness/takeaway_expression_skill.md`, `content_harness/quality_checks.md` |
+| 速读、重复、考生表达质检 | `CHANGELOG_HARNESS.md`, `content_harness/00_index.md`, `quick_reads_quality.py`, `duplication_quality.py`, `expression_quality.py` |
+| Prompt、生成规则 | `CHANGELOG_HARNESS.md`, `content_harness/runtime_prompt_rules.md`, `content_harness/article_selection_prompt.md`, `prompt_templates.py` |
+| 质检、门禁、自动修复 | `CHANGELOG_HARNESS.md`, `content_harness/quality_checks.md`, `scripts/validate_daily_brief.py`, `brief_quality.py` |
+| 展示重复、标签泄漏、三版本同步 | `CHANGELOG_HARNESS.md`, `content_harness/display_rules.md`, `email_renderer.py`, `duplication_quality.py`, `expression_quality.py` |
+| 事实安全、时政常识风险 | `CHANGELOG_HARNESS.md`, `content_harness/fact_safety_rules.md`, `takeaway_quality.py`, `content_quality_reviewer.py` |
+| P0 修复闭环 | `CHANGELOG_HARNESS.md`, `content_harness/p0_repair_workflow.md`, `main.py`, `llm_client.py`, `harness_audit.py` |
+| 发布部署、FC 依赖 | `CHANGELOG_HARNESS.md`, `content_harness/deployment_rules.md`, `requirements.txt`, `README.md` |
+| 晚上候选件 | `CHANGELOG_HARNESS.md`, `content_harness/workflow.md`, `candidate_store.py`, `main.py` |
+| 早晨发送链路 | `CHANGELOG_HARNESS.md`, `content_harness/workflow.md`, `main.py`, `email_sender.py`, `history.py` |
+| 归档、历史去重、OSS | `CHANGELOG_HARNESS.md`, `content_harness/workflow.md`, `daily_archive.py`, `history.py`, `candidate_store.py` |
+| 管理员质检报告 | `CHANGELOG_HARNESS.md`, `admin_report.py`, `harness_audit.py`, `harness_metrics.py` |
+| Harness 指标统计 | `CHANGELOG_HARNESS.md`, `harness_metrics.py`, `README.md` 的 Harness 指标统计段落 |
+| 知识库样例沉淀 | `CHANGELOG_HARNESS.md`, `knowledge/README.md`, `knowledge/weekly_log.md`, `knowledge/good_examples/`, `knowledge/bad_examples/`, `knowledge/exam_patterns/` |
+| 周度质量复盘 | `CHANGELOG_HARNESS.md`, `scripts/weekly_quality_review.py`, `harness_metrics.py`, `knowledge/README.md` |
 
 ## 3. 禁止行为
 
@@ -78,6 +86,7 @@ email_renderer.py               HTML/TXT 邮件渲染
 email_sender.py                 SMTP 发送
 history.py                      已发送历史去重
 daily_archive.py                每日归档
+CHANGELOG_HARNESS.md            Harness 行为变更记录，后续修改必须先读并追加记录
 content_harness/                产品、规则、技能、工作流、评估文档
 knowledge/                      正反例、题型转换方法、每周沉淀记录
 ```
@@ -107,8 +116,8 @@ knowledge/                      正反例、题型转换方法、每周沉淀记
 
 ## 8. 表达类修改规则
 
-凡是修改选文 Prompt、选文评分、featured/quick_reads 选择逻辑，必须先读 `content_harness/article_selection_prompt.md`、`content_harness/workflow.md`。
-凡是修改 `candidate_answer`、`rewritable_expression`、`exam_use`、`thirty_second_answer`、`output_sentence_template`、`golden_sentences`、`today_takeaway` 或相关 Prompt，必须先读 `content_harness/runtime_prompt_rules.md` 与 `content_harness/takeaway_expression_skill.md`。
+凡是修改选文 Prompt、选文评分、featured/quick_reads 选择逻辑，必须先读 `CHANGELOG_HARNESS.md`、`content_harness/article_selection_prompt.md`、`content_harness/workflow.md`。
+凡是修改 `candidate_answer`、`rewritable_expression`、`exam_use`、`thirty_second_answer`、`output_sentence_template`、`golden_sentences`、`today_takeaway` 或相关 Prompt，必须先读 `CHANGELOG_HARNESS.md`、`content_harness/runtime_prompt_rules.md` 与 `content_harness/takeaway_expression_skill.md`。
 
 表达类文字的目标不是“更官方”，而是“高水平考生可模仿”。
 
@@ -146,7 +155,7 @@ knowledge/                      正反例、题型转换方法、每周沉淀记
 - 不能包含 `__pycache__`。
 - 不能包含临时坏样例或本地输出目录。
 - 不能出现用户已废弃的预览触发字段。
-- README、`.env.example`、`content_harness/00_index.md` 必须与新行为一致。
+- README、`.env.example`、`content_harness/00_index.md`、`CHANGELOG_HARNESS.md` 必须与新行为一致。
 
 ## 10. 输出产物
 
