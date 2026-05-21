@@ -273,8 +273,8 @@ def evaluate_daily_question(brief: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(answer_framework, list) or len([x for x in answer_framework if _text(x)]) < 2:
         issues.append({"severity": "medium", "code": "weak_answer_framework", "message": "作答框架少于2条，可能不够可操作"})
     framework_items = [_text(x) for x in answer_framework if _text(x)] if isinstance(answer_framework, list) else []
-    if any(len(item) > 35 for item in framework_items):
-        issues.append({"severity": "medium", "code": "answer_framework_too_long", "message": "作答框架应为关键词式骨架，每点不超过35字，完整展开应放在考生版参考答案中"})
+    if any(len(item) > 45 for item in framework_items):
+        issues.append({"severity": "medium", "code": "answer_framework_too_long", "message": "作答框架应为关键词式骨架，每点不超过45字，完整展开应放在考生版参考答案中"})
     if candidate_answer and any(_has_long_overlap(item, candidate_answer, min_chars=12) for item in framework_items):
         issues.append({"severity": "medium", "code": "answer_framework_duplicates_candidate_answer", "message": "作答框架与考生版参考答案存在较长重复，应压缩成骨架，避免逐句复述"})
     if not exam_focus:

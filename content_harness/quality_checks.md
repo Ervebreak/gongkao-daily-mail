@@ -475,7 +475,7 @@
 - 审题关键只拆题，说明题目任务、相关主体、核心矛盾和不能漏的角度；
 - 作答主线只给一句总路线，说明从哪个逻辑切入、按什么顺序展开；
 - 作答框架才正式分点，使用 3-4 条“动词短语：简短解释。”；
-- 作答框架每条不超过 35 字，不逐句复述作答主线。
+- 作答框架每条不超过 45 字，不逐句复述作答主线。
 
 **不合格信号：**
 
@@ -622,7 +622,9 @@
 
 1. 如果两个模块出现完全相同句子，输出 `repeated_expression_across_modules`。若涉及金句，severity 为 high；否则为 medium。
 2. 如果两个模块语义高度相似，或连续出现相同核心短语超过 12 字，输出 `near_duplicate_expression`，severity 为 medium。
-3. 如果“作答框架”每点超过 35 字，或写成完整答案句，输出 `answer_framework_too_verbose`，severity 为 medium。
+3. 如果“作答框架”每点超过 45 字，或写成完整答案句，输出 `answer_framework_too_verbose`，severity 为 medium。
+
+如 35 字内难以完整表达，可放宽到 45 字，但必须保持完整短句。
 4. 如果“换成考场话 / 可用表达 / 必备金句”三者中有两者表达同一意思，输出 `module_role_overlap`，severity 为 medium；连续出现 2 处以上升为 high。
 5. 如果同一组表达反复出现“不能只……而要……”“不是……而是……”超过 3 次，输出 `rhetorical_pattern_repetition`，severity 为 low 或 medium。
 
@@ -969,11 +971,11 @@
 
 ### Check 17.5：作答框架是否与参考答案重复
 
-`answer_framework / answer_frame` 必须是关键词式骨架，每点不超过 35 字。
+`answer_framework / answer_frame` 必须是关键词式骨架，每点不超过 45 字。
 
 不合格信号：
 
-- 单点超过 35 字；
+- 单点超过 45 字；
 - 框架点像完整段落；
 - 与 `candidate_answer` 连续 12 字以上重复；
 - 框架和答案只是同一句话换序。

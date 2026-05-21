@@ -133,7 +133,7 @@ question_bank/shenlun_question_bank_v3_a.csv
 题库接入后，今日一题更容易生成申论式答案。必须继续遵守作答框架压缩规则：
 
 1. `answer_framework / answer_frame` 只写关键词式骨架；
-2. 每点不超过 35 字；
+2. 每点不超过 45 字；
 3. 格式为“动词短语：简短解释。”；
 4. `candidate_answer` 负责完整展开；
 5. 作答框架不得与考生版参考答案逐句重复；
@@ -161,4 +161,3 @@ question_bank/shenlun_question_bank_v3_a.csv
 1. 题库是否提升了题目的真实感；
 2. 是否出现原题泄漏、材料依赖或题目与精读文章脱节；
 3. 题库读取失败是否被正确降级，没有阻断发送。
-
