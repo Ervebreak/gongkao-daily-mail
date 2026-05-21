@@ -533,7 +533,7 @@ def render_email_html(brief: dict[str, Any]) -> str:
       <div style="font-size:16px;font-weight:900;line-height:1.65;margin-bottom:10px;">{h(question.get('question') or three_question)}</div>
       <div style="font-size:14px;color:#b45309;font-weight:900;margin:8px 0 5px;">审题关键</div>
       <div style="font-size:14px;line-height:1.7;color:#334155;background:#fff8e8;border-left:4px solid #f59e0b;border-radius:10px;padding:9px 10px;">{h(question.get('exam_focus') or question.get('review_key') or question.get('breaking_direction'))}</div>
-      {f'<div style="font-size:14px;color:#b45309;font-weight:900;margin:11px 0 5px;">破题提示</div><div style="font-size:14px;line-height:1.7;color:#334155;background:#fff8e8;border-left:4px solid #f59e0b;border-radius:10px;padding:9px 10px;">{h(clip_text(breaking_hint, 140))}</div>' if breaking_hint else ''}
+      {f'<div style="font-size:14px;color:#b45309;font-weight:900;margin:11px 0 5px;">作答主线</div><div style="font-size:14px;line-height:1.7;color:#334155;background:#fff8e8;border-left:4px solid #f59e0b;border-radius:10px;padding:9px 10px;">{h(clip_text(breaking_hint, 140))}</div>' if breaking_hint else ''}
       <div style="font-size:14px;color:#b45309;font-weight:900;margin:11px 0 5px;">作答框架</div>
       <ol style="padding-left:21px;line-height:1.72;font-size:14px;margin:0;">{render_question_frame(question)}</ol>
       <div style="font-size:14px;color:#b45309;font-weight:900;margin:11px 0 5px;">考生版参考答案</div>

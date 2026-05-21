@@ -111,6 +111,10 @@ MATERIAL_DEPENDENCY_TERMS = [
     "\u6750\u6599\u4e94",
 ]
 
+ANSWER_ROUTE_TERMS = [
+    "首先", "其次", "再次", "最后", "先", "再", "一是", "二是", "三是", "第一", "第二", "第三",
+]
+
 
 def _text(value: Any) -> str:
     if value is None:
@@ -275,8 +279,17 @@ def evaluate_daily_question(brief: dict[str, Any]) -> dict[str, Any]:
         issues.append({"severity": "medium", "code": "answer_framework_duplicates_candidate_answer", "message": "作答框架与考生版参考答案存在较长重复，应压缩成骨架，避免逐句复述"})
     if not exam_focus:
         issues.append({"severity": "low", "code": "missing_exam_focus", "message": "缺少审题关键"})
+    elif len(_keyword_hits(exam_focus, ANSWER_ROUTE_TERMS, limit=12)) >= 2:
+        issues.append({"severity": "medium", "code": "exam_focus_too_answer_like", "message": "审题关键写成了作答路线，应只拆题，不提前展开对策"})
     if not breaking_hint:
         issues.append({"severity": "low", "code": "missing_breaking_hint", "message": "缺少破题提示：需要说明核心考点和切入逻辑"})
+    else:
+        if any(_has_long_overlap(breaking_hint, item, min_chars=8) for item in framework_items):
+            issues.append({"severity": "medium", "code": "breaking_hint_duplicates_framework", "message": "作答主线与作答框架重复，应压缩为一句总路线"})
+        breaking_route_hits = _keyword_hits(breaking_hint, ANSWER_ROUTE_TERMS, limit=12)
+        semicolon_count = breaking_hint.count("；") + breaking_hint.count(";")
+        if semicolon_count >= 2 or len([hit for hit in ["一是", "二是", "三是"] if hit in breaking_hint]) >= 2 or (len(breaking_hint) > 80 and (semicolon_count >= 1 or len(breaking_route_hits) >= 2)):
+            issues.append({"severity": "medium", "code": "breaking_hint_too_framework_like", "message": "作答主线过长，容易变成第二套作答框架"})
     if not candidate_answer:
         issues.append({"severity": "high", "code": "missing_candidate_answer", "message": "缺少考生版参考答案"})
     elif len(candidate_answer) < 180:
