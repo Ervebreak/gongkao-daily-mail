@@ -282,7 +282,7 @@ def evaluate_daily_question(brief: dict[str, Any]) -> dict[str, Any]:
     elif len(_keyword_hits(exam_focus, ANSWER_ROUTE_TERMS, limit=12)) >= 2:
         issues.append({"severity": "medium", "code": "exam_focus_too_answer_like", "message": "审题关键写成了作答路线，应只拆题，不提前展开对策"})
     if not breaking_hint:
-        issues.append({"severity": "low", "code": "missing_breaking_hint", "message": "缺少破题提示：需要说明核心考点和切入逻辑"})
+        issues.append({"severity": "low", "code": "missing_breaking_hint", "message": "缺少作答主线：需要用一句话说明本题切入逻辑"})
     else:
         if any(_has_long_overlap(breaking_hint, item, min_chars=8) for item in framework_items):
             issues.append({"severity": "medium", "code": "breaking_hint_duplicates_framework", "message": "作答主线与作答框架重复，应压缩为一句总路线"})
