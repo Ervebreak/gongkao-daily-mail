@@ -27,6 +27,30 @@
 
 ## 最新改动
 
+### 2026-05-21｜新增今日一题三层边界专项规则文件
+
+**改动原因**
+
+仅在运行时 Prompt 中写规则还不够，后续改 Prompt、质检、渲染或样例时，需要一个更稳定的专项规则文件，避免“审题关键 / 作答主线 / 作答框架”边界再次模糊。
+
+**已改文件**
+
+- `content_harness/daily_question_boundary_rules.md`
+- `CHANGELOG_HARNESS.md`
+
+**最新版行为**
+
+新增专项规则文件，固定以下约定：
+
+- `exam_focus` / `review_key` = 审题关键，只拆题，不展开对策。
+- `breaking_hint` = 作答主线，底层字段不改，展示语义改为“作答主线”。
+- `answer_framework` / `answer_frame` = 作答框架，负责正式分点。
+
+**后续建议补齐**
+
+1. 将 `content_harness/daily_question_boundary_rules.md` 加入 `AGENTS.md` 和 `content_harness/00_index.md` 的必读清单。
+2. 同步修改 `prompt_templates.py`、`question_quality.py`、`email_renderer.py`。
+
 ### 2026-05-21｜明确今日一题三层边界
 
 **改动原因**
