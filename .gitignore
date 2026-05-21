@@ -1,22 +1,52 @@
+# secrets / local environment
 .env
 .env.*
 !.env.example
 
+# Python cache / virtual environments
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .venv/
 venv/
+
+# editor / OS files
 .idea/
 .vscode/
 .DS_Store
+Thumbs.db
 
+# production user data / private runtime data
 subscribers.csv
 sent_history/
 archive/
 output/
 logs/
 tmp/
+
+# generated artifacts
 *.log
 *.zip
 *.pdf
 *.xlsx
+weekly_preview_fixed.json
+weekly_preview_fixed.typ
+validate_report_gate_test.json
+mock_articles.json
+function.zip
+build/
+dist/
+
+# dependencies installed into project folder for Aliyun FC package builds
+bs4/
+requests/
+urllib3/
+certifi/
+charset_normalizer/
+idna/
+soupsieve/
+*.dist-info/
