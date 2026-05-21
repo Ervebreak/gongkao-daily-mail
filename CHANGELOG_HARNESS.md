@@ -35,6 +35,29 @@
 
 ## 最新改动
 
+### 2026-05-21｜同步 Harness 索引中的阅读顺序和今日一题边界规则
+
+**改动原因**
+
+`CHANGELOG_HARNESS.md` 和 `daily_question_boundary_rules.md` 已经建立，但 `content_harness/00_index.md` 仍未把它们纳入总览顺序和今日一题必读清单。后续 Codex / Cursor 可能只按索引读文件，从而遗漏最新边界规则。
+
+**已改文件**
+
+- `content_harness/00_index.md`
+- `CHANGELOG_HARNESS.md`
+
+**最新版行为**
+
+- `content_harness/00_index.md` 的总览顺序已前置 `../CHANGELOG_HARNESS.md` 和 `../AGENTS.md`。
+- 今日一题修改类型的必读文件已加入 `daily_question_boundary_rules.md`。
+- 今日一题、考生表达质感、质检门禁等相关修改类型均提示先读 `CHANGELOG_HARNESS.md`。
+- 今日一题章节新增确认点：审题关键只拆题，`breaking_hint` 底层字段不改但展示语义为作答主线，作答主线不写成第二套框架，作答框架才正式分点。
+
+**后续建议补齐**
+
+1. Codex 完成 `prompt_templates.py`、`email_renderer.py`、`question_quality.py` 后，在本文件追加代码层改动记录。
+2. 继续把三层边界规则同步进 `daily_question_skill.md` 和 `quality_checks.md`。
+
 ### 2026-05-21｜强制接手前先读变更记录
 
 **改动原因**
