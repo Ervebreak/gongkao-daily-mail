@@ -86,6 +86,18 @@ def strip_exam_use_prefix(value: Any) -> str:
     return text
 
 
+def strip_display_prefix(value: Any, *prefixes: str) -> str:
+    text = str(value or "").strip()
+    for prefix in prefixes:
+        clean_prefix = str(prefix or "").strip()
+        if not clean_prefix:
+            continue
+        for candidate in (clean_prefix, f"{clean_prefix}：", f"{clean_prefix}:"):
+            if text.startswith(candidate):
+                return text[len(candidate):].strip()
+    return text
+
+
 def is_exam_use_display_item(value: Any) -> bool:
     text = str(value or "").strip()
     return bool(text) and not text.startswith(("可用表达", "可复用表达", "万能表达", "表达积累"))
@@ -467,8 +479,15 @@ def render_email_html(brief: dict[str, Any]) -> str:
     quick_cards = render_quick_reads(brief)
     takeaway_gold = as_list(takeaway.get("golden_sentences"))[:2]
     common_points = as_list(takeaway.get("common_knowledge_points"))[:1]
-    original_focus = featured.get("original_reading_focus") or "点开原文时，重点看作者如何从具体事实推导出治理判断，以及哪些表述可以改写进申论或面试。"
-    breaking_hint = question.get("breaking_hint") or question.get("breaking_direction") or question.get("review_key") or ""
+    original_focus = strip_display_prefix(
+        featured.get("original_reading_focus") or "点开原文时，重点看作者如何从具体事实推导出治理判断，以及哪些表述可以改写进申论或面试。",
+        "如果点原文，重点看",
+    )
+    breaking_hint = strip_display_prefix(
+        question.get("breaking_hint") or question.get("breaking_direction") or question.get("review_key") or "",
+        "作答主线",
+    )
+    rewritable_expression = strip_display_prefix(featured.get("rewritable_expression"), "可用表达")
 
     return f"""<!doctype html>
 <html>
@@ -520,7 +539,7 @@ def render_email_html(brief: dict[str, Any]) -> str:
 
       <div style="margin-top:12px;background:#f8fafc;border-radius:12px;padding:10px 11px;">
         <div style="font-size:14px;font-weight:900;color:#0f172a;margin-bottom:6px;">可用表达</div>
-        <div style="font-size:14px;line-height:1.72;color:#334155;">{h(clip_text(featured.get('rewritable_expression'), 80))}</div>
+        <div style="font-size:14px;line-height:1.72;color:#334155;">{h(clip_text(rewritable_expression, 80))}</div>
       </div>
 
     </div>

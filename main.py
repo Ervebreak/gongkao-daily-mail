@@ -158,6 +158,22 @@ def is_morning_candidate_send_invocation(event: Any) -> bool:
     return event_mode(event) in {"morning_send", "candidate_send", "send_candidate"}
 
 
+def is_weekly_pdf_candidate_invocation(event: Any) -> bool:
+    return event_mode(event) in {"weekly_pdf_candidate", "weekly_candidate", "nightly_weekly_pdf"}
+
+
+def should_generate_weekly_pdf_candidate_today(event: Any, delivery_date: str) -> bool:
+    payload = normalize_event(event)
+    force_daily = str(payload.get("force_daily") or payload.get("skip_weekly_pdf_candidate") or "").strip().lower() in {"1", "true", "yes", "y", "on"}
+    if force_daily or not settings.enable_weekly_pdf:
+        return False
+    try:
+        candidate_day = dt.date.fromisoformat(delivery_date[:10])
+    except Exception:
+        return False
+    return candidate_day.weekday() == settings.weekly_pdf_weekday
+
+
 def resolve_delivery_date(event: Any, *, nightly_candidate: bool = False) -> str:
     payload = normalize_event(event)
     explicit = str(payload.get("delivery_date") or payload.get("candidate_date") or payload.get("date") or "").strip()
@@ -223,6 +239,7 @@ def build_quality_gate(
     content_risk_quality: dict[str, Any] | None = None,
     selection_quality: dict[str, Any] | None = None,
     content_quality: dict[str, Any] | None = None,
+    cleanliness_quality: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     p0_codes = {
         "missing_question",
@@ -274,6 +291,14 @@ def build_quality_gate(
         "unsupported_claims",
         "mainline_incoherent",
         "content_quality_reviewer_error",
+        "duplicate_label_prefix",
+        "leading_colon",
+        "rewritable_expression_label_prefix",
+        "duplicate_subject_prefix",
+        "daily_question_missing_identity",
+        "daily_question_missing_scene",
+        "daily_question_missing_conflict",
+        "daily_question_missing_task",
     }
     p0_issues: list[dict[str, str]] = []
     modules = (
@@ -288,6 +313,7 @@ def build_quality_gate(
         ("content_risk", content_risk_quality or {}),
         ("selection", selection_quality or {}),
         ("content_quality", content_quality or {}),
+        ("pre_send_cleanliness", cleanliness_quality or {}),
     )
     for module, quality in modules:
         for issue in quality.get("issues") or []:
@@ -297,7 +323,7 @@ def build_quality_gate(
             severity = str(issue.get("severity") or "").lower()
             if severity == "high" and code in p0_codes:
                 p0_issues.append({
-                    "module": module,
+                    "module": str(issue.get("module_override") or module),
                     "code": code,
                     "message": str(issue.get("message") or code),
                 })
@@ -904,6 +930,7 @@ def evaluate_candidate_with_current_quality(
     from expression_quality import evaluate_expression_quality
     from framework_quality import evaluate_framework_map
     from module_redundancy_quality import evaluate_module_redundancy
+    from pre_send_cleanliness import pre_send_cleanliness_guard
     from question_quality import evaluate_daily_question
     from quick_reads_quality import evaluate_quick_reads
     from takeaway_quality import evaluate_takeaway
@@ -928,6 +955,13 @@ def evaluate_candidate_with_current_quality(
 
     plain_text = render_plain_text(brief)
     html_body = render_email_html(brief)
+    guarded, cleanliness_quality = pre_send_cleanliness_guard(
+        {"brief": brief, "subject": str(subject), "plain_text": plain_text, "html_body": html_body, "quality": {}}
+    )
+    brief = guarded.get("brief") if isinstance(guarded.get("brief"), dict) else brief
+    subject = str(guarded.get("subject") or subject)
+    plain_text = str(guarded.get("plain_text") or plain_text)
+    html_body = str(guarded.get("html_body") or html_body)
     question_quality = evaluate_daily_question(brief)
     framework_quality = evaluate_framework_map(brief)
     takeaway_quality = evaluate_takeaway(brief)
@@ -951,6 +985,7 @@ def evaluate_candidate_with_current_quality(
         content_risk_quality,
         selection_quality,
         content_quality,
+        cleanliness_quality,
     )
     return {
         "brief": brief,
@@ -972,6 +1007,7 @@ def evaluate_candidate_with_current_quality(
                 "content_risk": content_risk_quality,
                 "selection": selection_quality,
                 "content_quality": content_quality,
+                "cleanliness": cleanliness_quality,
             }
         },
     }
@@ -1151,7 +1187,161 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
     }
 
 
+def build_weekly_pdf_candidate_message(weekly_pdf: dict[str, Any]) -> tuple[str, str]:
+    start_date = str(weekly_pdf.get("start_date") or "")
+    end_date = str(weekly_pdf.get("end_date") or "")
+    filename = str(weekly_pdf.get("attachment_filename") or "公考晨读周复盘资料包.pdf")
+    plain_text = "\n".join(
+        [
+            "本周 PDF 资料包已附上",
+            "",
+            "今天不推送新的精读文章和速读文章，只做本周复盘。",
+            "",
+            "这周怎么复习：",
+            "1. 先看本周主题总览，快速回忆这周学过哪些公共治理场景；",
+            "2. 再看每日复盘卡，重点看文章框架、考场迁移和今日一题；",
+            "3. 最后看本周表达素材库，挑 2-3 句真正能写进申论或面试里的表达。",
+            "",
+            "想麻烦你回复一点反馈：",
+            "这版 PDF 是按「周复盘资料包」的形式整理，不是简单把 6 封邮件拼在一起。你可以直接回复本邮件，不用写很多，随便说一两句都可以。",
+            "- 这个 PDF 排版读起来是否舒服？",
+            "- 每日复盘卡里，哪些部分最有用，哪些可以删减？",
+            "- 「今日一题」保留参考答案，对你复习有没有帮助？",
+            "- 你更希望周报完整一点，还是更短一点、只保留重点？",
+            "",
+            f"汇总范围：{start_date} 至 {end_date}",
+            f"附件：{filename}",
+        ]
+    )
+    html_body = f"""<!doctype html>
+<html>
+<body style="margin:0;padding:0;background:#f6f8fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif;color:#334155;">
+  <div style="max-width:720px;margin:0 auto;padding:28px 14px;">
+    <div style="background:linear-gradient(135deg,#1f66a6,#1f7fbd);color:#fff;border-radius:18px;padding:24px 26px;margin-bottom:16px;">
+      <div style="font-size:13px;letter-spacing:2px;font-weight:900;opacity:.9;">WEEKLY REVIEW 周日复盘</div>
+      <div style="font-size:30px;font-weight:900;line-height:1.35;margin-top:10px;">本周 PDF 资料包已附上</div>
+      <div style="font-size:16px;line-height:1.75;margin-top:12px;opacity:.96;">今天不推送新的精读文章和速读文章，只做本周复盘。</div>
+    </div>
+
+    <div style="background:#fff;border:1px solid #dfe7f2;border-radius:16px;padding:22px 24px;margin-bottom:16px;">
+      <div style="font-size:18px;font-weight:900;color:#165dff;margin-bottom:12px;">这周怎么复习</div>
+      <div style="font-size:16px;line-height:1.9;">本周一到周六的晨读内容已经整理成 PDF 附件。建议今天不用追新内容，花 20-30 分钟把本周材料过一遍。</div>
+      <ol style="font-size:16px;line-height:1.9;margin:16px 0 0;padding-left:24px;">
+        <li>先看<b>本周主题总览</b>，快速回忆这周学过哪些公共治理场景；</li>
+        <li>再看<b>每日复盘卡</b>，重点看文章框架、考场迁移和今日一题；</li>
+        <li>最后看<b>本周表达素材库</b>，挑 2-3 句真正能写进申论或面试里的表达。</li>
+      </ol>
+    </div>
+
+    <div style="background:#fffdf6;border:1px solid #f8dba5;border-radius:16px;padding:22px 24px;margin-bottom:16px;">
+      <div style="font-size:18px;font-weight:900;color:#b45309;margin-bottom:12px;">想麻烦你回复一点反馈</div>
+      <div style="font-size:16px;line-height:1.9;">这版 PDF 是我们按「周复盘资料包」的形式整理，不是简单把 6 封邮件拼在一起。你可以直接回复本邮件，不用写很多，随便说一两句都可以。</div>
+      <ul style="font-size:16px;line-height:1.9;margin:14px 0 0;padding-left:22px;">
+        <li>这个 PDF 排版读起来是否舒服？</li>
+        <li>每日复盘卡里，哪些部分最有用，哪些可以删减？</li>
+        <li>「今日一题」保留参考答案，对你复习有没有帮助？</li>
+        <li>你更希望周报完整一点，还是更短一点、只保留重点？</li>
+      </ul>
+      <div style="font-size:16px;line-height:1.9;margin-top:14px;">你的反馈会直接用于下周版本优化。谢谢你参与内测。</div>
+    </div>
+
+    <div style="background:#fff;border:1px solid #dfe7f2;border-radius:16px;padding:16px 22px;color:#64748b;font-size:15px;line-height:1.8;">
+      <div>汇总范围：{start_date} 至 {end_date}</div>
+      <div>附件：{filename}</div>
+    </div>
+  </div>
+</body>
+</html>"""
+    return plain_text, html_body
+
+
+def generate_weekly_pdf_candidate(event: Any | None = None) -> dict[str, Any]:
+    from candidate_store import save_candidate
+    from weekly_report import build_weekly_assets
+
+    settings.output_dir.mkdir(parents=True, exist_ok=True)
+    logger = RunLogger(settings.output_dir)
+    payload = normalize_event(event)
+    delivery_date = resolve_delivery_date(payload, nightly_candidate=True)
+    weekly_event = dict(payload)
+    for key in ("delivery_date", "candidate_date", "date"):
+        weekly_event.pop(key, None)
+    weekly_event.setdefault("end_date", dt.datetime.now(TZ).date().isoformat())
+    assets = build_weekly_assets(weekly_event)
+    subject = f"{settings.subject_prefix}本周晨读完整汇编｜{assets['start_date']}至{assets['end_date']}"
+    quality_gate = {"overall": "ok", "p0_count": 0, "p0_issues": []}
+    quality = {
+        "final": {
+            "weekly_pdf": {
+                "ok": True,
+                "status": "ok",
+                "score": 100,
+                "issues": [],
+                "archives_loaded": assets.get("archives_loaded"),
+                "misses": assets.get("misses") or [],
+                "pdf_engine": assets.get("pdf_engine"),
+            }
+        },
+        "gate": quality_gate,
+    }
+    weekly_pdf = {
+        "start_date": assets.get("start_date"),
+        "end_date": assets.get("end_date"),
+        "days_requested": assets.get("days_requested"),
+        "archives_loaded": assets.get("archives_loaded"),
+        "misses": assets.get("misses") or [],
+        "local_pdf": assets.get("local_pdf"),
+        "local_md": assets.get("local_md"),
+        "local_html": assets.get("local_html"),
+        "oss_pdf_path": ((assets.get("oss_upload") or {}).get("pdf") or {}).get("oss_path"),
+        "attachment_filename": (assets.get("attachment") or {}).get("filename") or "gongkao-weekly.pdf",
+        "pdf_engine": assets.get("pdf_engine"),
+        "typst_meta": assets.get("typst_meta"),
+    }
+    plain_text, html_body = build_weekly_pdf_candidate_message(weekly_pdf)
+    candidate_payload = {
+        "schema_version": 1,
+        "candidate_type": "weekly_pdf",
+        "generated_at": dt.datetime.now(TZ).isoformat(),
+        "delivery_date": delivery_date,
+        "subject": subject,
+        "brief": {},
+        "plain_text": plain_text,
+        "html_body": html_body,
+        "quality": quality,
+        "quality_gate": quality_gate,
+        "weekly_pdf": weekly_pdf,
+        "article_stats": {
+            "weekly_pdf_only": True,
+            "daily_article_generation_skipped": True,
+            "history_read_ok": True,
+        },
+        "final_selection": {},
+    }
+    candidate_save_result = save_candidate(candidate_payload)
+    logger.info(
+        "weekly pdf candidate saved",
+        delivery_date=delivery_date,
+        weekly_end_date=assets.get("end_date"),
+        archives_loaded=assets.get("archives_loaded"),
+        local_pdf=assets.get("local_pdf"),
+        **candidate_save_result,
+    )
+    log_path = logger.save("latest_weekly_pdf_candidate.log")
+    logger.dump_to_stdout()
+    return {
+        "status": "ok",
+        "mode": "weekly_pdf_candidate",
+        "delivery_date": delivery_date,
+        "weekly_pdf": weekly_pdf,
+        "candidate_save_result": candidate_save_result,
+        "log": str(log_path),
+    }
+
+
 def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dict[str, Any]:
+    if is_weekly_pdf_candidate_invocation(event):
+        return generate_weekly_pdf_candidate(event)
     if is_morning_candidate_send_invocation(event):
         return send_saved_candidate(event)
 
@@ -1180,6 +1370,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
     )
     from minor_auto_fixer import apply_minor_auto_fixes, merge_minor_fixes_into_rewrite
     from module_redundancy_quality import evaluate_module_redundancy
+    from pre_send_cleanliness import pre_send_cleanliness_guard
     from question_quality import evaluate_daily_question
     from quick_reads_quality import evaluate_quick_reads
     from takeaway_quality import evaluate_takeaway
@@ -1193,6 +1384,10 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
     test_invocation = is_test_invocation(event)
     candidate_invocation = is_nightly_candidate_invocation(event)
     today = resolve_delivery_date(event, nightly_candidate=candidate_invocation)
+    if candidate_invocation and should_generate_weekly_pdf_candidate_today(event, today):
+        weekly_event = normalize_event(event)
+        weekly_event["delivery_date"] = today
+        return generate_weekly_pdf_candidate(weekly_event)
     llm_trace_events: list[dict[str, Any]] = []
 
     def _llm_trace_hook(entry: dict[str, Any]) -> None:
@@ -1526,6 +1721,29 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
         except Exception as exc:
             logger.info("content issue rewrite failed", error=str(exc))
             content_issue_rewrite_result = {"error": str(exc), "rewritten_modules": []}
+    guarded, cleanliness_quality = pre_send_cleanliness_guard(
+        {"brief": brief, "subject": str(subject), "plain_text": plain_text, "html_body": html_body, "quality": {}}
+    )
+    brief = guarded.get("brief") if isinstance(guarded.get("brief"), dict) else brief
+    subject = str(guarded.get("subject") or subject)
+    plain_text = str(guarded.get("plain_text") or plain_text)
+    html_body = str(guarded.get("html_body") or html_body)
+    logger.info(
+        "pre-send cleanliness guard",
+        status=cleanliness_quality.get("status"),
+        score=cleanliness_quality.get("score"),
+        fix_count=len(cleanliness_quality.get("fixes") or []),
+        unresolved_count=len(cleanliness_quality.get("unresolved_issues") or []),
+    )
+    question_quality = evaluate_daily_question(brief)
+    framework_quality = evaluate_framework_map(brief)
+    takeaway_quality = evaluate_takeaway(brief)
+    brief_quality = evaluate_brief_cleanliness(brief, plain_text, html_body)
+    quick_reads_quality = evaluate_quick_reads(brief)
+    duplication_quality = evaluate_duplication(brief)
+    expression_quality = evaluate_expression_quality(brief)
+    module_redundancy_quality = evaluate_module_redundancy(brief)
+    content_risk_quality = evaluate_content_risks(brief, plain_text, html_body)
     quality_gate = build_quality_gate(
         question_quality,
         framework_quality,
@@ -1538,13 +1756,14 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
         content_risk_quality,
         selection_quality,
         content_quality,
+        cleanliness_quality,
     )
     logger.info("quality gate", **quality_gate, blocked=(not test_invocation) and quality_gate.get("overall") == "fail")
     if settings.quality_rewrite_enabled and quality_gate.get("overall") == "fail":
         try:
             p0_issues = quality_gate.get("p0_issues") or []
             p0_modules = {str(issue.get("module") or "") for issue in p0_issues if isinstance(issue, dict)}
-            force_all_content_modules = bool({"brief_cleanliness", "duplication", "expression_quality", "module_redundancy"} & p0_modules)
+            force_all_content_modules = bool({"brief_cleanliness", "duplication", "expression_quality", "module_redundancy", "pre_send_cleanliness"} & p0_modules)
             p0_question_quality = _quality_for_p0_repair(question_quality, "daily_question", p0_issues, force=force_all_content_modules)
             p0_framework_quality = _quality_for_p0_repair(framework_quality, "framework_map", p0_issues, force=force_all_content_modules)
             p0_takeaway_quality = _quality_for_p0_repair(takeaway_quality, "today_takeaway", p0_issues, force=force_all_content_modules)
@@ -1601,6 +1820,29 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                 logger.info("content risk quality after p0 repair", **content_risk_quality)
                 content_quality = evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation)
                 logger.info("content quality after p0 repair", **content_quality)
+                guarded, cleanliness_quality = pre_send_cleanliness_guard(
+                    {"brief": brief, "subject": str(subject), "plain_text": plain_text, "html_body": html_body, "quality": {}}
+                )
+                brief = guarded.get("brief") if isinstance(guarded.get("brief"), dict) else brief
+                subject = str(guarded.get("subject") or subject)
+                plain_text = str(guarded.get("plain_text") or plain_text)
+                html_body = str(guarded.get("html_body") or html_body)
+                logger.info(
+                    "pre-send cleanliness guard after p0 repair",
+                    status=cleanliness_quality.get("status"),
+                    score=cleanliness_quality.get("score"),
+                    fix_count=len(cleanliness_quality.get("fixes") or []),
+                    unresolved_count=len(cleanliness_quality.get("unresolved_issues") or []),
+                )
+                question_quality = evaluate_daily_question(brief)
+                framework_quality = evaluate_framework_map(brief)
+                takeaway_quality = evaluate_takeaway(brief)
+                brief_quality = evaluate_brief_cleanliness(brief, plain_text, html_body)
+                quick_reads_quality = evaluate_quick_reads(brief)
+                duplication_quality = evaluate_duplication(brief)
+                expression_quality = evaluate_expression_quality(brief)
+                module_redundancy_quality = evaluate_module_redundancy(brief)
+                content_risk_quality = evaluate_content_risks(brief, plain_text, html_body)
                 quality_gate = build_quality_gate(
                     question_quality,
                     framework_quality,
@@ -1613,6 +1855,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                     content_risk_quality,
                     selection_quality,
                     content_quality,
+                    cleanliness_quality,
                 )
                 logger.info("quality gate after p0 repair", **quality_gate, blocked=(not test_invocation) and quality_gate.get("overall") == "fail")
         except Exception as exc:
@@ -1658,6 +1901,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
             "content_risk": content_risk_quality,
             "selection": selection_quality,
             "content_quality": content_quality,
+            "cleanliness": cleanliness_quality,
         },
         "rewrite": rewrite_result,
         "minor_auto_fix": minor_fix_result,
@@ -1995,6 +2239,8 @@ def _legacy_handler_unused(event, context):
     # 3. 以下仅允许由非 HTTP 的测试事件/定时触发器调用。
     if is_feedback_test_email_invocation(payload):
         return send_feedback_test_email(payload)
+    if is_weekly_pdf_candidate_invocation(payload):
+        return generate_weekly_pdf_candidate(payload)
     if is_weekly_pdf_invocation(payload):
         from weekly_report import run_weekly_pdf
 
@@ -2011,6 +2257,8 @@ def handler(event, context):
             return http_block_response(payload)
         if is_feedback_test_email_invocation(payload):
             return send_feedback_test_email(payload)
+        if is_weekly_pdf_candidate_invocation(payload):
+            return generate_weekly_pdf_candidate(payload)
         if is_weekly_pdf_invocation(payload):
             from weekly_report import run_weekly_pdf
 
