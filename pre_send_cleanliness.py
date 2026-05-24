@@ -14,6 +14,41 @@ DISPLAY_LABELS = (
     "如果点原文，重点看",
 )
 LEADING_RESIDUE = "：:·•・"
+SENTENCE_ENDING = "。！？；.!?」』）】》"
+TRUNCATED_TAILS = (
+    "可落地",
+    "可以用于",
+    "适合转化为",
+    "有助于",
+    "体现出",
+    "关键在于",
+    "主要包括",
+    "从而",
+    "进而",
+    "同时",
+    "并且",
+)
+BODY_TEXT_PATHS = {
+    "brief.today_focus",
+    "brief.today_three_things.must_remember_sentence",
+    "brief.featured_article.one_sentence",
+    "brief.featured_article.original_reading_focus",
+    "brief.featured_article.three_useful_points",
+    "brief.featured_article.three_useful_points[*]",
+    "brief.featured_article.exam_use",
+    "brief.featured_article.usable_for_exam",
+    "brief.featured_article.rewritable_expression",
+    "brief.daily_question.exam_focus",
+    "brief.daily_question.breaking_hint",
+    "brief.daily_question.candidate_answer",
+    "brief.daily_question.output_sentence_template",
+    "brief.daily_question.thirty_second_answer",
+    "brief.today_takeaway.common_knowledge_points",
+    "brief.today_takeaway.common_knowledge_points[*]",
+    "brief.today_takeaway.golden_sentences[*].sentence",
+    "brief.quick_reads[*].one_sentence",
+    "brief.quick_reads[*].exam_value",
+}
 
 
 def _text(value: Any) -> str:
@@ -122,6 +157,45 @@ def _strip_labels(text: str, labels: tuple[str, ...]) -> str:
     return _strip_leading_colon(fixed)
 
 
+def _normalized_body_path(path: str) -> str:
+    return re.sub(r"\[\d+\]", "[*]", path or "")
+
+
+def _is_body_text_path(path: str) -> bool:
+    return _normalized_body_path(path) in BODY_TEXT_PATHS
+
+
+def _ensure_sentence_punctuation(text: str) -> str:
+    fixed = (text or "").rstrip()
+    if not fixed or fixed.endswith(tuple(SENTENCE_ENDING)):
+        return fixed
+    return fixed + "。"
+
+
+def _without_sentence_punctuation(text: str) -> str:
+    return (text or "").strip().rstrip(SENTENCE_ENDING).strip()
+
+
+def _suspected_truncated_tail(text: str) -> str:
+    stripped = _without_sentence_punctuation(text)
+    for tail in TRUNCATED_TAILS:
+        if stripped.endswith(tail):
+            return tail
+    return ""
+
+
+def _module_from_path(path: str) -> str:
+    if ".daily_question." in path:
+        return "daily_question"
+    if ".featured_article." in path:
+        return "featured_article"
+    if ".today_takeaway." in path:
+        return "today_takeaway"
+    if ".quick_reads" in path:
+        return "quick_reads"
+    return "brief"
+
+
 def _clean_text_field(path: str, value: str) -> str:
     field_labels = {
         "brief.featured_article.rewritable_expression": ("可用表达",),
@@ -132,8 +206,12 @@ def _clean_text_field(path: str, value: str) -> str:
     if path in {"subject", "brief.email_subject", "brief.subject"}:
         return _dedupe_subject_prefix(value)
     if path in field_labels:
-        return _strip_labels(value, field_labels[path])
-    return _strip_leading_colon(_collapse_repeated_label(value))
+        cleaned = _strip_labels(value, field_labels[path])
+    else:
+        cleaned = _strip_leading_colon(_collapse_repeated_label(value))
+    if _is_body_text_path(path):
+        cleaned = _ensure_sentence_punctuation(cleaned)
+    return cleaned
 
 
 def _clean_html(html: str) -> str:
@@ -243,6 +321,23 @@ def check_cleanliness(data: dict[str, Any]) -> dict[str, Any]:
             issues.append(_issue("high", "duplicate_label_prefix", f"存在重复栏目标题：{label}", path, auto_fixable=True, blocking=True))
         if re.match(rf"^\s*[{re.escape(LEADING_RESIDUE)}]", value):
             issues.append(_issue("high", "leading_colon", "字段正文以冒号开头。", path, auto_fixable=True, blocking=True))
+        if _is_body_text_path(path):
+            text_value = _text(value)
+            cleaned_value = _clean_text_field(path, value)
+            if cleaned_value != text_value and cleaned_value.endswith("。") and not text_value.rstrip().endswith(tuple(SENTENCE_ENDING)):
+                issues.append(_issue("medium", "missing_sentence_punctuation", "正文型字段缺少句末标点，已自动补中文句号。", path, auto_fixable=True))
+            truncated_tail = _suspected_truncated_tail(value)
+            if truncated_tail:
+                issues.append(
+                    _issue(
+                        "high",
+                        "suspected_truncated_sentence",
+                        f"正文型字段疑似半截句，结尾停在“{truncated_tail}”。",
+                        path,
+                        blocking=True,
+                        module_override=_module_from_path(path),
+                    )
+                )
     rewritable = _text((brief.get("featured_article") if isinstance(brief.get("featured_article"), dict) else {}).get("rewritable_expression"))
     if re.match(r"^\s*可用表达\s*[：:]?", rewritable):
         issues.append(_issue("high", "rewritable_expression_label_prefix", "可用表达字段值不应包含可用表达前缀。", "brief.featured_article.rewritable_expression", auto_fixable=True, blocking=True))

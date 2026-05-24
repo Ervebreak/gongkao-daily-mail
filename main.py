@@ -249,6 +249,7 @@ def build_quality_gate(
         "truncated_answer",
         "isolated_number",
         "incomplete_sentence",
+        "suspected_truncated_sentence",
         "incomplete_label",
         "exam_migration_step",
         "missing_main_line",
