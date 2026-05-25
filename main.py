@@ -250,6 +250,7 @@ def build_quality_gate(
         "isolated_number",
         "incomplete_sentence",
         "suspected_truncated_sentence",
+        "grassroots_authority_overreach",
         "incomplete_label",
         "exam_migration_step",
         "missing_main_line",

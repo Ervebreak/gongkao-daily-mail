@@ -115,6 +115,31 @@ ANSWER_ROUTE_TERMS = [
     "首先", "其次", "再次", "最后", "先", "再", "一是", "二是", "三是", "第一", "第二", "第三",
 ]
 
+GRASSROOTS_AUTHORITY_TERMS = [
+    "基层", "街道", "社区", "市场监管所", "市场监管", "城管", "工作人员", "执法人员", "网格员", "乡镇",
+]
+
+GRASSROOTS_OVERREACH_P0_TERMS = [
+    "依法处理持续售卖普通高糖高油食品商户",
+    "无明确违法依据处罚",
+    "处罚普通高糖高油食品",
+    "查处普通高糖高油食品",
+    "取缔售卖普通高糖高油食品",
+]
+
+GRASSROOTS_OVERREACH_P1_TERMS = [
+    "制定行业标准",
+    "修改包装",
+    "推行包装标识",
+    "统一包装标识",
+    "强制包装标识",
+    "要求商户修改包装",
+]
+
+UPPER_LEVEL_QUALIFIERS = [
+    "建议上级", "报请上级", "推动上级", "向上级", "上报", "提请", "建议有关部门", "推动完善",
+]
+
 
 def _text(value: Any) -> str:
     if value is None:
@@ -213,6 +238,45 @@ def _has_long_overlap(source: str, target: str, min_chars: int = 12) -> bool:
     return False
 
 
+def _is_upper_level_suggestion(text: str, term: str) -> bool:
+    start = text.find(term)
+    while start >= 0:
+        window = text[max(0, start - 18):start + len(term) + 4]
+        if any(qualifier in window for qualifier in UPPER_LEVEL_QUALIFIERS):
+            return True
+        start = text.find(term, start + 1)
+    return False
+
+
+def _grassroots_authority_overreach_issues(question: str, framework_items: list[str], candidate_answer: str) -> list[dict[str, str]]:
+    if not _keyword_hits(question, GRASSROOTS_AUTHORITY_TERMS, limit=4):
+        return []
+    answer_text = " ".join([*framework_items, candidate_answer])
+    high_hits = _keyword_hits(answer_text, GRASSROOTS_OVERREACH_P0_TERMS, limit=6)
+    medium_hits = [
+        term for term in GRASSROOTS_OVERREACH_P1_TERMS
+        if term in answer_text and not _is_upper_level_suggestion(answer_text, term)
+    ][:6]
+    issues: list[dict[str, str]] = []
+    if high_hits:
+        issues.append({
+            "severity": "high",
+            "code": "grassroots_authority_overreach",
+            "message": "基层身份答案存在越权执法风险："
+            + "、".join(high_hits)
+            + "。应区分可直接执行的摸排、检查、提示、约谈、上报、复查；需依法查处的仅限三无、过期、标签不规范、虚假宣传、无证经营等明确违法违规问题。",
+        })
+    if medium_hits:
+        issues.append({
+            "severity": "medium",
+            "code": "grassroots_authority_overreach",
+            "message": "基层身份答案疑似把上级标准制定或包装治理写成基层直接权限："
+            + "、".join(medium_hits)
+            + "。可改为“建议上级探索风险提示制度、完善标准”，基层侧重摸排、提示、约谈、上报、复查。",
+        })
+    return issues
+
+
 def evaluate_daily_question(brief: dict[str, Any]) -> dict[str, Any]:
     """返回 today_question 的质检结果；不修改 brief。"""
     question_obj = brief.get("daily_question") or {}
@@ -277,6 +341,7 @@ def evaluate_daily_question(brief: dict[str, Any]) -> dict[str, Any]:
         issues.append({"severity": "medium", "code": "answer_framework_too_long", "message": "作答框架应为关键词式骨架，每点不超过45字，完整展开应放在考生版参考答案中"})
     if candidate_answer and any(_has_long_overlap(item, candidate_answer, min_chars=12) for item in framework_items):
         issues.append({"severity": "medium", "code": "answer_framework_duplicates_candidate_answer", "message": "作答框架与考生版参考答案存在较长重复，应压缩成骨架，避免逐句复述"})
+    issues.extend(_grassroots_authority_overreach_issues(question, framework_items, candidate_answer))
     if not exam_focus:
         issues.append({"severity": "low", "code": "missing_exam_focus", "message": "缺少审题关键"})
     elif len(_keyword_hits(exam_focus, ANSWER_ROUTE_TERMS, limit=12)) >= 2:
