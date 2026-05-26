@@ -473,6 +473,8 @@ def merge_rewrite_results(primary: dict[str, Any] | None, secondary: dict[str, A
     for label, item in (("initial", primary), ("p0_repair", secondary)):
         if not isinstance(item, dict):
             continue
+        if item.get("rolled_back"):
+            continue
         merged["rounds"].append({"round": label, **{key: value for key, value in item.items() if key != "brief"}})
         for module in item.get("rewritten_modules") or []:
             if module not in merged["rewritten_modules"]:
@@ -1720,6 +1722,16 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                     selection_quality = before_content_issue_rewrite["selection_quality"]
                     content_quality = before_content_issue_rewrite["content_quality"]
                     content_issue_rewrite_result["rolled_back"] = True
+                    content_issue_rewrite_result["changed"] = False
+                    content_issue_rewrite_result["rewritten_modules"] = []
+                    content_issue_rewrite_result["changed_modules"] = []
+                    content_issue_rewrite_result["changed_fields"] = []
+                    content_issue_rewrite_result["rewrites"] = []
+                    content_issue_rewrite_result["details"] = {
+                        **dict(content_issue_rewrite_result.get("details") or {}),
+                        "rolled_back": True,
+                        "content_issue_rewrites": [],
+                    }
         except Exception as exc:
             logger.info("content issue rewrite failed", error=str(exc))
             content_issue_rewrite_result = {"error": str(exc), "rewritten_modules": []}
@@ -1746,6 +1758,8 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
     expression_quality = evaluate_expression_quality(brief)
     module_redundancy_quality = evaluate_module_redundancy(brief)
     content_risk_quality = evaluate_content_risks(brief, plain_text, html_body)
+    content_quality = evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation)
+    logger.info("content quality after pre-send cleanliness guard", **content_quality)
     quality_gate = build_quality_gate(
         question_quality,
         framework_quality,
@@ -1845,6 +1859,8 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                 expression_quality = evaluate_expression_quality(brief)
                 module_redundancy_quality = evaluate_module_redundancy(brief)
                 content_risk_quality = evaluate_content_risks(brief, plain_text, html_body)
+                content_quality = evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation)
+                logger.info("content quality after pre-send cleanliness guard after p0 repair", **content_quality)
                 quality_gate = build_quality_gate(
                     question_quality,
                     framework_quality,

@@ -236,10 +236,20 @@ def _walk_values(value: Any):
 
 def _auto_fix_summary_lines(candidate: dict[str, Any], quality: dict[str, Any], limit: int = 10) -> list[str]:
     rows: list[str] = []
+    seen: set[tuple[str, str, str, str]] = set()
     minor = quality.get("minor_auto_fix") if isinstance(quality.get("minor_auto_fix"), dict) else {}
     for fix in minor.get("fixes") or []:
         if not isinstance(fix, dict):
             continue
+        key = (
+            str(fix.get("field") or fix.get("module") or ""),
+            str(fix.get("code") or ""),
+            _clip_inline(fix.get("bad_text"), 160),
+            _clip_inline(fix.get("replacement"), 160),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
         rows.append(
             f"{len(rows) + 1}. {fix.get('field') or fix.get('module')}\n"
             f"   - 问题：{fix.get('code')}\n"
@@ -249,21 +259,42 @@ def _auto_fix_summary_lines(candidate: dict[str, Any], quality: dict[str, Any], 
             return rows
 
     rewrite = quality.get("rewrite") if isinstance(quality.get("rewrite"), dict) else {}
-    for node in _walk_values(rewrite):
-        for item in node.get("content_issue_rewrites") or node.get("rewrites") or []:
-            if not isinstance(item, dict):
+    if not rewrite.get("rolled_back"):
+        for node in _walk_values(rewrite):
+            if not isinstance(node, dict) or node.get("rolled_back"):
                 continue
-            rows.append(
-                f"{len(rows) + 1}. {item.get('field') or item.get('module')}\n"
-                f"   - 问题：{item.get('issue_code') or item.get('reason')}\n"
-                f"   - 修复：{_clip_inline(item.get('before'))} -> {_clip_inline(item.get('after'))}"
-            )
-            if len(rows) >= limit:
-                return rows
+            for item in node.get("content_issue_rewrites") or node.get("rewrites") or []:
+                if not isinstance(item, dict):
+                    continue
+                key = (
+                    str(item.get("field") or item.get("module") or ""),
+                    str(item.get("issue_code") or item.get("reason") or ""),
+                    _clip_inline(item.get("before"), 160),
+                    _clip_inline(item.get("after"), 160),
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                rows.append(
+                    f"{len(rows) + 1}. {item.get('field') or item.get('module')}\n"
+                    f"   - 问题：{item.get('issue_code') or item.get('reason')}\n"
+                    f"   - 修复：{_clip_inline(item.get('before'))} -> {_clip_inline(item.get('after'))}"
+                )
+                if len(rows) >= limit:
+                    return rows
 
     for row in candidate.get("rewrite_comparison") or quality.get("rewrite_comparison") or []:
         if not isinstance(row, dict) or not row.get("changed"):
             continue
+        key = (
+            str(row.get("module") or ""),
+            "module_rewrite",
+            _clip_inline(row.get("before"), 160),
+            _clip_inline(row.get("after"), 160),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
         rows.append(
             f"{len(rows) + 1}. {row.get('module')}\n"
             f"   - 问题：模块级重写\n"

@@ -43,6 +43,7 @@ BODY_TEXT_PATHS = {
     "brief.daily_question.candidate_answer",
     "brief.daily_question.output_sentence_template",
     "brief.daily_question.thirty_second_answer",
+    "brief.today_takeaway.framework",
     "brief.today_takeaway.common_knowledge_points",
     "brief.today_takeaway.common_knowledge_points[*]",
     "brief.today_takeaway.golden_sentences[*].sentence",
@@ -172,6 +173,18 @@ def _ensure_sentence_punctuation(text: str) -> str:
     return fixed + "。"
 
 
+def _normalize_trailing_semicolon(path: str, text: str) -> str:
+    if _normalized_body_path(path) not in {
+        "brief.daily_question.thirty_second_answer",
+        "brief.daily_question.output_sentence_template",
+    }:
+        return text
+    fixed = (text or "").rstrip()
+    if fixed.endswith(("；", ";")):
+        return fixed.rstrip("；; ").rstrip() + "。"
+    return text
+
+
 def _without_sentence_punctuation(text: str) -> str:
     return (text or "").strip().rstrip(SENTENCE_ENDING).strip()
 
@@ -210,6 +223,7 @@ def _clean_text_field(path: str, value: str) -> str:
     else:
         cleaned = _strip_leading_colon(_collapse_repeated_label(value))
     if _is_body_text_path(path):
+        cleaned = _normalize_trailing_semicolon(path, cleaned)
         cleaned = _ensure_sentence_punctuation(cleaned)
     return cleaned
 
@@ -326,6 +340,11 @@ def check_cleanliness(data: dict[str, Any]) -> dict[str, Any]:
             cleaned_value = _clean_text_field(path, value)
             if cleaned_value != text_value and cleaned_value.endswith("。") and not text_value.rstrip().endswith(tuple(SENTENCE_ENDING)):
                 issues.append(_issue("medium", "missing_sentence_punctuation", "正文型字段缺少句末标点，已自动补中文句号。", path, auto_fixable=True))
+            if cleaned_value != text_value and _normalized_body_path(path) in {
+                "brief.daily_question.thirty_second_answer",
+                "brief.daily_question.output_sentence_template",
+            } and text_value.rstrip().endswith(("；", ";")):
+                issues.append(_issue("medium", "trailing_semicolon_answer", "今日一题参考句式以分号结尾，已字段级改为完整句号。", path, auto_fixable=True))
             truncated_tail = _suspected_truncated_tail(value)
             if truncated_tail:
                 issues.append(
