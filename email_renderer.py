@@ -78,29 +78,44 @@ def clip_no_ellipsis(value: Any, limit: int) -> str:
     return head.rstrip("，、 ：:；;但和与及并通过")
 
 
+DISPLAY_PREFIXES = (
+    "如果点原文，重点看",
+    "可用表达",
+    "作答主线",
+    "审题关键",
+    "换成考场话",
+    "考场话",
+)
+
+
 def strip_exam_use_prefix(value: Any) -> str:
-    text = str(value or "").strip()
-    for prefix in ["换成考场话：", "换成考场话:", "考场话：", "考场话:"]:
-        if text.startswith(prefix):
-            return text[len(prefix):].strip()
-    return text
+    return strip_display_prefix(value, "换成考场话", "考场话")
 
 
 def strip_display_prefix(value: Any, *prefixes: str) -> str:
     text = str(value or "").strip()
-    for prefix in prefixes:
-        clean_prefix = str(prefix or "").strip()
-        if not clean_prefix:
-            continue
-        for candidate in (clean_prefix, f"{clean_prefix}：", f"{clean_prefix}:"):
-            if text.startswith(candidate):
-                return text[len(candidate):].strip()
+    candidates = prefixes or DISPLAY_PREFIXES
+    changed = True
+    while changed:
+        changed = False
+        for prefix in candidates:
+            clean_prefix = str(prefix or "").strip()
+            if not clean_prefix:
+                continue
+            for candidate in (clean_prefix, f"{clean_prefix}：", f"{clean_prefix}:"):
+                if text.startswith(candidate):
+                    text = text[len(candidate):].strip()
+                    changed = True
+                    break
+            if changed:
+                break
     return text
 
 
 def is_exam_use_display_item(value: Any) -> bool:
     text = str(value or "").strip()
-    return bool(text) and not text.startswith(("可用表达", "可复用表达", "万能表达", "表达积累"))
+    blocked_prefixes = ("可用表达", "可复用表达", "万能表达", "表达积累", "如果点原文，重点看", "审题关键", "作答主线")
+    return bool(text) and not text.startswith(blocked_prefixes)
 
 
 def is_framework_migration_step(item: Any) -> bool:
@@ -403,6 +418,16 @@ def render_plain_text(brief: dict[str, Any]) -> str:
     framework_map = ensure_dict(featured.get("article_framework_map"))
     steps = normalize_framework_steps(as_list(framework_map.get("steps") or featured.get("article_framework") or []), 5)
     golden = as_list(takeaway.get("golden_sentences"))[:2]
+    original_focus = strip_display_prefix(featured.get("original_reading_focus"), "如果点原文，重点看")
+    rewritable_expression = strip_display_prefix(featured.get("rewritable_expression"), "可用表达")
+    exam_focus = strip_display_prefix(
+        question.get("exam_focus") or question.get("review_key") or question.get("breaking_direction"),
+        "审题关键",
+    )
+    reference_sentence = strip_display_prefix(
+        question.get("output_sentence_template") or question.get("thirty_second_answer") or "",
+        "参考句式",
+    )
     lines = [
         str(brief["email_subject"]),
         f"日期：{brief['date']}",
@@ -412,7 +437,7 @@ def render_plain_text(brief: dict[str, Any]) -> str:
         f"{featured.get('title')}（{source_line(featured)}）",
         f"链接：{featured.get('url') or '原文链接暂不可用'}",
         f"备用搜索：{fallback_search_text(featured)}",
-        ("如果点原文，重点看：" + str(featured.get("original_reading_focus", ""))) if featured.get("original_reading_focus") else "",
+        ("如果点原文，重点看：" + original_focus) if original_focus else "",
         "一句话看懂：" + str(featured.get("one_sentence", "")),
         "记住3个点：",
         *[f"- {clip_text(item, 90)}" for item in as_list(featured.get("three_useful_points"))[:3]],
@@ -422,7 +447,7 @@ def render_plain_text(brief: dict[str, Any]) -> str:
             for item in as_list(featured.get("exam_use") or featured.get("usable_for_exam"))
             if is_exam_use_display_item(item)
         ][:2],
-        "可用表达：" + clip_text(featured.get("rewritable_expression", ""), 80),
+        "可用表达：" + clip_text(rewritable_expression, 80),
         "",
         "文章框架图｜一眼看懂文章怎么展开",
         f"文章类型：{framework_map.get('type') or framework_map.get('article_type', '')}",
@@ -435,12 +460,12 @@ def render_plain_text(brief: dict[str, Any]) -> str:
         "今日一题｜考场转化训练",
         "题型：" + str(question.get("question_type", "")),
         "题目：" + str(question.get("question", today_question_text(brief))),
-        "审题关键：" + str(question.get("exam_focus") or question.get("breaking_direction", "")),
+        "审题关键：" + exam_focus,
         "作答框架：" + "；".join(clip_text(item, 95) for item in (as_list(question.get("answer_framework")) or as_list(question.get("answer_frame")))[:4]),
         "考生版参考答案：" + clip_text(question.get("candidate_answer") or "", 450),
         "30秒输出任务：" + clip_text(question.get("output_prompt") or "请用一句话写出这道题的开头表态。", 80),
         "我的一句话：________________",
-        "参考句式：" + clip_text(question.get("output_sentence_template") or question.get("thirty_second_answer") or "", 120),
+        "参考句式：" + clip_text(reference_sentence, 120),
         "",
         "今日可带走｜1个常识 + 2句必备金句 + 1个框架",
         "关键词：" + "、".join(str(item) for item in as_list(takeaway.get("keywords"))[:5]),
@@ -488,6 +513,10 @@ def render_email_html(brief: dict[str, Any]) -> str:
         "作答主线",
     )
     rewritable_expression = strip_display_prefix(featured.get("rewritable_expression"), "可用表达")
+    exam_focus = strip_display_prefix(
+        question.get("exam_focus") or question.get("review_key") or question.get("breaking_direction"),
+        "审题关键",
+    )
 
     return f"""<!doctype html>
 <html>
@@ -551,7 +580,7 @@ def render_email_html(brief: dict[str, Any]) -> str:
       <div style="font-size:14px;color:#b45309;font-weight:900;margin:4px 0 5px;">题目</div>
       <div style="font-size:16px;font-weight:900;line-height:1.65;margin-bottom:10px;">{h(question.get('question') or three_question)}</div>
       <div style="font-size:14px;color:#b45309;font-weight:900;margin:8px 0 5px;">审题关键</div>
-      <div style="font-size:14px;line-height:1.7;color:#334155;background:#fff8e8;border-left:4px solid #f59e0b;border-radius:10px;padding:9px 10px;">{h(question.get('exam_focus') or question.get('review_key') or question.get('breaking_direction'))}</div>
+      <div style="font-size:14px;line-height:1.7;color:#334155;background:#fff8e8;border-left:4px solid #f59e0b;border-radius:10px;padding:9px 10px;">{h(exam_focus)}</div>
       {f'<div style="font-size:14px;color:#b45309;font-weight:900;margin:11px 0 5px;">作答主线</div><div style="font-size:14px;line-height:1.7;color:#334155;background:#fff8e8;border-left:4px solid #f59e0b;border-radius:10px;padding:9px 10px;">{h(clip_text(breaking_hint, 140))}</div>' if breaking_hint else ''}
       <div style="font-size:14px;color:#b45309;font-weight:900;margin:11px 0 5px;">作答框架</div>
       <ol style="padding-left:21px;line-height:1.72;font-size:14px;margin:0;">{render_question_frame(question)}</ol>

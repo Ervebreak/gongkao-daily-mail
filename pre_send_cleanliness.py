@@ -213,13 +213,16 @@ def _clean_text_field(path: str, value: str) -> str:
     field_labels = {
         "brief.featured_article.rewritable_expression": ("可用表达",),
         "brief.featured_article.original_reading_focus": ("如果点原文，重点看",),
+        "brief.featured_article.usable_for_exam": ("可用表达", "如果点原文，重点看", "换成考场话"),
+        "brief.featured_article.exam_use[*]": ("换成考场话", "可用表达", "如果点原文，重点看"),
         "brief.daily_question.breaking_hint": ("作答主线",),
         "brief.daily_question.exam_focus": ("审题关键",),
     }
+    normalized_path = _normalized_body_path(path)
     if path in {"subject", "brief.email_subject", "brief.subject"}:
         return _dedupe_subject_prefix(value)
-    if path in field_labels:
-        cleaned = _strip_labels(value, field_labels[path])
+    if normalized_path in field_labels:
+        cleaned = _strip_labels(value, field_labels[normalized_path])
     else:
         cleaned = _strip_leading_colon(_collapse_repeated_label(value))
     if _is_body_text_path(path):
