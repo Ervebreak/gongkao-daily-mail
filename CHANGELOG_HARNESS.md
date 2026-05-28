@@ -35,6 +35,31 @@
 
 ## 最新改动
 
+### 2026-05-28｜阶段 2 抽取统一质量计算 helper
+
+**改动原因**
+
+`main.py` 中多处在 brief 被修复或重写后重复执行“渲染、各模块质检、content quality、quality gate 构造”逻辑。重复代码越多，后续修复字段同步、P0 repair、pre-send guard 时越容易出现“某一路径漏跑某个质检”的问题。
+
+**已改文件**
+
+- `main.py`
+- `CHANGELOG_HARNESS.md`
+
+**最新版行为**
+
+- 新增 `render_brief_outputs`，统一从 brief 生成纯文本和 HTML。
+- 新增 `evaluate_all_quality`，统一计算今日一题、框架图、今日可带走、整封清洁度、速读、重复、表达质感、模块冗余、内容风险、选文质量、content quality 和 pre-send cleanliness。
+- 新增 `build_gate_from_quality_map`，统一把质量 map 转成 `build_quality_gate(...)` 参数，避免各处手写参数顺序。
+- 新增 `recompute_after_brief_change`，用于 brief 变更后统一执行 schema 校验、URL 标注、最终选文摘要、主题变化检查、subject 重算、渲染和质量复算。
+- 候选件复核、content quality minor fix、content issue rewrite、pre-send cleanliness guard、P0 repair 后的部分重复质检代码已改为使用统一 helper。
+- 本阶段只抽函数和替换机械重复块，不拆文件、不改事件模式、不改发送判断、不改质量字段名。
+
+**后续注意事项**
+
+1. 后续继续替换剩余质量重复块时，应优先使用 `evaluate_all_quality` 和 `recompute_after_brief_change`，不要继续复制整段质检调用。
+2. 第 3 阶段拆文件前，应先确认 `quality.final`、`quality_gate`、`latest_quality.json` 和管理员报告结构没有字段缺失。
+
 ### 2026-05-28｜阶段 1 部署文档与打包包名统一
 
 **改动原因**

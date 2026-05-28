@@ -670,6 +670,146 @@ def should_attach_weekly_pdf_today(event: Any, today: str, test_invocation: bool
     return should, meta
 
 
+def render_brief_outputs(brief: dict[str, Any], subject: str) -> dict[str, Any]:
+    from email_renderer import render_email_html, render_plain_text
+
+    plain_text = render_plain_text(brief)
+    html_body = render_email_html(brief)
+    return {
+        "brief": brief,
+        "subject": subject,
+        "plain_text": plain_text,
+        "html_body": html_body,
+    }
+
+
+def evaluate_all_quality(
+    brief: dict[str, Any],
+    plain_text: str,
+    html_body: str,
+    *,
+    test_invocation: bool,
+    selection_quality: dict[str, Any] | None = None,
+    cleanliness_quality: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    from brief_quality import evaluate_brief_cleanliness
+    from content_quality_reviewer import evaluate_content_quality
+    from content_risk_quality import evaluate_content_risks
+    from duplication_quality import evaluate_duplication
+    from expression_quality import evaluate_expression_quality
+    from framework_quality import evaluate_framework_map
+    from module_redundancy_quality import evaluate_module_redundancy
+    from question_quality import evaluate_daily_question
+    from quick_reads_quality import evaluate_quick_reads
+    from takeaway_quality import evaluate_takeaway
+
+    if selection_quality is None:
+        selection_quality = evaluate_selection_quality(brief)
+    if cleanliness_quality is None:
+        cleanliness_quality = {}
+    return {
+        "daily_question": evaluate_daily_question(brief),
+        "framework_map": evaluate_framework_map(brief),
+        "today_takeaway": evaluate_takeaway(brief),
+        "brief_cleanliness": evaluate_brief_cleanliness(brief, plain_text, html_body),
+        "quick_reads": evaluate_quick_reads(brief),
+        "duplication": evaluate_duplication(brief),
+        "expression_quality": evaluate_expression_quality(brief),
+        "module_redundancy": evaluate_module_redundancy(brief),
+        "content_risk": evaluate_content_risks(brief, plain_text, html_body),
+        "selection": selection_quality,
+        "content_quality": evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation),
+        "cleanliness": cleanliness_quality,
+    }
+
+
+def build_gate_from_quality_map(quality: dict[str, Any]) -> dict[str, Any]:
+    return build_quality_gate(
+        quality.get("daily_question", {}),
+        quality.get("framework_map", {}),
+        quality.get("today_takeaway", {}),
+        quality.get("brief_cleanliness", {}),
+        quality.get("quick_reads", {}),
+        quality.get("duplication", {}),
+        quality.get("expression_quality", {}),
+        quality.get("module_redundancy", {}),
+        quality.get("content_risk", {}),
+        quality.get("selection", {}),
+        quality.get("content_quality", {}),
+        quality.get("cleanliness", {}),
+    )
+
+
+def _log_quality_map(logger: RunLogger, quality: dict[str, Any], suffix: str) -> None:
+    labels = {
+        "daily_question": "today question quality",
+        "framework_map": "framework map quality",
+        "today_takeaway": "today takeaway quality",
+        "brief_cleanliness": "brief cleanliness quality",
+        "quick_reads": "quick reads quality",
+        "duplication": "duplication quality",
+        "expression_quality": "expression quality",
+        "module_redundancy": "module redundancy quality",
+        "content_risk": "content risk quality",
+        "content_quality": "content quality",
+    }
+    for key, label in labels.items():
+        item = quality.get(key)
+        if isinstance(item, dict):
+            logger.info(f"{label} {suffix}".strip(), **item)
+
+
+def recompute_after_brief_change(
+    brief: dict[str, Any],
+    today: str,
+    *,
+    test_invocation: bool,
+    logger: RunLogger,
+    reason: str,
+    articles: list[Any] | None = None,
+    cleanliness_quality: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    from brief_schema import ensure_brief_schema
+    from url_checker import annotate_brief_urls
+
+    brief, schema_warnings = ensure_brief_schema(brief, today)
+    if schema_warnings:
+        logger.info(f"{reason} warnings", warnings=schema_warnings)
+    brief, url_checks = annotate_brief_urls(brief)
+    logger.info(f"source url checks {reason}", checks=url_checks)
+    final_selection = summarize_final_selection(brief)
+    logger.info(f"final article roles {reason}", **final_selection)
+    theme_changes: list[dict[str, str]] = []
+    if articles is not None:
+        theme_changes = detect_theme_changes(articles, brief)
+        logger.info(f"theme comparison {reason}", theme_changes=theme_changes)
+    selection_quality = evaluate_selection_quality(brief)
+    logger.info(f"selection quality {reason}", **selection_quality)
+    subject = brief.get("email_subject") or f"公考晨读 {today}"
+    if not str(subject).startswith(settings.subject_prefix):
+        subject = f"{settings.subject_prefix}{subject}"
+    rendered = render_brief_outputs(brief, str(subject))
+    quality = evaluate_all_quality(
+        brief,
+        str(rendered.get("plain_text") or ""),
+        str(rendered.get("html_body") or ""),
+        test_invocation=test_invocation,
+        selection_quality=selection_quality,
+        cleanliness_quality=cleanliness_quality,
+    )
+    _log_quality_map(logger, quality, reason)
+    return {
+        "brief": brief,
+        "subject": str(rendered.get("subject") or subject),
+        "plain_text": str(rendered.get("plain_text") or ""),
+        "html_body": str(rendered.get("html_body") or ""),
+        "schema_warnings": schema_warnings,
+        "final_selection": final_selection,
+        "theme_changes": theme_changes,
+        "quality": quality,
+    }
+
+
 def send_feedback_test_email(event: Any | None = None) -> dict[str, Any]:
     from email_renderer import render_feedback_buttons
     from email_sender import send_email
@@ -926,18 +1066,8 @@ def evaluate_candidate_with_current_quality(
     test_invocation: bool = False,
 ) -> dict[str, Any]:
     from brief_schema import ensure_brief_schema
-    from brief_quality import evaluate_brief_cleanliness
-    from content_quality_reviewer import evaluate_content_quality, get_content_quality_model_plan
-    from content_risk_quality import evaluate_content_risks
-    from duplication_quality import evaluate_duplication
     from email_renderer import render_email_html, render_plain_text
-    from expression_quality import evaluate_expression_quality
-    from framework_quality import evaluate_framework_map
-    from module_redundancy_quality import evaluate_module_redundancy
     from pre_send_cleanliness import pre_send_cleanliness_guard
-    from question_quality import evaluate_daily_question
-    from quick_reads_quality import evaluate_quick_reads
-    from takeaway_quality import evaluate_takeaway
 
     brief = candidate.get("brief") if isinstance(candidate.get("brief"), dict) else {}
     if not brief:
@@ -966,31 +1096,16 @@ def evaluate_candidate_with_current_quality(
     subject = str(guarded.get("subject") or subject)
     plain_text = str(guarded.get("plain_text") or plain_text)
     html_body = str(guarded.get("html_body") or html_body)
-    question_quality = evaluate_daily_question(brief)
-    framework_quality = evaluate_framework_map(brief)
-    takeaway_quality = evaluate_takeaway(brief)
-    brief_quality = evaluate_brief_cleanliness(brief, plain_text, html_body)
-    quick_reads_quality = evaluate_quick_reads(brief)
-    duplication_quality = evaluate_duplication(brief)
-    expression_quality = evaluate_expression_quality(brief)
-    module_redundancy_quality = evaluate_module_redundancy(brief)
-    content_risk_quality = evaluate_content_risks(brief, plain_text, html_body)
     selection_quality = evaluate_selection_quality(brief)
-    content_quality = evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation)
-    quality_gate = build_quality_gate(
-        question_quality,
-        framework_quality,
-        takeaway_quality,
-        brief_quality,
-        quick_reads_quality,
-        duplication_quality,
-        expression_quality,
-        module_redundancy_quality,
-        content_risk_quality,
-        selection_quality,
-        content_quality,
-        cleanliness_quality,
+    quality_map = evaluate_all_quality(
+        brief,
+        plain_text,
+        html_body,
+        test_invocation=test_invocation,
+        selection_quality=selection_quality,
+        cleanliness_quality=cleanliness_quality,
     )
+    quality_gate = build_gate_from_quality_map(quality_map)
     return {
         "brief": brief,
         "plain_text": plain_text,
@@ -999,20 +1114,7 @@ def evaluate_candidate_with_current_quality(
         "schema_warnings": schema_warnings,
         "quality_gate": quality_gate,
         "quality": {
-            "final": {
-                "daily_question": question_quality,
-                "framework_map": framework_quality,
-                "today_takeaway": takeaway_quality,
-                "brief_cleanliness": brief_quality,
-                "quick_reads": quick_reads_quality,
-                "duplication": duplication_quality,
-                "expression_quality": expression_quality,
-                "module_redundancy": module_redundancy_quality,
-                "content_risk": content_risk_quality,
-                "selection": selection_quality,
-                "content_quality": content_quality,
-                "cleanliness": cleanliness_quality,
-            }
+            "final": quality_map
         },
     }
 
@@ -1609,33 +1711,32 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                     minor_fix_result["changed_modules"] = list(dict.fromkeys(list(minor_fix_result.get("changed_modules") or []) + list(content_minor_fix.get("changed_modules") or [])))
                 else:
                     minor_fix_result = content_minor_fix
-                brief, content_minor_warnings = ensure_brief_schema(content_minor_fix.get("brief") or brief, today)
-                if content_minor_warnings:
-                    logger.info("content quality minor fix warnings", warnings=content_minor_warnings)
-                brief, url_checks = annotate_brief_urls(brief)
-                logger.info("source url checks after content quality minor fixes", checks=url_checks)
-                final_selection = summarize_final_selection(brief)
-                logger.info("final article roles after content quality minor fixes", **final_selection)
-                theme_changes = detect_theme_changes(articles, brief)
-                logger.info("theme comparison after content quality minor fixes", theme_changes=theme_changes)
-                selection_quality = evaluate_selection_quality(brief)
-                logger.info("selection quality after content quality minor fixes", **selection_quality)
-                subject = brief.get("email_subject") or f"公考晨读 {today}"
-                if not str(subject).startswith(settings.subject_prefix):
-                    subject = f"{settings.subject_prefix}{subject}"
-                plain_text = render_plain_text(brief)
-                html_body = render_email_html(brief)
-                question_quality = evaluate_daily_question(brief)
-                framework_quality = evaluate_framework_map(brief)
-                takeaway_quality = evaluate_takeaway(brief)
-                brief_quality = evaluate_brief_cleanliness(brief, plain_text, html_body)
-                quick_reads_quality = evaluate_quick_reads(brief)
-                duplication_quality = evaluate_duplication(brief)
-                expression_quality = evaluate_expression_quality(brief)
-                module_redundancy_quality = evaluate_module_redundancy(brief)
-                content_risk_quality = evaluate_content_risks(brief, plain_text, html_body)
-                content_quality = evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation)
-                logger.info("content quality after content minor fixes", **content_quality)
+                recomputed = recompute_after_brief_change(
+                    content_minor_fix.get("brief") or brief,
+                    today,
+                    test_invocation=test_invocation,
+                    logger=logger,
+                    reason="after content quality minor fixes",
+                    articles=articles,
+                )
+                brief = recomputed["brief"]
+                subject = recomputed["subject"]
+                plain_text = recomputed["plain_text"]
+                html_body = recomputed["html_body"]
+                final_selection = recomputed["final_selection"]
+                theme_changes = recomputed["theme_changes"]
+                quality_map = recomputed["quality"]
+                question_quality = quality_map["daily_question"]
+                framework_quality = quality_map["framework_map"]
+                takeaway_quality = quality_map["today_takeaway"]
+                brief_quality = quality_map["brief_cleanliness"]
+                quick_reads_quality = quality_map["quick_reads"]
+                duplication_quality = quality_map["duplication"]
+                expression_quality = quality_map["expression_quality"]
+                module_redundancy_quality = quality_map["module_redundancy"]
+                content_risk_quality = quality_map["content_risk"]
+                selection_quality = quality_map["selection"]
+                content_quality = quality_map["content_quality"]
 
             content_issue_rewrite_result = rewrite_content_issues(brief, content_quality, test_mode=test_invocation, today=today)
             if content_issue_rewrite_result.get("changed"):
@@ -1662,42 +1763,32 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                     rewritten_modules=content_issue_rewrite_result.get("rewritten_modules", []),
                     changed_fields=content_issue_rewrite_result.get("changed_fields", []),
                 )
-                brief, content_rewrite_warnings = ensure_brief_schema(content_issue_rewrite_result.get("brief") or brief, today)
-                if content_rewrite_warnings:
-                    logger.info("content issue rewrite warnings", warnings=content_rewrite_warnings)
-                brief, url_checks = annotate_brief_urls(brief)
-                logger.info("source url checks after content issue rewrite", checks=url_checks)
-                final_selection = summarize_final_selection(brief)
-                logger.info("final article roles after content issue rewrite", **final_selection)
-                theme_changes = detect_theme_changes(articles, brief)
-                logger.info("theme comparison after content issue rewrite", theme_changes=theme_changes)
-                selection_quality = evaluate_selection_quality(brief)
-                logger.info("selection quality after content issue rewrite", **selection_quality)
-                subject = brief.get("email_subject") or f"公考晨读 {today}"
-                if not str(subject).startswith(settings.subject_prefix):
-                    subject = f"{settings.subject_prefix}{subject}"
-                plain_text = render_plain_text(brief)
-                html_body = render_email_html(brief)
-                question_quality = evaluate_daily_question(brief)
-                logger.info("today question quality after content issue rewrite", **question_quality)
-                framework_quality = evaluate_framework_map(brief)
-                logger.info("framework map quality after content issue rewrite", **framework_quality)
-                takeaway_quality = evaluate_takeaway(brief)
-                logger.info("today takeaway quality after content issue rewrite", **takeaway_quality)
-                brief_quality = evaluate_brief_cleanliness(brief, plain_text, html_body)
-                logger.info("brief cleanliness quality after content issue rewrite", **brief_quality)
-                quick_reads_quality = evaluate_quick_reads(brief)
-                logger.info("quick reads quality after content issue rewrite", **quick_reads_quality)
-                duplication_quality = evaluate_duplication(brief)
-                logger.info("duplication quality after content issue rewrite", **duplication_quality)
-                expression_quality = evaluate_expression_quality(brief)
-                logger.info("expression quality after content issue rewrite", **expression_quality)
-                module_redundancy_quality = evaluate_module_redundancy(brief)
-                logger.info("module redundancy quality after content issue rewrite", **module_redundancy_quality)
-                content_risk_quality = evaluate_content_risks(brief, plain_text, html_body)
-                logger.info("content risk quality after content issue rewrite", **content_risk_quality)
-                content_quality = evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation)
-                logger.info("content quality after content issue rewrite", **content_quality)
+                recomputed = recompute_after_brief_change(
+                    content_issue_rewrite_result.get("brief") or brief,
+                    today,
+                    test_invocation=test_invocation,
+                    logger=logger,
+                    reason="after content issue rewrite",
+                    articles=articles,
+                )
+                brief = recomputed["brief"]
+                subject = recomputed["subject"]
+                plain_text = recomputed["plain_text"]
+                html_body = recomputed["html_body"]
+                final_selection = recomputed["final_selection"]
+                theme_changes = recomputed["theme_changes"]
+                quality_map = recomputed["quality"]
+                question_quality = quality_map["daily_question"]
+                framework_quality = quality_map["framework_map"]
+                takeaway_quality = quality_map["today_takeaway"]
+                brief_quality = quality_map["brief_cleanliness"]
+                quick_reads_quality = quality_map["quick_reads"]
+                duplication_quality = quality_map["duplication"]
+                expression_quality = quality_map["expression_quality"]
+                module_redundancy_quality = quality_map["module_redundancy"]
+                content_risk_quality = quality_map["content_risk"]
+                selection_quality = quality_map["selection"]
+                content_quality = quality_map["content_quality"]
                 after_content_score = int(content_quality.get("score") or 0)
                 if after_content_score + 2 < before_content_score:
                     logger.info(
@@ -1749,31 +1840,26 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
         fix_count=len(cleanliness_quality.get("fixes") or []),
         unresolved_count=len(cleanliness_quality.get("unresolved_issues") or []),
     )
-    question_quality = evaluate_daily_question(brief)
-    framework_quality = evaluate_framework_map(brief)
-    takeaway_quality = evaluate_takeaway(brief)
-    brief_quality = evaluate_brief_cleanliness(brief, plain_text, html_body)
-    quick_reads_quality = evaluate_quick_reads(brief)
-    duplication_quality = evaluate_duplication(brief)
-    expression_quality = evaluate_expression_quality(brief)
-    module_redundancy_quality = evaluate_module_redundancy(brief)
-    content_risk_quality = evaluate_content_risks(brief, plain_text, html_body)
-    content_quality = evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation)
-    logger.info("content quality after pre-send cleanliness guard", **content_quality)
-    quality_gate = build_quality_gate(
-        question_quality,
-        framework_quality,
-        takeaway_quality,
-        brief_quality,
-        quick_reads_quality,
-        duplication_quality,
-        expression_quality,
-        module_redundancy_quality,
-        content_risk_quality,
-        selection_quality,
-        content_quality,
-        cleanliness_quality,
+    quality_map = evaluate_all_quality(
+        brief,
+        plain_text,
+        html_body,
+        test_invocation=test_invocation,
+        selection_quality=selection_quality,
+        cleanliness_quality=cleanliness_quality,
     )
+    question_quality = quality_map["daily_question"]
+    framework_quality = quality_map["framework_map"]
+    takeaway_quality = quality_map["today_takeaway"]
+    brief_quality = quality_map["brief_cleanliness"]
+    quick_reads_quality = quality_map["quick_reads"]
+    duplication_quality = quality_map["duplication"]
+    expression_quality = quality_map["expression_quality"]
+    module_redundancy_quality = quality_map["module_redundancy"]
+    content_risk_quality = quality_map["content_risk"]
+    content_quality = quality_map["content_quality"]
+    logger.info("content quality after pre-send cleanliness guard", **content_quality)
+    quality_gate = build_gate_from_quality_map(quality_map)
     logger.info("quality gate", **quality_gate, blocked=(not test_invocation) and quality_gate.get("overall") == "fail")
     if settings.quality_rewrite_enabled and quality_gate.get("overall") == "fail":
         try:
@@ -1800,42 +1886,32 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                 details=p0_repair_result.get("details", {}),
             )
             if p0_repair_result.get("rewritten_modules"):
-                brief, p0_repair_warnings = ensure_brief_schema(p0_repair_result.get("brief") or brief, today)
-                if p0_repair_warnings:
-                    logger.info("p0 repair warnings", warnings=p0_repair_warnings)
-                brief, url_checks = annotate_brief_urls(brief)
-                logger.info("source url checks after p0 repair", checks=url_checks)
-                final_selection = summarize_final_selection(brief)
-                logger.info("final article roles after p0 repair", **final_selection)
-                theme_changes = detect_theme_changes(articles, brief)
-                logger.info("theme comparison after p0 repair", theme_changes=theme_changes)
-                selection_quality = evaluate_selection_quality(brief)
-                logger.info("selection quality after p0 repair", **selection_quality)
-                subject = brief.get("email_subject") or f"公考晨读 {today}"
-                if not str(subject).startswith(settings.subject_prefix):
-                    subject = f"{settings.subject_prefix}{subject}"
-                question_quality = evaluate_daily_question(brief)
-                logger.info("today question quality after p0 repair", **question_quality)
-                framework_quality = evaluate_framework_map(brief)
-                logger.info("framework map quality after p0 repair", **framework_quality)
-                takeaway_quality = evaluate_takeaway(brief)
-                logger.info("today takeaway quality after p0 repair", **takeaway_quality)
-                plain_text = render_plain_text(brief)
-                html_body = render_email_html(brief)
-                brief_quality = evaluate_brief_cleanliness(brief, plain_text, html_body)
-                logger.info("brief cleanliness quality after p0 repair", **brief_quality)
-                quick_reads_quality = evaluate_quick_reads(brief)
-                logger.info("quick reads quality after p0 repair", **quick_reads_quality)
-                duplication_quality = evaluate_duplication(brief)
-                logger.info("duplication quality after p0 repair", **duplication_quality)
-                expression_quality = evaluate_expression_quality(brief)
-                logger.info("expression quality after p0 repair", **expression_quality)
-                module_redundancy_quality = evaluate_module_redundancy(brief)
-                logger.info("module redundancy quality after p0 repair", **module_redundancy_quality)
-                content_risk_quality = evaluate_content_risks(brief, plain_text, html_body)
-                logger.info("content risk quality after p0 repair", **content_risk_quality)
-                content_quality = evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation)
-                logger.info("content quality after p0 repair", **content_quality)
+                recomputed = recompute_after_brief_change(
+                    p0_repair_result.get("brief") or brief,
+                    today,
+                    test_invocation=test_invocation,
+                    logger=logger,
+                    reason="after p0 repair",
+                    articles=articles,
+                )
+                brief = recomputed["brief"]
+                subject = recomputed["subject"]
+                plain_text = recomputed["plain_text"]
+                html_body = recomputed["html_body"]
+                final_selection = recomputed["final_selection"]
+                theme_changes = recomputed["theme_changes"]
+                quality_map = recomputed["quality"]
+                question_quality = quality_map["daily_question"]
+                framework_quality = quality_map["framework_map"]
+                takeaway_quality = quality_map["today_takeaway"]
+                brief_quality = quality_map["brief_cleanliness"]
+                quick_reads_quality = quality_map["quick_reads"]
+                duplication_quality = quality_map["duplication"]
+                expression_quality = quality_map["expression_quality"]
+                module_redundancy_quality = quality_map["module_redundancy"]
+                content_risk_quality = quality_map["content_risk"]
+                selection_quality = quality_map["selection"]
+                content_quality = quality_map["content_quality"]
                 guarded, cleanliness_quality = pre_send_cleanliness_guard(
                     {"brief": brief, "subject": str(subject), "plain_text": plain_text, "html_body": html_body, "quality": {}}
                 )
@@ -1850,31 +1926,26 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                     fix_count=len(cleanliness_quality.get("fixes") or []),
                     unresolved_count=len(cleanliness_quality.get("unresolved_issues") or []),
                 )
-                question_quality = evaluate_daily_question(brief)
-                framework_quality = evaluate_framework_map(brief)
-                takeaway_quality = evaluate_takeaway(brief)
-                brief_quality = evaluate_brief_cleanliness(brief, plain_text, html_body)
-                quick_reads_quality = evaluate_quick_reads(brief)
-                duplication_quality = evaluate_duplication(brief)
-                expression_quality = evaluate_expression_quality(brief)
-                module_redundancy_quality = evaluate_module_redundancy(brief)
-                content_risk_quality = evaluate_content_risks(brief, plain_text, html_body)
-                content_quality = evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation)
-                logger.info("content quality after pre-send cleanliness guard after p0 repair", **content_quality)
-                quality_gate = build_quality_gate(
-                    question_quality,
-                    framework_quality,
-                    takeaway_quality,
-                    brief_quality,
-                    quick_reads_quality,
-                    duplication_quality,
-                    expression_quality,
-                    module_redundancy_quality,
-                    content_risk_quality,
-                    selection_quality,
-                    content_quality,
-                    cleanliness_quality,
+                quality_map = evaluate_all_quality(
+                    brief,
+                    plain_text,
+                    html_body,
+                    test_invocation=test_invocation,
+                    selection_quality=selection_quality,
+                    cleanliness_quality=cleanliness_quality,
                 )
+                question_quality = quality_map["daily_question"]
+                framework_quality = quality_map["framework_map"]
+                takeaway_quality = quality_map["today_takeaway"]
+                brief_quality = quality_map["brief_cleanliness"]
+                quick_reads_quality = quality_map["quick_reads"]
+                duplication_quality = quality_map["duplication"]
+                expression_quality = quality_map["expression_quality"]
+                module_redundancy_quality = quality_map["module_redundancy"]
+                content_risk_quality = quality_map["content_risk"]
+                content_quality = quality_map["content_quality"]
+                logger.info("content quality after pre-send cleanliness guard after p0 repair", **content_quality)
+                quality_gate = build_gate_from_quality_map(quality_map)
                 logger.info("quality gate after p0 repair", **quality_gate, blocked=(not test_invocation) and quality_gate.get("overall") == "fail")
         except Exception as exc:
             logger.info("p0 repair failed", error=str(exc))
