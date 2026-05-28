@@ -141,9 +141,62 @@
 
 ---
 
+## 6. 邮件模块角色边界
+
+### 适用场景
+
+- `today_takeaway.golden_sentences`、`featured_article.rewritable_expression`、`featured_article.exam_use`、`today_takeaway.framework` 之间出现表达重复、功能撞车。
+- 质检提示 `module_role_overlap`、`repeated_expression_across_modules`、`near_duplicate_expression`。
+
+### 问题本质
+
+同一文章可以在多个模块反复出现同一主题，但不能让多个模块承担同一个功能。模块角色不清会造成用户感觉“邮件在重复说同一句话”。
+
+### 模块分工
+
+| 模块 | 角色 | 应该怎么写 |
+|---|---|---|
+| `today_takeaway.golden_sentences` | 可摘抄、可背诵、有文采 | 负责“记住一句话” |
+| `featured_article.rewritable_expression` | 考场可改写表达 | 负责“写进答案” |
+| `featured_article.exam_use` / `usable_for_exam` | 考场迁移说明 | 负责“告诉用户这篇文章怎么用” |
+| `today_takeaway.framework` | 方法论提炼 | 负责“提供答题框架” |
+
+### 典型错误
+
+```text
+exam_use：技术升级不能替代管理升级，装备越先进越需要人员、制度、监管。
+golden_sentence：设备越先进，越需要匹配专业的人、规范的制度和管到底的监督。
+```
+
+这两句虽然不完全相同，但功能高度重叠，都在承担“金句式表达”。
+
+### 推荐修法
+
+保留金句，把 `exam_use` 改成使用说明：
+
+```text
+这篇文章适合迁移到安全生产、技术治理、监管协同类对策题，可从责任压实、人员培训、数据共享、执法闭环四个角度展开。
+```
+
+如果 `rewritable_expression` 与金句撞车，优先改 `rewritable_expression`，让它更像考场表达：
+
+```text
+技术赋能不能只算设备账，还要算管理账、人员账和监管账；否则，越先进的工具，越可能放大旧治理漏洞。
+```
+
+### 维护规则
+
+1. 金句尽量保留，除非存在硬伤。
+2. `exam_use` 撞车时，优先改成“可迁移题型 + 作答角度”。
+3. `rewritable_expression` 撞车时，优先改成“能写入申论/面试答案的表达”。
+4. `framework` 不写金句，写方法论或答题路径。
+
+---
+
 ## 维护规则
 
 1. 框架必须能迁移到多篇文章和多类题。
 2. 作答框架以“动作 + 对象 + 目的”为主，不写成长答案。
 3. 涉及基层身份时，必须区分“可直接执行”“可建议上级”“需依法查处”。
 4. 后续每新增一个高频考点，应配至少一个反例，防止模型写空话。
+5. 模块角色边界属于产品质量规则，优先通过字段级改写和质检分级控制，不宜轻易升为 P0。
