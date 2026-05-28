@@ -144,6 +144,24 @@ def _rhetorical_pattern_hits(text: str) -> list[str]:
     return hits
 
 
+def _preferred_rewrite_target(left: dict[str, str], right: dict[str, str]) -> str:
+    roles = {left["role"], right["role"]}
+    # 金句是最终摘抄区，尽量保留；撞车时改考场迁移或可用表达。
+    if "exam_use" in roles:
+        return left["name"] if left["role"] == "exam_use" else right["name"]
+    if "rewritable_expression" in roles:
+        return left["name"] if left["role"] == "rewritable_expression" else right["name"]
+    return left["name"]
+
+
+def _role_overlap_severity(common_len: int, ratio: float) -> str:
+    # 模块角色重叠影响产品感，但一般不应直接阻断发送。
+    # 完全复制或极高相似度才升到 medium；普通功能相似只作为 low/review。
+    if ratio >= 0.92 or common_len >= 24:
+        return "medium"
+    return "low"
+
+
 def evaluate_module_redundancy(brief: dict[str, Any]) -> dict[str, Any]:
     items = _field_items(brief)
     records = _sentence_records(items)
@@ -159,7 +177,7 @@ def evaluate_module_redundancy(brief: dict[str, Any]) -> dict[str, Any]:
             continue
         previous = seen.get(key)
         if previous and previous["module"] != record["module"]:
-            severity = "high" if "golden_sentence" in {previous["role"], record["role"]} else "medium"
+            severity = "medium" if "golden_sentence" in {previous["role"], record["role"]} else "medium"
             repeated.append({
                 "from": previous["name"],
                 "to": record["name"],
@@ -213,6 +231,8 @@ def evaluate_module_redundancy(brief: dict[str, Any]) -> dict[str, Any]:
                     "sentence": left["sentence"][:90],
                     "common_chars": str(common_len),
                     "similarity": f"{ratio:.2f}",
+                    "severity": _role_overlap_severity(common_len, ratio),
+                    "rewrite_target": _preferred_rewrite_target(left, right),
                 })
 
     for duplicate in repeated[:5]:
@@ -239,14 +259,17 @@ def evaluate_module_redundancy(brief: dict[str, Any]) -> dict[str, Any]:
             "message": f"{item['name']} 过长或写成完整答案句，作答框架应只保留关键词式骨架",
         })
 
-    if role_overlaps:
-        severity = "high" if len(role_overlaps) >= 2 else "medium"
-        for overlap in role_overlaps[:4]:
-            issues.append({
-                "severity": severity,
-                "code": "module_role_overlap",
-                "message": f"{overlap['from']} 与 {overlap['to']} 承担了相同表达功能，应拆分为不同角度",
-            })
+    for overlap in role_overlaps[:4]:
+        issues.append({
+            "severity": overlap.get("severity", "low"),
+            "code": "module_role_overlap",
+            "message": (
+                f"{overlap['from']} 与 {overlap['to']} 承担了相近表达功能。"
+                f"建议优先改写 {overlap.get('rewrite_target') or overlap['from']}，让 exam_use 写考场迁移方法，"
+                "rewritable_expression 写考场表达，golden_sentences 保留摘抄金句。"
+            ),
+            "rewrite_target": overlap.get("rewrite_target", ""),
+        })
 
     all_text = " ".join(item["text"] for item in items)
     rhetorical_hits = _rhetorical_pattern_hits(all_text)

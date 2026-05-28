@@ -172,6 +172,38 @@ def _looks_like_plain_news_summary(text: str) -> bool:
     return bool(news_hits) and len(exam_hits) == 0 or (len(generic_hits) >= 1 and len(exam_hits) == 0)
 
 
+def _classify_url_issue(idx: int, item: dict[str, Any]) -> dict[str, str] | None:
+    url_status = _text(item.get("url_status")).lower()
+    url_reason = _text(item.get("url_status_reason"))
+    if not url_status or url_status in {"valid", "ok"}:
+        return None
+
+    title = _quick_title(item)
+    source = _text(item.get("source"))
+    url = _text(item.get("url"))
+    has_fallback = bool(title and source) or bool(title and url)
+    reason_lower = url_reason.lower()
+    is_ssl_warning = "ssl" in reason_lower and ("warning" in reason_lower or url_status == "warning")
+
+    if is_ssl_warning and has_fallback:
+        return {
+            "severity": "low",
+            "code": "quick_read_url_ssl_warning",
+            "message": f"第{idx}篇速读链接 SSL 校验警告：{url_reason}；已有标题/来源可作为备用搜索，不阻断发送。",
+        }
+    if has_fallback:
+        return {
+            "severity": "medium",
+            "code": "quick_read_url_warning",
+            "message": f"第{idx}篇速读链接状态异常：{url_status} {url_reason}；已有标题/来源可备用搜索。",
+        }
+    return {
+        "severity": "high",
+        "code": "quick_read_url_not_valid",
+        "message": f"第{idx}篇速读链接状态异常且缺少备用搜索信息：{url_status} {url_reason}",
+    }
+
+
 def evaluate_quick_reads(brief: dict[str, Any]) -> dict[str, Any]:
     quick_reads = _as_list(brief.get("quick_reads"))
     issues: list[dict[str, str]] = []
@@ -211,10 +243,9 @@ def evaluate_quick_reads(brief: dict[str, Any]) -> dict[str, Any]:
             issues.append({"severity": "high", "code": "truncated_quick_read_one_sentence", "message": f"第{idx}篇速读一句话概括疑似半句话"})
 
         if isinstance(item, dict):
-            url_status = _text(item.get("url_status")).lower()
-            url_reason = _text(item.get("url_status_reason"))
-            if url_status and url_status not in {"valid", "ok"}:
-                issues.append({"severity": "high", "code": "quick_read_url_not_valid", "message": f"第{idx}篇速读链接状态异常：{url_status} {url_reason}"})
+            url_issue = _classify_url_issue(idx, item)
+            if url_issue:
+                issues.append(url_issue)
 
         exam_hits = _keyword_hits(reason, EXAM_VALUE_KEYWORDS)
         if exam_hits:

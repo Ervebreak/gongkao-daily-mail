@@ -12,6 +12,7 @@ DISPLAY_LABELS = (
     "作答主线",
     "审题关键",
     "如果点原文，重点看",
+    "可迁移框架",
 )
 LEADING_RESIDUE = "：:·•・"
 SENTENCE_ENDING = "。！？；.!?」』）】》"
@@ -27,6 +28,39 @@ TRUNCATED_TAILS = (
     "进而",
     "同时",
     "并且",
+)
+DANGLING_ENDINGS = (
+    "通过",
+    "由于",
+    "为了",
+    "围绕",
+    "依靠",
+    "立足",
+    "推动",
+    "促进",
+    "实现",
+    "提升",
+    "强化",
+    "完善",
+    "构建",
+    "形成",
+    "建立",
+    "转向",
+    "转为",
+    "赋能",
+    "配套",
+    "让",
+    "把",
+    "与",
+    "和",
+    "及",
+    "并",
+    "但",
+    "而",
+    "在",
+    "为",
+    "的",
+    "监",
 )
 BODY_TEXT_PATHS = {
     "brief.today_focus",
@@ -49,6 +83,15 @@ BODY_TEXT_PATHS = {
     "brief.today_takeaway.golden_sentences[*].sentence",
     "brief.quick_reads[*].one_sentence",
     "brief.quick_reads[*].exam_value",
+}
+DISPLAY_PREFIX_RULES = {
+    "brief.featured_article.rewritable_expression": ("可用表达",),
+    "brief.featured_article.original_reading_focus": ("如果点原文，重点看",),
+    "brief.featured_article.usable_for_exam": ("可用表达", "如果点原文，重点看", "换成考场话"),
+    "brief.featured_article.exam_use[*]": ("换成考场话", "可用表达", "如果点原文，重点看"),
+    "brief.daily_question.breaking_hint": ("作答主线", "破题关键"),
+    "brief.daily_question.exam_focus": ("审题关键",),
+    "brief.today_takeaway.framework": ("可迁移框架",),
 }
 
 
@@ -151,6 +194,7 @@ def _strip_labels(text: str, labels: tuple[str, ...]) -> str:
     while changed:
         changed = False
         for label in labels:
+            # 字段值由 brief 存正文，栏目标题由 renderer 渲染；字段开头不能保留任何同名标题。
             next_value = re.sub(rf"^\s*{re.escape(label)}\s*[：:]?\s*", "", fixed, count=1).strip()
             if next_value != fixed:
                 fixed = next_value
@@ -173,20 +217,34 @@ def _ensure_sentence_punctuation(text: str) -> str:
     return fixed + "。"
 
 
-def _normalize_trailing_semicolon(path: str, text: str) -> str:
-    if _normalized_body_path(path) not in {
-        "brief.daily_question.thirty_second_answer",
-        "brief.daily_question.output_sentence_template",
-    }:
-        return text
-    fixed = (text or "").rstrip()
-    if fixed.endswith(("；", ";")):
-        return fixed.rstrip("；; ").rstrip() + "。"
-    return text
-
-
 def _without_sentence_punctuation(text: str) -> str:
     return (text or "").strip().rstrip(SENTENCE_ENDING).strip()
+
+
+def _last_clause(text: str) -> str:
+    parts = [part.strip() for part in re.split(r"[，,；;。！？]", text or "") if part.strip()]
+    return parts[-1] if parts else (text or "").strip()
+
+
+def _looks_incomplete(text: str) -> bool:
+    value = _text(text)
+    if not value:
+        return False
+    if any(marker in value for marker in ("……", "...", "…", "..")):
+        return True
+    if value.endswith(("，", "、", "：", "；", ",", ":", ";")):
+        return True
+    stripped = _without_sentence_punctuation(value)
+    if any(stripped.endswith(tail) for tail in TRUNCATED_TAILS):
+        return True
+    if any(stripped.endswith(tail) for tail in DANGLING_ENDINGS):
+        return True
+    clause = _last_clause(value)
+    if clause.startswith(("让", "把")) and len(clause) <= 10:
+        return True
+    if clause.startswith(("通过", "依靠", "围绕", "立足")) and len(clause) <= 14:
+        return True
+    return False
 
 
 def _suspected_truncated_tail(text: str) -> str:
@@ -194,6 +252,11 @@ def _suspected_truncated_tail(text: str) -> str:
     for tail in TRUNCATED_TAILS:
         if stripped.endswith(tail):
             return tail
+    for tail in DANGLING_ENDINGS:
+        if stripped.endswith(tail):
+            return tail
+    if _looks_incomplete(text):
+        return "未完成结构"
     return ""
 
 
@@ -209,20 +272,60 @@ def _module_from_path(path: str) -> str:
     return "brief"
 
 
+def _normalize_trailing_semicolon(path: str, text: str) -> str:
+    if _normalized_body_path(path) not in {
+        "brief.daily_question.thirty_second_answer",
+        "brief.daily_question.output_sentence_template",
+    }:
+        return text
+    fixed = (text or "").rstrip()
+    if fixed.endswith(("；", ";", "，", ",", "、", "：", ":")):
+        return fixed.rstrip("；;，,、：: ").rstrip() + "。"
+    return text
+
+
+def _framework_action(item: Any) -> str:
+    text = _text(item)
+    if not text:
+        return "抓住关键环节"
+    text = text.split("：", 1)[0].split(":", 1)[0]
+    return text.strip(" 。；;，,") or "抓住关键环节"
+
+
+def _repair_thirty_second_answer_from_root(root: Any) -> str:
+    try:
+        question = root["brief"]["daily_question"]
+    except Exception:
+        return ""
+    if not isinstance(question, dict):
+        return ""
+    current = _text(question.get("thirty_second_answer"))
+    fallback = _text(question.get("output_sentence_template"))
+    target_text = current or fallback
+    if target_text and not _looks_incomplete(target_text):
+        return ""
+
+    framework = question.get("answer_framework") or question.get("answer_frame") or []
+    if not isinstance(framework, list):
+        framework = []
+    actions = [_framework_action(item) for item in framework if _text(item)][:3]
+    while len(actions) < 3:
+        actions.append(("压实责任", "协同推进", "闭环落实")[len(actions)])
+    repaired = (
+        "这道题的核心是把问题推进到治理闭环："
+        f"一是{actions[0]}；二是{actions[1]}；三是{actions[2]}，"
+        "最终用责任、协同和长效机制把问题解决到位。"
+    )
+    question["thirty_second_answer"] = repaired
+    return repaired
+
+
 def _clean_text_field(path: str, value: str) -> str:
-    field_labels = {
-        "brief.featured_article.rewritable_expression": ("可用表达",),
-        "brief.featured_article.original_reading_focus": ("如果点原文，重点看",),
-        "brief.featured_article.usable_for_exam": ("可用表达", "如果点原文，重点看", "换成考场话"),
-        "brief.featured_article.exam_use[*]": ("换成考场话", "可用表达", "如果点原文，重点看"),
-        "brief.daily_question.breaking_hint": ("作答主线",),
-        "brief.daily_question.exam_focus": ("审题关键",),
-    }
     normalized_path = _normalized_body_path(path)
     if path in {"subject", "brief.email_subject", "brief.subject"}:
         return _dedupe_subject_prefix(value)
-    if normalized_path in field_labels:
-        cleaned = _strip_labels(value, field_labels[normalized_path])
+    if normalized_path in DISPLAY_PREFIX_RULES:
+        cleaned = _strip_labels(value, DISPLAY_PREFIX_RULES[normalized_path])
     else:
         cleaned = _strip_leading_colon(_collapse_repeated_label(value))
     if _is_body_text_path(path):
@@ -303,9 +406,9 @@ def _daily_question_structure_issues(data: dict[str, Any]) -> list[dict[str, Any
     text = _text(question.get("question"))
     groups = {
         "identity": ("作为", "假如你是", "工作人员", "调研组", "负责人", "城管局", "街道", "社区"),
-        "scene": ("某地", "某市", "某区", "近期", "群众", "基层", "社区", "学校", "企业"),
-        "conflict": ("问题", "困境", "被占", "缺乏", "争议", "抱怨", "难用", "反转", "风险"),
-        "task": ("请", "提出", "建议", "对策", "工作思路", "怎么办", "如何"),
+        "scene": ("某地", "某市", "某区", "近期", "群众", "基层", "社区", "学校", "企业", "辖区"),
+        "conflict": ("问题", "困境", "被占", "缺乏", "争议", "抱怨", "难用", "反转", "风险", "短板"),
+        "task": ("请", "提出", "建议", "对策", "工作思路", "怎么办", "如何", "破解"),
     }
     labels = {
         "identity": "身份",
@@ -338,16 +441,21 @@ def check_cleanliness(data: dict[str, Any]) -> dict[str, Any]:
             issues.append(_issue("high", "duplicate_label_prefix", f"存在重复栏目标题：{label}", path, auto_fixable=True, blocking=True))
         if re.match(rf"^\s*[{re.escape(LEADING_RESIDUE)}]", value):
             issues.append(_issue("high", "leading_colon", "字段正文以冒号开头。", path, auto_fixable=True, blocking=True))
+        normalized_path = _normalized_body_path(path)
+        if normalized_path in DISPLAY_PREFIX_RULES:
+            stripped = _strip_labels(value, DISPLAY_PREFIX_RULES[normalized_path])
+            if stripped != _text(value):
+                issues.append(_issue("high", "display_label_prefix", "字段值不应携带栏目标题前缀，标题由模板渲染。", path, auto_fixable=True, blocking=True))
         if _is_body_text_path(path):
             text_value = _text(value)
             cleaned_value = _clean_text_field(path, value)
             if cleaned_value != text_value and cleaned_value.endswith("。") and not text_value.rstrip().endswith(tuple(SENTENCE_ENDING)):
                 issues.append(_issue("medium", "missing_sentence_punctuation", "正文型字段缺少句末标点，已自动补中文句号。", path, auto_fixable=True))
-            if cleaned_value != text_value and _normalized_body_path(path) in {
+            if cleaned_value != text_value and normalized_path in {
                 "brief.daily_question.thirty_second_answer",
                 "brief.daily_question.output_sentence_template",
-            } and text_value.rstrip().endswith(("；", ";")):
-                issues.append(_issue("medium", "trailing_semicolon_answer", "今日一题参考句式以分号结尾，已字段级改为完整句号。", path, auto_fixable=True))
+            } and text_value.rstrip().endswith(("；", ";", "，", ",", "、", "：", ":")):
+                issues.append(_issue("high", "trailing_semicolon_answer", "今日一题30秒输出疑似半截句，已字段级补成完整句。", path, auto_fixable=True, blocking=True, module_override="daily_question"))
             truncated_tail = _suspected_truncated_tail(value)
             if truncated_tail:
                 issues.append(
@@ -356,6 +464,7 @@ def check_cleanliness(data: dict[str, Any]) -> dict[str, Any]:
                         "suspected_truncated_sentence",
                         f"正文型字段疑似半截句，结尾停在“{truncated_tail}”。",
                         path,
+                        auto_fixable=normalized_path in {"brief.daily_question.thirty_second_answer", "brief.daily_question.output_sentence_template"},
                         blocking=True,
                         module_override=_module_from_path(path),
                     )
@@ -393,8 +502,7 @@ def check_cleanliness(data: dict[str, Any]) -> dict[str, Any]:
 def auto_fix_cleanliness(data: dict[str, Any], issues: list[dict[str, Any]]) -> tuple[dict[str, Any], list[dict[str, str]]]:
     fixed = copy.deepcopy(data)
     fixes: list[dict[str, str]] = []
-    if not any(issue.get("auto_fixable") for issue in issues):
-        return fixed, fixes
+    has_fixable = any(issue.get("auto_fixable") for issue in issues)
 
     if isinstance(fixed.get("brief"), dict):
         for path, before in _walk_strings(fixed["brief"], "brief"):
@@ -402,6 +510,14 @@ def auto_fix_cleanliness(data: dict[str, Any], issues: list[dict[str, Any]]) -> 
             if after != before:
                 _set_path(fixed, path, after)
                 fixes.append(_fix("clean_brief_field", path, before, after))
+        before_thirty = _text(((fixed.get("brief") or {}).get("daily_question") or {}).get("thirty_second_answer"))
+        repaired = _repair_thirty_second_answer_from_root(fixed)
+        if repaired and repaired != before_thirty:
+            fixes.append(_fix("repair_thirty_second_answer", "brief.daily_question.thirty_second_answer", before_thirty, repaired))
+            has_fixable = True
+
+    if not has_fixable and not fixes:
+        return fixed, fixes
 
     for path in ("subject", "plain_text", "html_body"):
         before = _text(fixed.get(path))
