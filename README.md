@@ -19,6 +19,28 @@ python scripts\weekly_quality_review.py --metrics output\harness_metrics.jsonl
 main.handler
 ```
 
+## 部署打包
+
+部署包统一命名为：
+
+```text
+function.zip
+```
+
+Windows 本地推荐执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build_fc_package.ps1
+```
+
+Linux / WSL / Git Bash 可执行：
+
+```bash
+bash scripts/build_fc_package.sh
+```
+
+生成 `function.zip` 后上传到阿里云函数计算。详细步骤见 `docs/deploy_aliyun_fc.md`。
+
 ## 必填环境变量
 
 ```text
@@ -182,7 +204,7 @@ python main.py
 
 1. 运行环境选 Python 3.10。
 2. 请求处理程序填写 `main.handler`。
-3. 上传 `gongkao-morning-mailer.zip`。
+3. 上传 `function.zip`。
 4. 在“环境变量”里填写 `.env.example` 对应变量，不要把密钥写进代码。
 5. 创建定时触发器，每天 08:00，北京时间。
 

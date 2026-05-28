@@ -35,6 +35,182 @@
 
 ## 最新改动
 
+### 2026-05-28｜阶段 1 部署文档与打包包名统一
+
+**改动原因**
+
+代码优化第一阶段先处理低风险的部署和仓库卫生问题。此前 README 写上传 `gongkao-morning-mailer.zip`，Bash 打包脚本输出 `function.zip`，PowerShell 打包脚本默认输出 `_release\gongkao-morning-mailer.zip`，容易导致本地、GitHub 和阿里云 FC 上传说明不一致。
+
+**已改文件**
+
+- `README.md`
+- `requirements.txt`
+- `.gitignore`
+- `scripts/build_fc_package.ps1`
+- `content_harness/deployment_rules.md`
+- `docs/deploy_aliyun_fc.md`
+- `docs/architecture.md`
+- `docs/code_optimization_execution_plan.md`
+- `docs/code_optimization_execution_plan.docx`
+
+**最新版行为**
+
+- 部署包统一命名为 `function.zip`。
+- PowerShell 打包脚本默认在仓库根目录生成 `function.zip`；如果传入相对路径，会按仓库根目录解析。
+- README 和部署规则文档统一说明上传 `function.zip`。
+- 新增阿里云 FC 部署说明，明确本地检查、打包、上传、触发器和发布后验证步骤。
+- 新增当前运行架构文档，记录 `main.handler`、HTTP 阻断、feedback、夜间候选、早晨发送、周报 PDF 和质量门禁边界。
+- `reportlab` 依赖锁定为 `reportlab==4.5.1`，避免 FC 打包时安装不可预期版本。
+- `.gitignore` 补充 `chardet/`，防止依赖目录误入仓库。
+
+**后续注意事项**
+
+1. 本阶段不删除仓库中已跟踪的 `reportlab/` 目录，后续如要移除 vendored 目录，必须单独验证 PDF 生成和 FC 打包。
+2. 后续拆分 `main.py` 前，应先完成质量计算 helper 抽取，避免在多个文件之间复制重复质检代码。
+
+### 2026-05-27｜渲染层与发送前清洗统一兜底去除展示标签泄漏
+
+**改动原因**
+
+用户继续反馈，最终 `candidate_email_*.html` 中仍反复出现“可用表达：可用表达：”“如果点原文，重点看：如果点原文，重点看：”“审题关键：审题关键：”“作答主线：作答主线：”等展示型小标题重复。单靠上游生成约束和早期渲染去重还不够，需要在渲染层和发送前清洗层同时做更稳的兜底。
+
+**已改文件**
+
+- `email_renderer.py`
+- `pre_send_cleanliness.py`
+- `CHANGELOG_HARNESS.md`
+
+**最新版行为**
+
+- `email_renderer.py` 新增统一的展示前缀剥离逻辑，最终渲染 HTML / 纯文本时会重复剥离以下前缀，直到字段正文恢复为纯内容：
+  - `如果点原文，重点看`
+  - `可用表达`
+  - `作答主线`
+  - `审题关键`
+  - `换成考场话`
+  - `考场话`
+- 纯文本和 HTML 渲染层都会在 `original_reading_focus`、`rewritable_expression`、`exam_focus`、参考句式等展示型字段上应用这层兜底，而不是只依赖上游 brief 已经被修干净。
+- `pre_send_cleanliness.py` 补齐了 `usable_for_exam` 和 `exam_use[*]` 这两个字段别名的前缀清洗，避免质检命中一个字段名、最终渲染却走另一个字段名，导致“修了但邮件里还在”。
+- 这次改动只处理展示标签泄漏，不改模块结构、不改字段含义、不重写正文内容。
+
+**后续注意事项**
+
+1. 如果后续新增新的“标题 + 正文”展示模块，且正文值也可能自带同名小标题，必须同步加入渲染层与 `pre_send_cleanliness.py` 的前缀剥离名单。
+2. 生成侧仍应尽量避免输出这些前缀；当前修复是展示层兜底，不代表可以放松上游 Prompt 约束。
+
+### 2026-05-26｜修复 rewrite 后候选件、HTML、纯文本与质量卡不一致
+
+**改动原因**
+
+用户反馈 `latest_quality_card.md` 的“自动修复摘要”显示某些字段已经修好，但最终 `latest.json`、`candidate_email_*.html`、`plain_text` 里仍残留半截句、小标题前缀或分号结尾；同时质量卡里同一条修复摘要会重复出现。问题本质是 rewrite 后写回、复检、再渲染和质量卡摘要去重没有完全打通。
+
+**已改文件**
+
+- `main.py`
+- `pre_send_cleanliness.py`
+- `admin_report.py`
+- `CHANGELOG_HARNESS.md`
+
+**最新版行为**
+
+- `content_issue_rewrite` 或 `p0 repair` 之后，会重新同步：
+  - `brief`
+  - `plain_text`
+  - `html_body`
+  - `content_quality`
+  - `quality_gate`
+  保证最终候选件里保存的是修复后的最终产物，而不是“摘要说修了，但正文还没换”。
+- 如果 `content_issue_rewrite` 导致内容质量分数明显下降，会整轮回滚，并把该轮 rewrite 标记为 `rolled_back`；被回滚的 rewrite 不再继续污染最终质量卡和候选件摘要。
+- `merge_rewrite_results` 会跳过已回滚轮次，`admin_report.py` 会对自动修复摘要去重，避免同一条修复在质量卡里重复展示两次。
+- `pre_send_cleanliness.py` 补充了字段级兜底：
+  - `today_takeaway.framework` 纳入正文型字段清洁范围
+  - `daily_question.thirty_second_answer`
+  - `daily_question.output_sentence_template`
+  如果只剩末尾分号，会直接字段级改成句号，而不是为这一个标点问题重写整个 `daily_question`
+- `main.py` 在发送前清洁度守卫之后也会重新评估 `content_quality`，避免质量门禁仍沿用清洁前的旧结果。
+
+**后续注意事项**
+
+1. 以后凡是新增“自动修复但不一定重写全文”的字段级清洁逻辑，都要确认 `latest.json`、`plain_text`、`html_body`、`quality_card` 四份产物是否同步更新。
+2. 如果后续再出现“质量卡说修了，但邮件里没修”的问题，优先排查写回顺序、回滚标记和摘要去重，而不是先怀疑单条 Prompt。
+
+### 2026-05-25｜新增正文型字段句末标点守卫与半截句尾检测
+
+**改动原因**
+
+用户反馈生成邮件里经常出现“像字段拼接结果”的正文：有些展示型内容缺句号，有些句子停在“可落地”“有助于”“关键在于”“从而”等明显半截尾巴上，还有个别 30 秒参考句式只剩一个分号结尾。需要在发送前增加确定性的正文收口规则，先把成品感和截断风险稳住。
+
+**已改文件**
+
+- `pre_send_cleanliness.py`
+- `main.py`
+- `CHANGELOG_HARNESS.md`
+
+**最新版行为**
+
+- 发送前清洁度守卫会对以下正文型字段自动补中文句号：只要字段结尾不是 `。！？；.!?」』）】》`，就补成完整句，覆盖范围包括：
+  - `today_focus`
+  - `must_remember_sentence`
+  - `featured_article.one_sentence`
+  - `original_reading_focus`
+  - `three_useful_points`
+  - `exam_use / usable_for_exam`
+  - `rewritable_expression`
+  - `daily_question.exam_focus`
+  - `daily_question.breaking_hint`
+  - `daily_question.candidate_answer`
+  - `daily_question.output_sentence_template`
+  - `daily_question.thirty_second_answer`
+  - `today_takeaway.framework`
+  - `today_takeaway.common_knowledge_points`
+  - `today_takeaway.golden_sentences[*].sentence`
+  - `quick_reads[*].one_sentence`
+  - `quick_reads[*].exam_value`
+- 如果正文型字段以“可落地、可以用于、适合转化为、有助于、体现出、关键在于、主要包括、从而、进而、同时、并且”等高风险尾巴结束，会记为 `suspected_truncated_sentence`，并进入质量门禁。
+- 今日一题的 `thirty_second_answer` / `output_sentence_template` 如果只剩末尾分号，会在字段级直接改成句号，避免因为一个尾标点重写整个题目模块。
+- `main.py` 已把 `suspected_truncated_sentence` 纳入 `quality_gate` 的 P0 集合，确保这类明显半截句不会被放过。
+
+**后续注意事项**
+
+1. 这套规则只负责“收尾”和“识别明显半截句”，不代替内容重写；如果正文逻辑本身不通顺，仍要走原有 rewrite / 质量门禁链路。
+2. 后续如果新增正文型字段，需要同步加入 `BODY_TEXT_PATHS`，否则不会自动补句号或识别半截尾巴。
+
+### 2026-05-25｜新增基层身份越权作答风险质检
+
+**改动原因**
+
+用户指出，今日一题如果题干身份是基层、街道、社区、市场监管所、城管、工作人员等，答案里却直接写“制定行业标准”“修改包装”“推行包装标识”甚至“无明确违法依据处罚普通高糖高油食品商户”，会形成明显越权甚至违法表述。这类问题不能只当普通表达瑕疵处理，需要单独拦截。
+
+**已改文件**
+
+- `question_quality.py`
+- `main.py`
+- `CHANGELOG_HARNESS.md`
+
+**最新版行为**
+
+- `question_quality.py` 新增 `grassroots_authority_overreach` 检查：当题干命中基层身份语境时，会联动扫描 `answer_framework` 与 `candidate_answer`。
+- 对以下高风险表述直接按高风险拦截：
+  - `依法处理持续售卖普通高糖高油食品商户`
+  - `无明确违法依据处罚`
+  - `处罚普通高糖高油食品`
+  - `查处普通高糖高油食品`
+  - `取缔售卖普通高糖高油食品`
+- 对以下“把上级权限写成基层直接权限”的表述按中风险提示：
+  - `制定行业标准`
+  - `修改包装`
+  - `推行包装标识`
+  - `统一包装标识`
+  - `强制包装标识`
+  - `要求商户修改包装`
+- 如果这些表述前面明确写了“建议上级 / 报请上级 / 推动完善 / 上报”等限定语，规则会尽量识别为“建议上级做”，不误伤。
+- `main.py` 已把 `grassroots_authority_overreach` 纳入 `quality_gate` 的 P0 集合。对于基层身份题，这类越权答案不能直接放行。
+
+**后续注意事项**
+
+1. 这条规则的核心不是“越保守越好”，而是明确区分三层权限：基层可直接做、建议上级做、只有明确违法时才依法查处。
+2. 如果后续扩展到教育、住建、市场监管等更多身份题型，应继续补充越权关键词和合法限定语，而不是只靠现有几个示例词。
+
 ### 2026-05-22｜周末候选件改为只生成周 PDF 汇编
 
 **改动原因**

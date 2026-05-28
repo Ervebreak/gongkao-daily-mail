@@ -1,5 +1,5 @@
 param(
-    [string]$OutputZip = "C:\edgeDownlods\公考真题\邮件产品\_release\gongkao-morning-mailer.zip",
+    [string]$OutputZip = "",
     [string]$BuildDir = "",
     [string]$PythonVersion = "310",
     [string]$Platform = "manylinux2014_x86_64"
@@ -9,6 +9,12 @@ $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $root = Split-Path -Parent $scriptDir
+if (-not $OutputZip) {
+    $OutputZip = Join-Path $root "function.zip"
+}
+elseif (-not [System.IO.Path]::IsPathRooted($OutputZip)) {
+    $OutputZip = Join-Path $root $OutputZip
+}
 if (-not $BuildDir) {
     $BuildDir = Join-Path $root "build\fc_linux_py$PythonVersion`_package"
 }

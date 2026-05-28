@@ -29,7 +29,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build_fc_package.ps1
 默认输出：
 
 ```text
-C:\edgeDownlods\公考真题\邮件产品\_release\gongkao-morning-mailer.zip
+function.zip
 ```
 
 该脚本会安装阿里云 FC Python 3.10 Linux x86_64 兼容依赖，并自动检查入口文件、题库兜底 CSV、Windows `.pyd`、`__pycache__` / `.pyc`。
