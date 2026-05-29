@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import weekly_report as weekly
+from weekly_material_curator import build_weekly_enrichment
 
 
 def find_typst_binary() -> str | None:
@@ -213,6 +214,17 @@ def build_data(payloads: list[dict[str, Any]], start_date: str, end_date: str, m
         ("生态治理与权责边界", "政府主导、财政兜底、政企分离；适用于公共服务定价、生态治理、公益商业边界。"),
         ("市场秩序与消费公平", "平台责任、算法问责、下沉维权；适用于新型市场监管和消费者权益保护。"),
     ]
+    try:
+        enrichment = build_weekly_enrichment(days)
+    except Exception as exc:
+        enrichment = {
+            "exam_map_cards": [],
+            "selected_expression_rows": [],
+            "material_cards": [],
+            "practice_questions": [],
+            "warnings": [f"weekly enrichment failed open: {type(exc).__name__}: {exc}"],
+        }
+    warnings.extend(enrichment.get("warnings") or [])
     return {
         "start_date": start_date,
         "end_date": end_date,
@@ -230,6 +242,10 @@ def build_data(payloads: list[dict[str, Any]], start_date: str, end_date: str, m
         "map_cards": map_cards,
         "expression_rows": expression_rows,
         "framework_rows": framework_rows,
+        "exam_map_cards": enrichment.get("exam_map_cards") or [],
+        "selected_expression_rows": enrichment.get("selected_expression_rows") or [],
+        "material_cards": enrichment.get("material_cards") or [],
+        "practice_questions": enrichment.get("practice_questions") or [],
     }
 
 
