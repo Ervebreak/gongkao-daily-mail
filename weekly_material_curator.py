@@ -450,6 +450,8 @@ def _build_prompt(days: list[dict[str, Any]]) -> str:
 5. 所有句子必须完整，不得出现省略号、半截句、悬空动词或未完成判断。
 6. 只输出合法 JSON 对象，不要输出解释。
 7. 如果候选文章证据不足，material_cards 可以少于 3 条或为空。
+8. 如果某篇 candidate_evidence 没有 evidence_text，不得基于它生成“案例型”素材；只有 existing_summary 或 selection_reason 中有明确机制做法时，才可生成“机制型”素材。
+9. material_cards 的 source_articles 和 source_urls 必须能对应到 candidate_evidence 中的 title 和 url。
 
 输出字段：
 {{
@@ -460,7 +462,7 @@ def _build_prompt(days: list[dict[str, Any]]) -> str:
     {{"date": "日期", "theme": "主题", "sentence": "精选金句或可用表达", "scenario": "适用场景"}}
   ],
   "material_cards": [
-    {{"title": "素材卡标题", "material_type": "case或mechanism", "source_dates": ["日期"], "source_articles": ["来源文章标题"], "target_topics": ["适用考点"], "factual_anchor": "事实锚点或机制做法", "exam_paragraph": "可放入申论或面试的素材段", "memory_sentence": "一句话记忆", "use_tip": "用法提示", "use_boundary": "使用边界"}}
+    {{"title": "素材卡标题", "material_type": "案例型 / 机制型 / 案例型+机制型", "source_dates": ["日期"], "source_articles": ["来源文章标题"], "source_urls": ["来源文章URL"], "target_topics": ["适用考点"], "factual_anchor": "事实锚点或机制做法", "exam_paragraph": "可放入申论或面试的素材段", "memory_sentence": "一句话记忆", "use_tip": "用法提示", "use_boundary": "使用边界"}}
   ],
   "practice_questions": [
     {{"question_type": "面试综合分析题", "question": "题目", "use_hint": "素材运用提示"}},
@@ -521,18 +523,29 @@ def _validate_enrichment(payload: dict[str, Any]) -> dict[str, Any]:
         if row:
             selected_expression_rows.append(row)
 
-    material_cards: list[dict[str, str]] = []
+    material_cards: list[dict[str, Any]] = []
+    material_type_aliases = {
+        "case": "案例型",
+        "mechanism": "机制型",
+        "case+mechanism": "案例型+机制型",
+        "案例": "案例型",
+        "机制": "机制型",
+        "案例机制": "案例型+机制型",
+    }
+    valid_material_types = {"案例型", "机制型", "案例型+机制型"}
     for item in _as_list(payload.get("material_cards")):
         if not isinstance(item, dict):
             continue
-        material_type = _clean(item.get("material_type") or item.get("type"))
+        raw_material_type = _clean(item.get("material_type") or item.get("type"))
+        material_type = material_type_aliases.get(raw_material_type, raw_material_type)
         factual_anchor = _clean(item.get("factual_anchor") or item.get("anchor"))
         exam_paragraph = _clean(item.get("exam_paragraph") or item.get("exam_value"))
         source_title = _clean(item.get("source_title"))
         source_articles = [_clean(x) for x in _as_list(item.get("source_articles") or source_title) if _clean(x)]
+        source_urls = [_clean(x) for x in _as_list(item.get("source_urls") or item.get("source_url") or item.get("url")) if _clean(x)]
         source_dates = [_clean(x) for x in _as_list(item.get("source_dates") or item.get("date")) if _clean(x)]
         target_topics = [_clean(x) for x in _as_list(item.get("target_topics") or item.get("theme")) if _clean(x)]
-        if material_type not in {"case", "mechanism"} or not factual_anchor or not exam_paragraph or not source_articles:
+        if material_type not in valid_material_types or not factual_anchor or not exam_paragraph or not source_articles:
             continue
         text_values = [
             _clean(item.get("title")),
@@ -550,6 +563,7 @@ def _validate_enrichment(payload: dict[str, Any]) -> dict[str, Any]:
                 "material_type": material_type,
                 "source_dates": source_dates,
                 "source_articles": source_articles,
+                "source_urls": source_urls,
                 "target_topics": target_topics,
                 "factual_anchor": factual_anchor,
                 "exam_paragraph": exam_paragraph,
@@ -563,6 +577,7 @@ def _validate_enrichment(payload: dict[str, Any]) -> dict[str, Any]:
                 "anchor": factual_anchor,
                 "exam_value": exam_paragraph,
                 "source_title": source_articles[0],
+                "source_url": source_urls[0] if source_urls else "",
             }
         )
 
