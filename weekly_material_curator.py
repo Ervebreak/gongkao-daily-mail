@@ -437,8 +437,8 @@ def build_material_candidate_evidence(days: list[dict[str, Any]], max_candidates
     return build_candidate_evidence(days, max_candidates=max_candidates)
 
 
-def _build_prompt(days: list[dict[str, Any]]) -> str:
-    candidate_evidence = build_candidate_evidence(days)
+def _build_prompt(days: list[dict[str, Any]], candidate_evidence: list[dict[str, Any]] | None = None) -> str:
+    candidate_evidence = candidate_evidence if candidate_evidence is not None else build_candidate_evidence(days)
     return f"""
 你是公考周末复盘资料包编辑。请只基于输入的本周结构化摘要和候选文章证据生成周报增强数据。
 
@@ -505,8 +505,28 @@ def _valid_text_map(row: Any, required: list[str]) -> dict[str, str] | None:
     return result
 
 
-def _validate_enrichment(payload: dict[str, Any]) -> dict[str, Any]:
+def _candidate_evidence_index(candidate_evidence: list[dict[str, Any]] | None) -> dict[str, dict[str, Any]]:
+    index: dict[str, dict[str, Any]] = {}
+    for row in candidate_evidence or []:
+        if not isinstance(row, dict):
+            continue
+        for key in (_clean(row.get("title")), _clean(row.get("url"))):
+            if key:
+                index[key] = row
+    return index
+
+
+def _material_sources_have_evidence(source_articles: list[str], source_urls: list[str], evidence_index: dict[str, dict[str, Any]]) -> bool:
+    for key in source_articles + source_urls:
+        row = evidence_index.get(_clean(key))
+        if row and _clean(row.get("evidence_text")):
+            return True
+    return False
+
+
+def _validate_enrichment(payload: dict[str, Any], candidate_evidence: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     warnings = [_clean(item) for item in _as_list(payload.get("warnings")) if _clean(item)]
+    evidence_index = _candidate_evidence_index(candidate_evidence)
 
     exam_map_cards: list[dict[str, Any]] = []
     for item in _as_list(payload.get("exam_map_cards")):
@@ -546,6 +566,9 @@ def _validate_enrichment(payload: dict[str, Any]) -> dict[str, Any]:
         source_dates = [_clean(x) for x in _as_list(item.get("source_dates") or item.get("date")) if _clean(x)]
         target_topics = [_clean(x) for x in _as_list(item.get("target_topics") or item.get("theme")) if _clean(x)]
         if material_type not in valid_material_types or not factual_anchor or not exam_paragraph or not source_articles:
+            continue
+        if "案例型" in material_type and not _material_sources_have_evidence(source_articles, source_urls, evidence_index):
+            warnings.append(f"drop material card without source evidence_text: {source_articles[0]}")
             continue
         text_values = [
             _clean(item.get("title")),
@@ -614,7 +637,8 @@ def _validate_enrichment(payload: dict[str, Any]) -> dict[str, Any]:
 def _call_curator_model(days: list[dict[str, Any]]) -> dict[str, Any]:
     from llm_client import chat_completion
 
-    prompt = _build_prompt(days)
+    candidate_evidence = build_candidate_evidence(days)
+    prompt = _build_prompt(days, candidate_evidence=candidate_evidence)
     errors: list[str] = []
     candidates = _model_candidates() + _fallback_model_candidates()
     for attempt, model in enumerate(candidates, start=1):
@@ -632,7 +656,7 @@ def _call_curator_model(days: list[dict[str, Any]]) -> dict[str, Any]:
             )
             if not isinstance(response, dict):
                 raise ValueError("weekly material curator returned non-object JSON")
-            return _validate_enrichment(response)
+            return _validate_enrichment(response, candidate_evidence=candidate_evidence)
         except Exception as exc:
             errors.append(f"{model}: {type(exc).__name__}: {exc}")
     return _blank_enrichment(["weekly material curator model failed: " + " | ".join(errors[:4])])
