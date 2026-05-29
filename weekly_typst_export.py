@@ -278,7 +278,16 @@ def render_typst(data: dict[str, Any]) -> str:
         + ","
         for day in days
     )
-    map_cards = "][\n".join(f'#map-card[{typst_text(title)}][{typst_text(desc)}]' for title, desc in data["map_cards"])
+    if data.get("exam_map_cards"):
+        map_cards = "][\n".join(
+            f'#map-card[{typst_text(card.get("title"))}][{typst_text(card.get("summary") or card.get("body") or card.get("description"))}'
+            f'#linebreak()#muted[{typst_text(card.get("use_for") or card.get("use_tip"))}]'
+            f'#v(3pt){t_badges(card.get("keywords") or card.get("target_topics") or [], 6)}]'
+            for card in data["exam_map_cards"]
+            if isinstance(card, dict)
+        )
+    else:
+        map_cards = "][\n".join(f'#map-card[{typst_text(title)}][{typst_text(desc)}]' for title, desc in data["map_cards"])
     daily_sections: list[str] = []
     for day in days:
         featured = day["featured"]
@@ -357,11 +366,19 @@ def render_typst(data: dict[str, Any]) -> str:
 ]
 """
         )
-    expression_parts = [
-        f'#expr-row("{idx:02d}")[{typst_text(row["sentence"])}][{typst_text(row["date"])}｜{typst_text(row["theme"])}'
-        f'{("｜适用：" + typst_text(row["scenario"])) if row["scenario"] else ""}]'
-        for idx, row in enumerate(data["expression_rows"], start=1)
-    ]
+    expression_source = data.get("selected_expression_rows") or data["expression_rows"]
+    expression_parts = []
+    for idx, row in enumerate(expression_source, start=1):
+        if not isinstance(row, dict):
+            continue
+        sentence = row.get("sentence") or row.get("expression") or row.get("text")
+        date = row.get("date") or "本周"
+        theme = row.get("theme") or row.get("exam_point") or row.get("topic") or ""
+        scenario = row.get("scenario") or row.get("use_tip") or row.get("usage") or row.get("applicable_exam_point") or ""
+        expression_parts.append(
+            f'#expr-row("{idx:02d}")[{typst_text(sentence)}][{typst_text(date)}｜{typst_text(theme)}'
+            f'{("｜用法：" + typst_text(scenario)) if scenario else ""}]'
+        )
     expression_rows = "\n#std.line(length: 100%, stroke: 0.45pt + line)\n".join(expression_parts)
     framework_rows = "\n".join(
         f'#frame-row[{typst_text(row["date"])}｜{typst_text(row["theme"])}][{typst_text(row["framework"])}]'
@@ -394,6 +411,63 @@ def render_typst(data: dict[str, Any]) -> str:
                 + ","
             )
     quick_index = "\n".join(quick_index_rows)
+
+    def row_value(row: dict[str, Any], *keys: str) -> str:
+        for key in keys:
+            value = row.get(key)
+            if isinstance(value, list):
+                text = "、".join(clean(item) for item in value if clean(item))
+            else:
+                text = clean(value)
+            if text:
+                return text
+        return ""
+
+    material_parts: list[str] = []
+    for idx, row in enumerate(data.get("material_cards") or [], start=1):
+        if not isinstance(row, dict):
+            continue
+        title = row_value(row, "title", "source_title", "theme") or f"素材卡 {idx:02d}"
+        material_type = row_value(row, "material_type", "type")
+        source_dates = row_value(row, "source_dates", "date")
+        source_articles = row_value(row, "source_articles", "source_title")
+        target_topics = row_value(row, "target_topics", "theme")
+        factual_anchor = row_value(row, "factual_anchor", "anchor")
+        exam_paragraph = row_value(row, "exam_paragraph", "exam_value")
+        memory_sentence = row_value(row, "memory_sentence")
+        use_tip = row_value(row, "use_tip")
+        use_boundary = row_value(row, "use_boundary")
+        material_parts.append(
+            f'#material-card[{typst_text(title)}][{typst_text(material_type)}][{typst_text(source_dates)}][{typst_text(source_articles)}]'
+            f'[{typst_text(target_topics)}][{typst_text(factual_anchor)}][{typst_text(exam_paragraph)}]'
+            f'[{typst_text(memory_sentence)}][{typst_text(use_tip)}][{typst_text(use_boundary)}]'
+        )
+    material_cards = "\n#v(7pt)\n".join(material_parts)
+
+    practice_parts: list[str] = []
+    for idx, row in enumerate(data.get("practice_questions") or [], start=1):
+        if not isinstance(row, dict):
+            continue
+        title = row_value(row, "title") or f"素材运用题 {idx:02d}"
+        question_type = row_value(row, "question_type")
+        question = row_value(row, "question")
+        target_topics = row_value(row, "target_topics")
+        suggested_golden_sentences = row_value(row, "suggested_golden_sentences")
+        suggested_case_materials = row_value(row, "suggested_case_materials")
+        suggested_policy_expressions = row_value(row, "suggested_policy_expressions")
+        answer_hint = row_value(row, "answer_hint", "use_hint")
+        mini_reference_answer = row_value(row, "mini_reference_answer")
+        use_boundary = row_value(row, "use_boundary")
+        if question_type == "对策建议题" and not use_boundary:
+            use_boundary = "不建议硬塞外部案例，应优先围绕题干材料提出可执行做法。"
+        practice_parts.append(
+            f'#practice-card[{typst_text(title)}][{typst_text(question_type)}][{typst_text(question)}]'
+            f'[{typst_text(target_topics)}][{typst_text(suggested_golden_sentences)}]'
+            f'[{typst_text(suggested_case_materials)}][{typst_text(suggested_policy_expressions)}]'
+            f'[{typst_text(answer_hint)}][{typst_text(mini_reference_answer)}][{typst_text(use_boundary)}]'
+        )
+    practice_questions = "\n#v(7pt)\n".join(practice_parts)
+
     return f"""
 #set document(title: [公考晨读周复盘资料包 V1.2])
 #set page(
@@ -401,7 +475,7 @@ def render_typst(data: dict[str, Any]) -> str:
   margin: (x: 13mm, y: 17mm),
   numbering: "1",
   header: align(left)[#text(size: 8.5pt, fill: rgb("#64748b"))[公考晨读 · 周复盘资料包 V1]],
-  footer: text(size: 8pt, fill: rgb("#94a3b8"))[周日复盘版 · 摘要/框架/表达/索引],
+  footer: text(size: 8pt, fill: rgb("#94a3b8"))[周日复盘版 · 摘要/框架/表达/素材/题目/索引],
 )
 #set text(font: ("Microsoft YaHei", "SimSun"), size: 10.2pt, lang: "zh")
 #set par(justify: false, leading: 0.72em, spacing: 0.62em)
@@ -440,6 +514,31 @@ def render_typst(data: dict[str, Any]) -> str:
 #let expr-row(no, sentence, meta) = grid(columns: (28pt, 1fr), gutter: 9pt, box(fill: num-fill, stroke: 0.5pt + rgb("#cfe3fb"), inset: 6pt, radius: 5pt)[#text(fill: blue, weight: "bold", size: 8.5pt)[#no]], [#text(weight: "bold")[#sentence]#linebreak()#muted[#meta]])
 #let frame-row(title, body) = box(fill: rgb("#f8fbff"), stroke: 0.55pt + line, inset: 9pt, radius: 6.5pt, width: 100%)[#text(weight: "bold", fill: brand)[#title]#v(4pt)#body]
 #let quote-bank(body) = block(fill: white, stroke: 0.6pt + line, inset: 10pt, radius: 7.5pt, width: 100%, breakable: true)[#body]
+#let material-card(title, material-type, source-dates, source-articles, target-topics, factual-anchor, exam-paragraph, memory-sentence, use-tip, use-boundary) = block(fill: white, stroke: 0.6pt + line, inset: 10pt, radius: 7.5pt, width: 100%, breakable: true)[
+  #text(size: 12pt, weight: "bold", fill: brand)[#title]
+  #if material-type != "" [#linebreak()#badge[#material-type]]
+  #v(5pt)
+  #if source-dates != "" or source-articles != "" [#info-strip[来源][#source-dates#if source-dates != "" and source-articles != "" [｜]#source-articles]]
+  #if target-topics != "" [#info-strip[适用考点][#target-topics]]
+  #if factual-anchor != "" [#info-strip[事实锚点][#factual-anchor]]
+  #if exam-paragraph != "" [#info-strip[考场表达][#exam-paragraph]]
+  #if memory-sentence != "" [#answer-box[记忆句][#memory-sentence]]
+  #if use-tip != "" [#info-strip[用法提示][#use-tip]]
+  #if use-boundary != "" [#muted[使用边界：#use-boundary]]
+]
+#let practice-card(title, question-type, question, target-topics, suggested-golden-sentences, suggested-case-materials, suggested-policy-expressions, answer-hint, mini-reference-answer, use-boundary) = block(fill: white, stroke: 0.6pt + line, inset: 10pt, radius: 7.5pt, width: 100%, breakable: true)[
+  #text(size: 12pt, weight: "bold", fill: brand)[#title]
+  #if question-type != "" [#linebreak()#badge[#question-type]]
+  #v(5pt)
+  #if question != "" [#text(weight: "bold")[#question]]
+  #if target-topics != "" [#info-strip[训练主题][#target-topics]]
+  #if suggested-golden-sentences != "" [#info-strip[建议金句][#suggested-golden-sentences]]
+  #if suggested-case-materials != "" [#info-strip[建议素材][#suggested-case-materials]]
+  #if suggested-policy-expressions != "" [#info-strip[政策表达][#suggested-policy-expressions]]
+  #if answer-hint != "" [#info-strip[作答提示][#answer-hint]]
+  #if mini-reference-answer != "" [#candidate-answer[#mini-reference-answer]]
+  #if use-boundary != "" [#muted[使用边界：#use-boundary]]
+]
 
 #set page(numbering: none, header: none, footer: none)
 #box(fill: cover-surface, stroke: 0.8pt + line, inset: 24pt, radius: 12pt, width: 100%, height: 135mm)[
@@ -467,7 +566,7 @@ def render_typst(data: dict[str, Any]) -> str:
   #panel[使用说明][
     + 先看“本周主题总览”，快速回顾本周文章和题型。
     + 再看“每日复盘卡”，抓住每篇文章的核心观点、框架和考场迁移。
-    + 最后集中背诵“表达素材库”，并用“今日一题”做周末复盘训练。
+    + 最后集中背诵“金句表达库”，并用“素材运用题”做周末复盘训练。
     + 延伸阅读只做摘要和原文入口，不收录原文全文。
   ]
 ][
@@ -475,7 +574,15 @@ def render_typst(data: dict[str, Any]) -> str:
 ]
 
 #pagebreak()
-#set page(numbering: "1", header: align(left)[#text(size: 8.5pt, fill: muted-color)[公考晨读 · 周复盘资料包 V1]], footer: text(size: 8pt, fill: rgb("#94a3b8"))[周日复盘版 · 摘要/框架/表达/索引])
+#set page(numbering: "1", header: align(left)[#text(size: 8.5pt, fill: muted-color)[公考晨读 · 周复盘资料包 V1]], footer: text(size: 8pt, fill: rgb("#94a3b8"))[周日复盘版 · 摘要/框架/表达/素材/题目/索引])
+
+= 00｜使用说明
+#info-strip[复盘顺序][先看本周主题总览和高频考点地图，再看每日复盘卡，最后集中使用金句表达库、考场素材库和素材运用题。]
+#grid(columns: (1fr, 1fr), gutter: 8pt)[
+  #panel[资料包定位][这份 PDF 面向周末复盘，不新增精读文章，只把本周已发送内容重新整理为考点、表达、素材和训练题。]
+][
+  #panel[使用边界][素材卡和运用题只基于本周 daily JSON 已有字段生成；字段不足时宁可留空，不补造案例或政策事实。]
+]
 
 = 01｜本周主题总览
 #info-strip[复盘方式][这份 PDF 不是把每日邮件简单拼接，而是按“周末复盘”的方式重新组织：先看总览，再逐日复盘，最后集中沉淀表达与阅读索引。]
@@ -494,7 +601,7 @@ def render_typst(data: dict[str, Any]) -> str:
 {''.join(daily_sections)}
 
 #pagebreak()
-= 03｜本周表达素材库
+= 03｜本周金句表达库
 #info-strip[使用建议][这一部分用于周末集中背诵。优先记能直接放进申论段落或面试表达里的句子。]
 #block-title[可背金句]
 #quote-bank[
@@ -504,7 +611,17 @@ def render_typst(data: dict[str, Any]) -> str:
 {framework_rows if framework_rows else '#muted[暂无可迁移框架]'}
 
 #pagebreak()
-= 04｜延伸阅读索引
+= 04｜本周考场素材库
+#info-strip[使用建议][素材卡优先保留有事实锚点或机制做法的内容；没有稳定事实支撑时不强行提炼。]
+{material_cards if material_cards else '#muted[本周暂无稳定可提炼的考场素材卡]'}
+
+#pagebreak()
+= 05｜本周素材运用题
+#info-strip[使用建议][三道题分别用于面试综合分析、对策建议和申论作文分论点展开训练。对策建议题不建议硬塞外部案例。]
+{practice_questions if practice_questions else '#muted[本周暂无稳定可生成的素材运用题]'}
+
+#pagebreak()
+= 06｜延伸阅读索引
 #info-strip[说明][本页只做“摘要 + 原文入口”。如需阅读全文，请复制链接打开原文；PDF 不收录延伸阅读全文。]
 #block-title[精读原文入口]
 #table(columns: (0.7fr, 2.3fr, 1.2fr, 2.6fr), inset: 5pt, stroke: 0.45pt + line, fill: (x, y) => if y == 0 {{ table-head }} else if calc.odd(y) {{ rgb("#f8fafc") }} else {{ white }},
