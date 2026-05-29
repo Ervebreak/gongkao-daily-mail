@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from html import unescape
 from typing import Any
 
 from config import settings
@@ -281,6 +282,7 @@ def _material_candidate_score(article: dict[str, Any]) -> int:
 
 def select_material_candidate_articles(days: list[dict[str, Any]], max_candidates: int = 6) -> list[dict[str, Any]]:
     """Select a small article set suitable for material-card evidence reading."""
+    max_candidates = min(max(1, max_candidates), 6)
     compact_days = _compact_days(days)
     candidates: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -335,7 +337,7 @@ def select_material_candidate_articles(days: list[dict[str, Any]], max_candidate
         for item in candidates
     ]
     scored.sort(key=lambda item: (-int(item.get("material_score") or 0), item.get("date") or "", item.get("title") or ""))
-    return scored[: max(1, max_candidates)]
+    return scored[:max_candidates]
 
 
 def _selection_reason(article: dict[str, Any]) -> str:
@@ -352,65 +354,97 @@ def _selection_reason(article: dict[str, Any]) -> str:
     return "；".join(reasons[:3]) or "标题摘要具备素材提炼可能"
 
 
-def _extract_article_paragraphs(html: str, url: str = "") -> list[str]:
-    from bs4 import BeautifulSoup
-
-    soup = BeautifulSoup(html, "html.parser")
-    if "data.people.com.cn/rmrb/" in url:
-        root = soup.select_one(".detail_con") or soup.select_one(".div_detail")
+def _html_to_text(html: str) -> str:
+    text = re.sub(r"(?is)<(script|style|noscript).*?>.*?</\1>", " ", html or "")
+    paragraph_texts = re.findall(r"(?is)<p[^>]*>(.*?)</p>", text)
+    if paragraph_texts:
+        chunks = paragraph_texts
     else:
-        root = soup.select_one(".rm_txt_con, .artDet, .main, .content, article")
-    root = root or soup
-    paragraphs: list[str] = []
-    for p in root.find_all("p"):
-        text = re.sub(r"\s+", " ", p.get_text(" ", strip=True)).strip()
-        if len(text) >= 25 and not re.search(r"责任编辑|版权|新华社客户端|扫一扫|客户端", text):
-            paragraphs.append(text)
-    if paragraphs:
-        return paragraphs[:12]
-    text = re.sub(r"\s+", " ", root.get_text(" ", strip=True)).strip()
-    chunks = re.split(r"(?<=[。！？])", text)
-    return [chunk.strip() for chunk in chunks if len(chunk.strip()) >= 35][:10]
+        article_match = re.search(r"(?is)<article[^>]*>(.*?)</article>", text)
+        content_match = re.search(r'(?is)<div[^>]+(?:class|id)=["\'][^"\']*(?:content|article|main|detail|正文)[^"\']*["\'][^>]*>(.*?)</div>', text)
+        chunks = [article_match.group(1) if article_match else content_match.group(1)] if article_match or content_match else [text]
+    cleaned: list[str] = []
+    for chunk in chunks:
+        chunk = re.sub(r"(?is)<br\s*/?>", "\n", chunk)
+        chunk = re.sub(r"(?is)<[^>]+>", " ", chunk)
+        chunk = unescape(chunk)
+        chunk = re.sub(r"\s+", " ", chunk).strip()
+        if len(chunk) >= 25 and not re.search(r"责任编辑|版权|新华社客户端|扫一扫|客户端", chunk):
+            cleaned.append(chunk)
+    text = "\n".join(cleaned)
+    if not text:
+        text = re.sub(r"(?is)<[^>]+>", " ", html or "")
+        text = re.sub(r"\s+", " ", unescape(text)).strip()
+    return text
 
 
-def _fetch_article_evidence(article: dict[str, Any]) -> dict[str, Any]:
-    url = _clean(article.get("url"))
+def _fetch_article_text_with_warning(url: str, max_chars: int = 1800) -> tuple[str, str]:
+    url = _clean(url)
     if not url:
-        return {**article, "evidence_status": "skipped_no_url", "evidence_paragraphs": []}
+        return "", "skipped_no_url"
     try:
         import requests
 
         response = requests.get(url, timeout=12, headers={"User-Agent": USER_AGENT}, verify=False)
+        if response.status_code in {403, 404}:
+            return "", f"fetch_failed: http_{response.status_code}"
         response.raise_for_status()
         if not response.encoding or response.encoding.lower() == "iso-8859-1":
             response.encoding = "utf-8"
-        paragraphs = _extract_article_paragraphs(response.text, url)
-        return {
-            **article,
-            "evidence_status": "ok" if paragraphs else "empty",
-            "evidence_paragraphs": [_clip_text(paragraph, 260) for paragraph in paragraphs[:8]],
-        }
+        text = _clip_text(_html_to_text(response.text), max_chars)
+        return text, "" if text else "fetch_empty"
     except Exception as exc:
-        return {
-            **article,
-            "evidence_status": f"fetch_failed: {type(exc).__name__}",
-            "evidence_paragraphs": [],
+        return "", f"fetch_failed: {type(exc).__name__}"
+
+
+def fetch_article_text(url: str, max_chars: int = 1800) -> str:
+    """Fetch and lightly clean article text; fail open with an empty string."""
+    text, _warning = _fetch_article_text_with_warning(url, max_chars=max_chars)
+    return text
+
+
+def build_candidate_evidence(days: list[dict[str, Any]], max_candidates: int = 6) -> list[dict[str, Any]]:
+    max_candidates = min(max(1, max_candidates), 6)
+    candidates = select_material_candidate_articles(days, max_candidates=max_candidates)
+    evidence_rows: list[dict[str, Any]] = []
+    for article in candidates:
+        evidence_text, warning = _fetch_article_text_with_warning(_clean(article.get("url")), max_chars=1800)
+        existing_summary = "；".join(
+            item
+            for item in [
+                _clean(article.get("one_sentence")),
+                _clean(article.get("exam_value")),
+                _clean(article.get("day_focus")),
+            ]
+            if item
+        )
+        row = {
+            "date": _clean(article.get("date")),
+            "title": _clean(article.get("title")),
+            "source": _clean(article.get("source")),
+            "url": _clean(article.get("url")),
+            "selection_reason": _clean(article.get("selection_reason")),
+            "existing_summary": _clip_text(existing_summary, 500),
+            "evidence_text": evidence_text,
         }
+        if warning:
+            row["warning"] = warning
+        evidence_rows.append(row)
+    return evidence_rows
 
 
 def build_material_candidate_evidence(days: list[dict[str, Any]], max_candidates: int = 6) -> list[dict[str, Any]]:
-    candidates = select_material_candidate_articles(days, max_candidates=max_candidates)
-    return [_fetch_article_evidence(article) for article in candidates]
+    return build_candidate_evidence(days, max_candidates=max_candidates)
 
 
 def _build_prompt(days: list[dict[str, Any]]) -> str:
-    material_candidate_articles = build_material_candidate_evidence(days, max_candidates=6)
+    candidate_evidence = build_candidate_evidence(days)
     return f"""
 你是公考周末复盘资料包编辑。请只基于输入的本周结构化摘要和候选文章证据生成周报增强数据。
 
 硬性规则：
 1. 只使用输入 JSON 中已有信息，不得编造外部事实、政策、案例、数字、地名、部门名。
-2. material_cards 只能从 material_candidate_articles 中提炼，优先使用 evidence_paragraphs 中出现的事实锚点或机制做法。
+2. material_cards 只能从 candidate_evidence 中提炼，优先使用 evidence_text 中出现的事实锚点或机制做法。
 3. 不要推测未提供的文章全文；输入中没有的事实不要补。
 4. 对策建议题不要硬塞外部案例。
 5. 所有句子必须完整，不得出现省略号、半截句、悬空动词或未完成判断。
@@ -443,7 +477,7 @@ def _build_prompt(days: list[dict[str, Any]]) -> str:
 - practice_questions：严格3道，题型分别为面试综合分析题、对策建议题、申论作文分论点展开题。
 
 输入 JSON：
-{json.dumps({"days": _compact_days(days), "material_candidate_articles": material_candidate_articles}, ensure_ascii=False)}
+{json.dumps({"days": _compact_days(days), "candidate_evidence": candidate_evidence}, ensure_ascii=False)}
 """.strip()
 
 
