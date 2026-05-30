@@ -452,6 +452,8 @@ def _build_prompt(days: list[dict[str, Any]], candidate_evidence: list[dict[str,
 7. 如果候选文章证据不足，material_cards 可以少于 3 条或为空。
 8. 如果某篇 candidate_evidence 没有 evidence_text，不得基于它生成“案例型”素材；只有 existing_summary 或 selection_reason 中有明确机制做法时，才可生成“机制型”素材。
 9. material_cards 的 source_articles 和 source_urls 必须能对应到 candidate_evidence 中的 title 和 url。
+10. material_cards 不能只写成某一篇文章专属案例，必须从具体事实中抽象出可迁移的公考母题、治理逻辑和通用考场写法。
+11. practice_questions 的三道题都必须可直接训练，不得出现空的作答提示或空的考生版参考答案。
 
 输出字段：
 {{
@@ -462,12 +464,12 @@ def _build_prompt(days: list[dict[str, Any]], candidate_evidence: list[dict[str,
     {{"date": "日期", "theme": "主题", "sentence": "精选金句或可用表达", "scenario": "适用场景"}}
   ],
   "material_cards": [
-    {{"title": "素材卡标题", "material_type": "案例型 / 机制型 / 案例型+机制型", "source_dates": ["日期"], "source_articles": ["来源文章标题"], "source_urls": ["来源文章URL"], "target_topics": ["适用考点"], "factual_anchor": "事实锚点或机制做法", "exam_paragraph": "可放入申论或面试的素材段", "memory_sentence": "一句话记忆", "use_tip": "用法提示", "use_boundary": "使用边界"}}
+    {{"title": "素材卡标题", "material_type": "案例型 / 机制型 / 案例型+机制型", "source_dates": ["日期"], "source_articles": ["来源文章标题"], "source_urls": ["来源文章URL"], "target_topics": ["适用考点"], "core_topic": "抽象母题，如公共服务从有到优", "generalizable_logic": "可迁移治理逻辑", "factual_anchor": "事实锚点或机制做法", "exam_paragraph": "默认考场表达，可与具体写法一致", "exam_paragraph_specific": "保留具体事实的考场写法", "exam_paragraph_general": "脱离具体案例也能迁移使用的通用写法", "can_use_for": ["至少5个适用场景"], "suggested_question_types": ["适用题型"], "not_suitable_for": ["不适合使用的场景"], "memory_sentence": "一句话记忆", "use_tip": "用法提示", "use_boundary": "使用边界"}}
   ],
   "practice_questions": [
-    {{"question_type": "面试综合分析题", "question": "题目", "use_hint": "素材运用提示"}},
-    {{"question_type": "对策建议题", "question": "题目", "use_hint": "素材运用提示"}},
-    {{"question_type": "申论作文分论点展开题", "question": "题目", "use_hint": "素材运用提示"}}
+    {{"title": "题目标题", "question_type": "面试综合分析题", "question": "题目", "target_topics": ["训练主题"], "suggested_golden_sentences": ["建议金句"], "suggested_case_materials": ["至少1条素材卡标题"], "suggested_policy_expressions": ["政策表达"], "answer_hint": "作答提示", "mini_reference_answer": "考生版参考答案", "use_boundary": "使用边界"}},
+    {{"title": "题目标题", "question_type": "对策建议题", "question": "题目", "target_topics": ["训练主题"], "suggested_golden_sentences": ["建议金句"], "suggested_case_materials": [], "suggested_policy_expressions": ["至少1条政策表达"], "answer_hint": "作答提示", "mini_reference_answer": "考生版参考答案", "use_boundary": "本题重点是措施表达，不建议硬塞外部案例。"}},
+    {{"title": "题目标题", "question_type": "申论作文分论点展开题", "question": "题目", "target_topics": ["训练主题"], "suggested_golden_sentences": ["建议金句"], "suggested_case_materials": ["至少1条素材卡标题"], "suggested_policy_expressions": ["政策表达"], "answer_hint": "作答提示", "mini_reference_answer": "考生版参考答案", "use_boundary": "使用边界"}}
   ],
   "warnings": ["无法处理或字段不足的说明"]
 }}
@@ -476,7 +478,12 @@ def _build_prompt(days: list[dict[str, Any]], candidate_evidence: list[dict[str,
 - exam_map_cards：4到6个。
 - selected_expression_rows：8到15条。
 - material_cards：3到6条，必须有事实锚点或机制做法。
+- material_cards 每条必须尽量补全 core_topic、generalizable_logic、exam_paragraph_specific、exam_paragraph_general、can_use_for、suggested_question_types、not_suitable_for。
+- can_use_for 至少 5 个适用场景；exam_paragraph_general 必须能迁移到同类题目，不能依赖原文专属细节。
 - practice_questions：严格3道，题型分别为面试综合分析题、对策建议题、申论作文分论点展开题。
+- practice_questions 每题必须有 answer_hint 和 mini_reference_answer。
+- 对策建议题 suggested_case_materials 可以为空，但 suggested_policy_expressions 不能为空，use_boundary 必须提醒“本题重点是措施表达，不建议硬塞外部案例。”
+- 面试综合分析题和申论作文分论点展开题必须至少关联 1 条素材卡和 1 条金句。
 
 输入 JSON：
 {json.dumps({"days": _compact_days(days), "candidate_evidence": candidate_evidence}, ensure_ascii=False)}
@@ -559,12 +566,19 @@ def _validate_enrichment(payload: dict[str, Any], candidate_evidence: list[dict[
         raw_material_type = _clean(item.get("material_type") or item.get("type"))
         material_type = material_type_aliases.get(raw_material_type, raw_material_type)
         factual_anchor = _clean(item.get("factual_anchor") or item.get("anchor"))
-        exam_paragraph = _clean(item.get("exam_paragraph") or item.get("exam_value"))
+        exam_paragraph_specific = _clean(item.get("exam_paragraph_specific"))
+        exam_paragraph_general = _clean(item.get("exam_paragraph_general"))
+        exam_paragraph = _clean(item.get("exam_paragraph") or item.get("exam_value") or exam_paragraph_specific or exam_paragraph_general)
         source_title = _clean(item.get("source_title"))
         source_articles = [_clean(x) for x in _as_list(item.get("source_articles") or source_title) if _clean(x)]
         source_urls = [_clean(x) for x in _as_list(item.get("source_urls") or item.get("source_url") or item.get("url")) if _clean(x)]
         source_dates = [_clean(x) for x in _as_list(item.get("source_dates") or item.get("date")) if _clean(x)]
         target_topics = [_clean(x) for x in _as_list(item.get("target_topics") or item.get("theme")) if _clean(x)]
+        core_topic = _clean(item.get("core_topic"))
+        generalizable_logic = _clean(item.get("generalizable_logic"))
+        can_use_for = [_clean(x) for x in _as_list(item.get("can_use_for")) if _clean(x)]
+        suggested_question_types = [_clean(x) for x in _as_list(item.get("suggested_question_types")) if _clean(x)]
+        not_suitable_for = [_clean(x) for x in _as_list(item.get("not_suitable_for")) if _clean(x)]
         if material_type not in valid_material_types or not factual_anchor or not exam_paragraph or not source_articles:
             continue
         if "案例型" in material_type and not _material_sources_have_evidence(source_articles, source_urls, evidence_index):
@@ -574,6 +588,10 @@ def _validate_enrichment(payload: dict[str, Any], candidate_evidence: list[dict[
             _clean(item.get("title")),
             factual_anchor,
             exam_paragraph,
+            core_topic,
+            generalizable_logic,
+            exam_paragraph_specific,
+            exam_paragraph_general,
             _clean(item.get("memory_sentence")),
             _clean(item.get("use_tip")),
             _clean(item.get("use_boundary")),
@@ -588,8 +606,15 @@ def _validate_enrichment(payload: dict[str, Any], candidate_evidence: list[dict[
                 "source_articles": source_articles,
                 "source_urls": source_urls,
                 "target_topics": target_topics,
+                "core_topic": core_topic,
+                "generalizable_logic": generalizable_logic,
                 "factual_anchor": factual_anchor,
                 "exam_paragraph": exam_paragraph,
+                "exam_paragraph_specific": exam_paragraph_specific,
+                "exam_paragraph_general": exam_paragraph_general,
+                "can_use_for": can_use_for[:8],
+                "suggested_question_types": suggested_question_types[:5],
+                "not_suitable_for": not_suitable_for[:5],
                 "memory_sentence": _clean(item.get("memory_sentence")),
                 "use_tip": _clean(item.get("use_tip")),
                 "use_boundary": _clean(item.get("use_boundary")),
@@ -604,17 +629,60 @@ def _validate_enrichment(payload: dict[str, Any], candidate_evidence: list[dict[
             }
         )
 
-    practice_questions: list[dict[str, str]] = []
+    practice_questions: list[dict[str, Any]] = []
     allowed_types = ["面试综合分析题", "对策建议题", "申论作文分论点展开题"]
     seen_types: set[str] = set()
     for item in _as_list(payload.get("practice_questions")):
-        row = _valid_text_map(item, ["question_type", "question", "use_hint"])
-        if not row:
+        if not isinstance(item, dict):
             continue
-        if row["question_type"] not in allowed_types or row["question_type"] in seen_types:
+        question_type = _clean(item.get("question_type"))
+        question = _clean(item.get("question"))
+        answer_hint = _clean(item.get("answer_hint") or item.get("use_hint"))
+        mini_reference_answer = _clean(item.get("mini_reference_answer"))
+        if not all([question_type, question, answer_hint, mini_reference_answer]):
             continue
-        seen_types.add(row["question_type"])
-        practice_questions.append(row)
+        if question_type not in allowed_types or question_type in seen_types:
+            continue
+        target_topics = [_clean(x) for x in _as_list(item.get("target_topics")) if _clean(x)]
+        suggested_golden_sentences = [_clean(x) for x in _as_list(item.get("suggested_golden_sentences")) if _clean(x)]
+        suggested_case_materials = [_clean(x) for x in _as_list(item.get("suggested_case_materials")) if _clean(x)]
+        suggested_policy_expressions = [_clean(x) for x in _as_list(item.get("suggested_policy_expressions")) if _clean(x)]
+        use_boundary = _clean(item.get("use_boundary"))
+        if question_type == "对策建议题":
+            if not suggested_policy_expressions:
+                continue
+            if "不建议硬塞外部案例" not in use_boundary:
+                use_boundary = "本题重点是措施表达，不建议硬塞外部案例。"
+        else:
+            if not suggested_golden_sentences or not suggested_case_materials:
+                continue
+        text_values = [
+            _clean(item.get("title")),
+            question,
+            answer_hint,
+            mini_reference_answer,
+            use_boundary,
+            *suggested_golden_sentences,
+            *suggested_policy_expressions,
+        ]
+        if any(value and len(value) >= 18 and not _is_complete_sentence(value) for value in text_values):
+            continue
+        seen_types.add(question_type)
+        practice_questions.append(
+            {
+                "title": _clean(item.get("title")) or question_type,
+                "question_type": question_type,
+                "question": question,
+                "target_topics": target_topics,
+                "suggested_golden_sentences": suggested_golden_sentences,
+                "suggested_case_materials": suggested_case_materials,
+                "suggested_policy_expressions": suggested_policy_expressions,
+                "answer_hint": answer_hint,
+                "mini_reference_answer": mini_reference_answer,
+                "use_boundary": use_boundary,
+                "use_hint": answer_hint,
+            }
+        )
 
     if len(exam_map_cards) < 4:
         warnings.append("weekly enrichment returned fewer than 4 exam_map_cards")

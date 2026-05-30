@@ -432,15 +432,24 @@ def render_typst(data: dict[str, Any]) -> str:
         source_dates = row_value(row, "source_dates", "date")
         source_articles = row_value(row, "source_articles", "source_title")
         target_topics = row_value(row, "target_topics", "theme")
+        core_topic = row_value(row, "core_topic")
+        generalizable_logic = row_value(row, "generalizable_logic")
         factual_anchor = row_value(row, "factual_anchor", "anchor")
         exam_paragraph = row_value(row, "exam_paragraph", "exam_value")
+        exam_paragraph_specific = row_value(row, "exam_paragraph_specific")
+        exam_paragraph_general = row_value(row, "exam_paragraph_general")
+        can_use_for = row_value(row, "can_use_for")
+        suggested_question_types = row_value(row, "suggested_question_types")
+        not_suitable_for = row_value(row, "not_suitable_for")
         memory_sentence = row_value(row, "memory_sentence")
         use_tip = row_value(row, "use_tip")
         use_boundary = row_value(row, "use_boundary")
         material_parts.append(
             f'#material-card[{typst_text(title)}][{typst_text(material_type)}][{typst_text(source_dates)}][{typst_text(source_articles)}]'
-            f'[{typst_text(target_topics)}][{typst_text(factual_anchor)}][{typst_text(exam_paragraph)}]'
-            f'[{typst_text(memory_sentence)}][{typst_text(use_tip)}][{typst_text(use_boundary)}]'
+            f'[{typst_text(target_topics)}][{typst_text(core_topic)}][{typst_text(generalizable_logic)}]'
+            f'[{typst_text(factual_anchor)}][{typst_text(exam_paragraph)}][{typst_text(exam_paragraph_specific)}]'
+            f'[{typst_text(exam_paragraph_general)}][{typst_text(can_use_for)}][{typst_text(suggested_question_types)}]'
+            f'[{typst_text(not_suitable_for)}][{typst_text(memory_sentence)}][{typst_text(use_tip)}][{typst_text(use_boundary)}]'
         )
     material_cards = "\n#v(7pt)\n".join(material_parts)
 
@@ -459,7 +468,7 @@ def render_typst(data: dict[str, Any]) -> str:
         mini_reference_answer = row_value(row, "mini_reference_answer")
         use_boundary = row_value(row, "use_boundary")
         if question_type == "对策建议题" and not use_boundary:
-            use_boundary = "不建议硬塞外部案例，应优先围绕题干材料提出可执行做法。"
+            use_boundary = "本题重点是措施表达，不建议硬塞外部案例。"
         practice_parts.append(
             f'#practice-card[{typst_text(title)}][{typst_text(question_type)}][{typst_text(question)}]'
             f'[{typst_text(target_topics)}][{typst_text(suggested_golden_sentences)}]'
@@ -514,14 +523,21 @@ def render_typst(data: dict[str, Any]) -> str:
 #let expr-row(no, sentence, meta) = grid(columns: (28pt, 1fr), gutter: 9pt, box(fill: num-fill, stroke: 0.5pt + rgb("#cfe3fb"), inset: 6pt, radius: 5pt)[#text(fill: blue, weight: "bold", size: 8.5pt)[#no]], [#text(weight: "bold")[#sentence]#linebreak()#muted[#meta]])
 #let frame-row(title, body) = box(fill: rgb("#f8fbff"), stroke: 0.55pt + line, inset: 9pt, radius: 6.5pt, width: 100%)[#text(weight: "bold", fill: brand)[#title]#v(4pt)#body]
 #let quote-bank(body) = block(fill: white, stroke: 0.6pt + line, inset: 10pt, radius: 7.5pt, width: 100%, breakable: true)[#body]
-#let material-card(title, material-type, source-dates, source-articles, target-topics, factual-anchor, exam-paragraph, memory-sentence, use-tip, use-boundary) = block(fill: white, stroke: 0.6pt + line, inset: 10pt, radius: 7.5pt, width: 100%, breakable: true)[
+#let material-card(title, material-type, source-dates, source-articles, target-topics, core-topic, generalizable-logic, factual-anchor, exam-paragraph, exam-paragraph-specific, exam-paragraph-general, can-use-for, suggested-question-types, not-suitable-for, memory-sentence, use-tip, use-boundary) = block(fill: white, stroke: 0.6pt + line, inset: 10pt, radius: 7.5pt, width: 100%, breakable: true)[
   #text(size: 12pt, weight: "bold", fill: brand)[#title]
   #if material-type != "" [#linebreak()#badge[#material-type]]
   #v(5pt)
   #if source-dates != "" or source-articles != "" [#info-strip[来源][#source-dates#if source-dates != "" and source-articles != "" [｜]#source-articles]]
   #if target-topics != "" [#info-strip[适用考点][#target-topics]]
+  #if core-topic != "" [#info-strip[可迁移母题][#core-topic]]
+  #if generalizable-logic != "" [#info-strip[通用治理逻辑][#generalizable-logic]]
   #if factual-anchor != "" [#info-strip[事实锚点][#factual-anchor]]
-  #if exam-paragraph != "" [#info-strip[考场表达][#exam-paragraph]]
+  #if exam-paragraph-specific != "" [#info-strip[具体事实写法][#exam-paragraph-specific]]
+  #if exam-paragraph-general != "" [#info-strip[通用考场写法][#exam-paragraph-general]]
+  #if exam-paragraph-specific == "" and exam-paragraph-general == "" and exam-paragraph != "" [#info-strip[考场表达][#exam-paragraph]]
+  #if can-use-for != "" [#info-strip[可用于][#can-use-for]]
+  #if suggested-question-types != "" [#info-strip[适用题型][#suggested-question-types]]
+  #if not-suitable-for != "" [#info-strip[不适合][#not-suitable-for]]
   #if memory-sentence != "" [#answer-box[记忆句][#memory-sentence]]
   #if use-tip != "" [#info-strip[用法提示][#use-tip]]
   #if use-boundary != "" [#muted[使用边界：#use-boundary]]
