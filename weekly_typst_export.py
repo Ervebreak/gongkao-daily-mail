@@ -578,10 +578,8 @@ def render_typst(data: dict[str, Any]) -> str:
 
 = 00｜使用说明
 #info-strip[复盘顺序][先看本周主题总览和高频考点地图，再看每日复盘卡，最后集中使用金句表达库、考场素材库和素材运用题。]
-#grid(columns: (1fr, 1fr), gutter: 8pt)[
+#grid(columns: (1fr), gutter: 8pt)[
   #panel[资料包定位][这份 PDF 面向周末复盘，不新增精读文章，只把本周已发送内容重新整理为考点、表达、素材和训练题。]
-][
-  #panel[使用边界][素材卡和运用题只基于本周 daily JSON 已有字段生成；字段不足时宁可留空，不补造案例或政策事实。]
 ]
 
 = 01｜本周主题总览
