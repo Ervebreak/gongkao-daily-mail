@@ -19,6 +19,7 @@ import requests
 
 from config import settings
 from history import oss_config, oss_headers, oss_ready, oss_url
+from weekly_pdf_tracking import replace_weekly_pdf_tracking_placeholders
 
 EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
 FEEDBACK_UID_PLACEHOLDER = "__FEEDBACK_UID__"
@@ -189,14 +190,19 @@ def get_effective_recipient_records(test_mode: bool = False) -> tuple[list[dict[
 
 
 def personalize_html_for_recipient(html_body: str, recipient: dict[str, str]) -> str:
-    return (
+    email = recipient.get("email", "")
+    return replace_weekly_pdf_tracking_placeholders(
         html_body.replace(FEEDBACK_UID_PLACEHOLDER, recipient.get("uid", ""))
-        .replace(FEEDBACK_EMAIL_HASH_PLACEHOLDER, recipient.get("email_hash", ""))
+        .replace(FEEDBACK_EMAIL_HASH_PLACEHOLDER, recipient.get("email_hash", "")),
+        email,
     )
 
 
 def personalize_html_for_bcc(html_body: str) -> str:
-    return html_body.replace(FEEDBACK_UID_PLACEHOLDER, "bcc").replace(FEEDBACK_EMAIL_HASH_PLACEHOLDER, "")
+    return replace_weekly_pdf_tracking_placeholders(
+        html_body.replace(FEEDBACK_UID_PLACEHOLDER, "bcc").replace(FEEDBACK_EMAIL_HASH_PLACEHOLDER, ""),
+        "bcc",
+    )
 
 
 def build_message(subject: str, plain_text: str, html_body: str, to_header: str, attachments: list[dict] | None = None) -> MIMEMultipart:

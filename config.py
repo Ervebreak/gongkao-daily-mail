@@ -126,6 +126,9 @@ class Settings:
     subject_prefix: str = get_env("MAIL_SUBJECT_PREFIX", "【公考晨读】")
     feedback_base_url: str = get_env("FEEDBACK_BASE_URL").strip()
     feedback_prefix: str = get_env("FEEDBACK_PREFIX", "gongkao-morning-mailer/feedback").strip().strip("/")
+    download_tracking_secret: str = get_env("DOWNLOAD_TRACKING_SECRET").strip()
+    download_tracking_base_url: str = get_env("DOWNLOAD_TRACKING_BASE_URL").strip()
+    download_tracking_prefix: str = get_env("DOWNLOAD_TRACKING_PREFIX", "analytics/pdf_clicks").strip().strip("/")
 
     @property
     def history_path(self) -> Path:

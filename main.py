@@ -1192,9 +1192,14 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
 
 
 def build_weekly_pdf_candidate_message(weekly_pdf: dict[str, Any]) -> tuple[str, str]:
+    from weekly_pdf_tracking import build_weekly_pdf_tracking_placeholder
+
     start_date = str(weekly_pdf.get("start_date") or "")
     end_date = str(weekly_pdf.get("end_date") or "")
     filename = str(weekly_pdf.get("attachment_filename") or "公考晨读周复盘资料包.pdf")
+    pdf_url = str(weekly_pdf.get("oss_pdf_path") or weekly_pdf.get("pdf_url") or "")
+    week_key = f"{start_date}_to_{end_date}"
+    download_url = build_weekly_pdf_tracking_placeholder(pdf_url, week_key) if pdf_url else ""
     plain_text = "\n".join(
         [
             "本周 PDF 资料包已附上",
@@ -1215,7 +1220,19 @@ def build_weekly_pdf_candidate_message(weekly_pdf: dict[str, Any]) -> tuple[str,
             "",
             f"汇总范围：{start_date} 至 {end_date}",
             f"附件：{filename}",
+            "如果你的邮箱不方便查看附件，请打开邮件 HTML 里的下载按钮。",
         ]
+    )
+    download_block = (
+        f"""
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:16px;padding:20px 24px;margin-bottom:16px;">
+      <div style="font-size:18px;font-weight:900;color:#165dff;margin-bottom:10px;">下载 PDF</div>
+      <div style="font-size:15px;line-height:1.8;color:#334155;margin-bottom:14px;">如果邮箱附件打开不方便，可以点击下面按钮下载本周资料包。</div>
+      <a href="{download_url}" style="display:inline-block;background:#165dff;color:#fff;text-decoration:none;padding:10px 16px;border-radius:10px;font-size:15px;font-weight:900;">下载本周 PDF</a>
+    </div>
+"""
+        if download_url
+        else ""
     )
     html_body = f"""<!doctype html>
 <html>
@@ -1236,6 +1253,8 @@ def build_weekly_pdf_candidate_message(weekly_pdf: dict[str, Any]) -> tuple[str,
         <li>最后看<b>本周表达素材库</b>，挑 2-3 句真正能写进申论或面试里的表达。</li>
       </ol>
     </div>
+
+{download_block}
 
     <div style="background:#fffdf6;border:1px solid #f8dba5;border-radius:16px;padding:22px 24px;margin-bottom:16px;">
       <div style="font-size:18px;font-weight:900;color:#b45309;margin-bottom:12px;">想麻烦你回复一点反馈</div>
@@ -2247,6 +2266,10 @@ def _legacy_handler_unused(event, context):
     # 1. 反馈请求只能走反馈逻辑，绝不能触发每日晨读。
     if is_feedback_like_invocation(payload):
         return handle_feedback(payload)
+    from weekly_pdf_tracking import handle_weekly_pdf_download, is_weekly_pdf_download_invocation
+
+    if is_weekly_pdf_download_invocation(payload):
+        return handle_weekly_pdf_download(payload)
 
     # 2. 所有其他 HTTP 请求一律拦截。
     #    包括 QQ 邮箱/浏览器自动请求的 /favicon.ico、预加载、探测请求等。
@@ -2271,6 +2294,10 @@ def handler(event, context):
     try:
         if is_feedback_like_invocation(payload):
             return handle_feedback(payload)
+        from weekly_pdf_tracking import handle_weekly_pdf_download, is_weekly_pdf_download_invocation
+
+        if is_weekly_pdf_download_invocation(payload):
+            return handle_weekly_pdf_download(payload)
         if is_http_invocation(payload):
             return http_block_response(payload)
         if is_feedback_test_email_invocation(payload):
