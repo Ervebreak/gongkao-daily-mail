@@ -567,6 +567,238 @@ def summarize_final_selection(brief: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _policy_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, list):
+        return " ".join(_policy_text(item) for item in value if item).strip()
+    if isinstance(value, dict):
+        return " ".join(_policy_text(item) for item in value.values() if item).strip()
+    return " ".join(str(value).split()).strip()
+
+
+def _policy_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        parts = []
+        for segment in value.replace("；", ";").replace("，", ",").replace("、", ",").split(","):
+            for item in segment.split(";"):
+                item = _policy_text(item)
+                if item:
+                    parts.append(item)
+        return parts
+    if isinstance(value, list):
+        return [_policy_text(item) for item in value if _policy_text(item)]
+    return [_policy_text(value)] if _policy_text(value) else []
+
+
+def _clip_policy_sentence(value: Any, limit: int = 90) -> str:
+    text = _policy_text(value)
+    if not text:
+        return ""
+    if len(text) <= limit:
+        return text
+    for mark in "。；;":
+        index = text.rfind(mark, 0, limit + 1)
+        if index >= 20:
+            return text[: index + 1].strip()
+    return ""
+
+
+def _choose_policy_quote(policy: dict[str, Any]) -> str:
+    short_quote = _clip_policy_sentence(policy.get("short_quote"), 90)
+    if short_quote:
+        return short_quote
+    return _clip_policy_sentence(policy.get("policy_quote"), 90)
+
+
+def _choose_authoritative_quote(quote: dict[str, Any]) -> str:
+    for key in ("short_quote", "quote_text"):
+        text = _policy_text(quote.get(key))
+        if text and "“" in text and "”" not in text:
+            continue
+        if text and len(text) <= 90 and text[-1] in "。；;！!？?”」』":
+            return text
+        clipped = _clip_policy_sentence(text, 90)
+        if clipped and "“" in clipped and "”" not in clipped:
+            continue
+        if clipped and clipped[-1] in "。；;！!？?”」』":
+            return clipped
+    return ""
+
+
+def _authoritative_source(quote: dict[str, Any], article_index: dict[str, dict[str, Any]]) -> str:
+    article = article_index.get(str(quote.get("article_id") or "")) or {}
+    speech_date = _policy_text(quote.get("speech_date") or article.get("speech_date"))
+    speech_event = _policy_text(quote.get("speech_event") or article.get("speech_event"))
+    if speech_date and speech_event:
+        return f"{speech_date}在{speech_event}上的讲话。"
+    publish_date = _policy_text(quote.get("publish_date") or article.get("publish_date"))
+    issue = _policy_text(article.get("journal"))
+    title = _policy_text(quote.get("source_title") or article.get("title"))
+    if issue and title:
+        return f"{issue}文章《{title}》。"
+    if publish_date and title:
+        return f"{publish_date}《求是》文章《{title}》。"
+    return f"《求是》文章《{title}》。" if title else ""
+
+
+def _policy_article_connection(featured: dict[str, Any], policy: dict[str, Any], theme: str) -> str:
+    title = _policy_text(featured.get("title")) or "当天文章"
+    article_point = _policy_text(
+        featured.get("one_sentence")
+        or featured.get("core_viewpoint")
+        or featured.get("main_thread")
+        or featured.get("theme")
+    )
+    policy_theme = _policy_text(policy.get("theme_level_1") or theme)
+    if article_point:
+        return _clip_policy_sentence(
+            f"本文以《{title}》中的具体案例，呈现了{policy_theme}从政策要求到基层场景的落点：{article_point}",
+            140,
+        ) or f"本文以《{title}》中的具体案例，说明{policy_theme}不能停留在文件表述中，而要落到具体治理场景和执行环节。"
+    return f"本文以《{title}》为案例，说明{policy_theme}需要通过具体平台、机制和行动转化为治理成效。"
+
+
+def _policy_exam_transfer(featured: dict[str, Any], policy: dict[str, Any], question: dict[str, Any]) -> str:
+    exam_usage = _policy_text(policy.get("exam_usage"))
+    if exam_usage:
+        return _clip_policy_sentence(exam_usage, 140) or exam_usage[:140].rstrip("，、；; ")
+    scenarios = _policy_list(featured.get("exam_use")) + _policy_list(question.get("question_type")) + _policy_list(question.get("topic_category"))
+    if scenarios:
+        return f"遇到{ '、'.join(scenarios[:3]) }类题目，可从政策目标、现实堵点、协同机制和闭环落实四个层面展开。"
+    return "遇到申论综合分析、基层治理和面试实务类题目，可从政策依据、问题转译、平台机制和落实闭环展开。"
+
+
+def _policy_answer_angles(policy: dict[str, Any], featured: dict[str, Any], question: dict[str, Any]) -> list[str]:
+    angles = _policy_list(policy.get("answer_angles"))
+    angles.extend(_policy_list(featured.get("article_framework"))[:2])
+    angles.extend(_policy_list(question.get("answer_framework"))[:2])
+    fallback = ["找准政策依据", "连接文章案例", "分析现实堵点", "提出机制化做法", "形成落实闭环"]
+    result: list[str] = []
+    for item in angles + fallback:
+        item = _clip_policy_sentence(item, 24) or _policy_text(item)[:24]
+        if item and item not in result:
+            result.append(item)
+        if len(result) >= 6:
+            break
+    return result[:6]
+
+
+def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = None) -> dict[str, Any]:
+    empty = {
+        "theme": "",
+        "policy_quote": "",
+        "policy_source": "",
+        "policy_source_type": "",
+        "policy_translation": "",
+        "authoritative_quote": "",
+        "authoritative_source": "",
+        "article_connection": "",
+        "exam_transfer": "",
+        "answer_angles": [],
+        "matched_policy_id": "",
+        "matched_qiushi_quote_id": "",
+        "matched_qiushi_article_id": "",
+        "matched_framework_id": "",
+        "matched_chunk_ids": [],
+        "source_type": "policy_only",
+    }
+    try:
+        from knowledge_base_loader import load_qiushi_article_index
+        from policy_coordinate_matcher import match_policy_coordinate_candidates
+
+        featured = brief.get("featured_article") if isinstance(brief.get("featured_article"), dict) else {}
+        question = brief.get("daily_question") if isinstance(brief.get("daily_question"), dict) else {}
+        takeaway = brief.get("today_takeaway") if isinstance(brief.get("today_takeaway"), dict) else {}
+        article_text = " ".join(
+            _policy_text(featured.get(key))
+            for key in [
+                "one_sentence",
+                "core_viewpoint",
+                "main_thread",
+                "original_overview",
+                "three_useful_points",
+                "exam_use",
+                "article_framework",
+            ]
+        )
+        keywords = (
+            _policy_list(takeaway.get("keywords"))
+            + _policy_list(featured.get("theme"))
+            + _policy_list(featured.get("title"))
+            + _policy_list(featured.get("article_framework_map"))
+        )
+        exam_scenarios = (
+            _policy_list(featured.get("exam_use"))
+            + _policy_list(featured.get("usable_for_exam"))
+            + _policy_list(question.get("question_type"))
+            + _policy_list(question.get("topic_category"))
+            + _policy_list(question.get("exam_focus"))
+        )
+        matches = match_policy_coordinate_candidates(
+            article_title=_policy_text(featured.get("title")),
+            article_summary=_policy_text(featured.get("one_sentence") or featured.get("core_viewpoint")),
+            article_text=article_text,
+            main_theme=_policy_text(featured.get("theme") or brief.get("today_theme")),
+            sub_themes=_policy_list(takeaway.get("keywords")) + _policy_list(featured.get("theme")),
+            keywords=keywords,
+            exam_scenarios=exam_scenarios,
+        ).get("matched_policy_coordinate_candidates", {})
+        policy = matches.get("best_policy") if isinstance(matches.get("best_policy"), dict) else {}
+        policy_quote = _choose_policy_quote(policy)
+        if not policy or not policy_quote:
+            if logger:
+                logger.info("policy coordinate skipped", reason="no_displayable_policy_match")
+            return empty
+
+        quote = matches.get("best_qiushi_quote") if isinstance(matches.get("best_qiushi_quote"), dict) else {}
+        article_index = {str(item.get("article_id") or ""): item for item in load_qiushi_article_index()}
+        authoritative_quote = _choose_authoritative_quote(quote) if quote else ""
+        authoritative_source = _authoritative_source(quote, article_index) if authoritative_quote else ""
+        framework = matches.get("best_framework") if isinstance(matches.get("best_framework"), dict) else {}
+        chunks = matches.get("matched_chunks") if isinstance(matches.get("matched_chunks"), list) else []
+        result = {
+            **empty,
+            "theme": _policy_text(policy.get("theme_level_1") or featured.get("theme") or brief.get("today_theme")),
+            "policy_quote": policy_quote,
+            "policy_source": _policy_text(policy.get("source_title")),
+            "policy_source_type": _policy_text(policy.get("source_type")),
+            "policy_translation": _policy_text(policy.get("plain_explanation")),
+            "authoritative_quote": authoritative_quote,
+            "authoritative_source": authoritative_source,
+            "article_connection": _policy_article_connection(featured, policy, _policy_text(brief.get("today_theme"))),
+            "exam_transfer": _policy_exam_transfer(featured, policy, question),
+            "answer_angles": _policy_answer_angles(policy, featured, question),
+            "matched_policy_id": _policy_text(policy.get("policy_id")),
+            "matched_qiushi_quote_id": _policy_text(quote.get("quote_id")) if authoritative_quote else "",
+            "matched_qiushi_article_id": _policy_text(quote.get("article_id")) if authoritative_quote else "",
+            "matched_framework_id": _policy_text(framework.get("framework_id")),
+            "matched_chunk_ids": [_policy_text(item.get("chunk_id")) for item in chunks if isinstance(item, dict) and item.get("chunk_id")],
+            "source_type": "policy_plus_qiushi" if authoritative_quote else "policy_only",
+        }
+        if authoritative_quote and not authoritative_source:
+            result["authoritative_quote"] = ""
+            result["matched_qiushi_quote_id"] = ""
+            result["matched_qiushi_article_id"] = ""
+            result["source_type"] = "policy_only"
+        if logger:
+            logger.info(
+                "policy coordinate matched",
+                matched_policy_id=result["matched_policy_id"],
+                matched_qiushi_quote_id=result["matched_qiushi_quote_id"],
+                matched_framework_id=result["matched_framework_id"],
+                matched_chunk_ids=result["matched_chunk_ids"],
+                source_type=result["source_type"],
+            )
+        return result
+    except Exception as exc:
+        if logger:
+            logger.info("policy coordinate failed", error=str(exc))
+        return empty
+
+
 def detect_theme_changes(articles: list[Any], brief: dict[str, Any]) -> list[dict[str, str]]:
     article_theme_by_url = {getattr(item, "url", ""): " / ".join(getattr(item, "themes", [])[:2]) for item in articles}
     article_theme_by_title = {getattr(item, "title", ""): " / ".join(getattr(item, "themes", [])[:2]) for item in articles}
@@ -1964,6 +2196,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
         send_mode=settings.send_mode,
     )
 
+    brief["policy_coordinate"] = build_policy_coordinate(brief, logger=logger)
     save_json(settings.output_dir / "latest_articles.json", [a.to_log_dict() for a in articles])
     save_json(settings.output_dir / "latest_brief.json", brief)
     quality_payload = {

@@ -35,6 +35,33 @@
 
 ## 最新改动
 
+### 2026-05-31｜daily JSON 写入 policy_coordinate 字段
+
+**改动原因**
+
+在不改邮件 HTML、发送逻辑和质量门禁的前提下，把政策坐标匹配结果写入每日 brief JSON，为后续渲染“今日政策坐标”模块做数据准备。
+
+**已改文件**
+
+- `main.py`
+- `CHANGELOG_HARNESS.md`
+
+**最新版本行为**
+
+- 在最终保存 `latest_brief.json` 和候选 payload 前，为 `brief` 新增 `policy_coordinate` 字段。
+- `policy_quote` 只来自政策语库，优先使用 `short_quote`，不合适时使用 `policy_quote`，且控制在 90 字以内。
+- `policy_source` 使用政策条目的 `source_title`，`policy_source_type` 使用 `source_type`。
+- `authoritative_quote` 只来自《求是》权威论述库，可为空；存在时必须同时生成 `authoritative_source`。
+- `authoritative_source` 优先使用 `speech_date + speech_event`，否则回退到《求是》期刊文章标题。
+- `article_connection` 和 `exam_transfer` 由最终精选文章、政策解释和考试场景生成，只写入 JSON，不进入正文渲染。
+- `brief` 中不写入“今日政策坐标”标题，保持字段只存结构化正文数据。
+
+**后续注意事项**
+
+1. 下一步若接入 HTML renderer，应只读取 `brief["policy_coordinate"]`，不要重新在渲染层做匹配。
+2. 渲染前建议先人工检查几天 `latest_brief.json` 中 `policy_coordinate` 的匹配质量。
+3. 本阶段没有修改 `quality_gate`，因此政策坐标字段暂不参与拦截。
+
 ### 2026-05-31｜政策坐标匹配器预接入
 
 **改动原因**
