@@ -47,10 +47,12 @@ function.zip
 - `requirements.txt`
 - `content_harness/`
 - `knowledge/`
+- `knowledge_base/`
 - 运行入口 `main.py`
 - 质检入口 `scripts/validate_daily_brief.py`
 - 如启用题库轻接入，必须包含 `question_bank.py`
 - 如使用本地兜底题库，必须包含 `data/question_bank/shenlun_question_bank_v3_a.csv`
+- 如启用本地知识库，必须包含 `knowledge_base/policy_corpus/policy_statements_core.jsonl` 和 `knowledge_base/topic_knowledge/article_index.jsonl`
 
 ## 3. 典型 P0
 
@@ -97,3 +99,27 @@ python -c "from question_bank import load_shenlun_question_bank; rows, meta=load
 - zip 内应能看到 `question_bank.py`；
 - zip 内应能看到本地兜底 CSV；
 - 若 OSS 题库缺失，程序仍应生成候选邮件。
+
+## 5. 知识库目录配置
+
+政策原文语库和《求是》专题知识库相关环境变量：
+
+```text
+KNOWLEDGE_BASE_MODE=local
+KNOWLEDGE_BASE_DIR=knowledge_base
+KNOWLEDGE_OSS_PREFIX=
+```
+
+当前阶段只接入目录、配置和打包资产，不接入每日 JSON 生成、HTML 渲染、发送逻辑或质量门禁。
+
+线上第一版默认使用本地知识库：
+
+1. `KNOWLEDGE_BASE_MODE=local`；
+2. `KNOWLEDGE_BASE_DIR=knowledge_base`；
+3. 发布包内应包含 `knowledge_base/policy_corpus/` 和 `knowledge_base/topic_knowledge/`。
+
+后续切换 OSS 时：
+
+1. 将 `KNOWLEDGE_BASE_MODE` 改为 `oss`；
+2. 将 `KNOWLEDGE_OSS_PREFIX` 设置为 bucket 内知识库对象前缀；
+3. 继续复用现有 `OSS_ENDPOINT`、`OSS_BUCKET`、`OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`。

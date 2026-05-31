@@ -35,6 +35,39 @@
 
 ## 最新改动
 
+### 2026-05-31｜知识库目录与配置预接入
+
+**改动原因**
+
+为后续接入“今日政策坐标”和《求是》专题知识库，先把已整理好的知识库文件放入仓库，并预留本地/OSS 两种读取模式。本阶段只做目录、配置和打包资产接入，不改变生成、渲染、发送和质量门禁逻辑。
+
+**已改文件**
+
+- `config.py`
+- `.env.example`
+- `README.md`
+- `scripts/build_fc_package.ps1`
+- `content_harness/deployment_rules.md`
+- `knowledge_base/policy_corpus/policy_statements_core.jsonl`
+- `knowledge_base/policy_corpus/policy_statements.jsonl`
+- `knowledge_base/topic_knowledge/`
+- `CHANGELOG_HARNESS.md`
+
+**最新版行为**
+
+- 新增环境变量：`KNOWLEDGE_BASE_MODE=local`、`KNOWLEDGE_BASE_DIR=knowledge_base`、`KNOWLEDGE_OSS_PREFIX=`。
+- `config.Settings` 新增知识库配置和路径属性：`knowledge_base_path`、`policy_corpus_path`、`topic_knowledge_path`。
+- 仓库新增 `knowledge_base/policy_corpus/`，包含政策原文核心展示库和扩展候选库。
+- 仓库新增 `knowledge_base/topic_knowledge/`，包含《求是》专题索引、切片、权威引用、专题框架和 `raw_articles/qiushi/` 原文目录。
+- FC 打包脚本会复制 `knowledge_base/`，并检查核心政策库和专题索引文件存在。
+- 本阶段不读取知识库、不写入 daily JSON、不改 Prompt、不改 renderer、不改发送逻辑、不改 quality_gate。
+
+**后续注意事项**
+
+1. 正式接入“今日政策坐标”时，优先读取 `knowledge_base/policy_corpus/policy_statements_core.jsonl`。
+2. 切换 OSS 时，将 `KNOWLEDGE_BASE_MODE` 改为 `oss`，并设置 `KNOWLEDGE_OSS_PREFIX` 为 bucket 内对象前缀；OSS 鉴权继续复用现有 OSS 配置。
+3. 接入生成逻辑前，应单独增加读取失败兜底，避免知识库缺失影响候选邮件生成。
+
 ### 2026-05-28｜阶段 2 抽取统一质量计算 helper
 
 **改动原因**
