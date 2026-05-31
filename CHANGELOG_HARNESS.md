@@ -35,6 +35,33 @@
 
 ## 最新改动
 
+### 2026-05-31｜政策坐标匹配器预接入
+
+**改动原因**
+
+为后续把“今日政策坐标”接入邮件正文，先新增独立匹配器，从政策原文库和《求是》专题知识库中召回当天文章可用的政策原文、权威论述、相关片段和专题框架。本阶段只返回候选对象，不写入 daily JSON、不修改 HTML、不修改发送逻辑。
+
+**已改文件**
+
+- `policy_coordinate_matcher.py`
+- `scripts/check_policy_coordinate_matcher.py`
+- `CHANGELOG_HARNESS.md`
+
+**最新版本行为**
+
+- 新增 `match_policy_coordinate_candidates(...)`，输入标题、摘要/正文、主题、关键词和考试场景，输出 `matched_policy_coordinate_candidates`。
+- 政策原文优先匹配 `policy_statements_core.jsonl`；核心库无语义命中时，再从扩展库中筛选 `quote_status=clean`、`display_ready=true`、`theme_confidence=high`、`usage_tier` 非 `disabled/background` 的条目。
+- 《求是》权威论述优先匹配 `authoritative_quotes_core.jsonl`，候选库只在核心库无结果时兜底。
+- `article_chunks.jsonl` 最多召回 3 个片段，`topic_frameworks.jsonl` 最多返回 1 个框架。
+- 匹配打分综合主题、二级主题、关键词、考试场景、展示优先级、`usage_tier` 和 `freshness`；`historical_framework` 降权，`disabled` 不使用，`background` 不直接展示。
+- 当前不接入生成链路，脚本 `scripts/check_policy_coordinate_matcher.py` 仅用于本地验证。
+
+**后续注意事项**
+
+1. 下一步接入邮件生成前，应先确认 `best_policy` 的展示质量和 `debug_scores` 是否符合人工预期。
+2. renderer 接入应单独提交，避免匹配逻辑和 HTML 展示逻辑混在一起。
+3. 如果后续切换 OSS 读取，需要先扩展 `knowledge_base_loader.py`，不要直接在匹配器里写 OSS 逻辑。
+
 ### 2026-05-31｜知识库 JSONL 加载器预接入
 
 **改动原因**
