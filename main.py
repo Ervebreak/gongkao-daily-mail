@@ -240,6 +240,7 @@ def build_quality_gate(
     selection_quality: dict[str, Any] | None = None,
     content_quality: dict[str, Any] | None = None,
     cleanliness_quality: dict[str, Any] | None = None,
+    policy_coordinate_quality: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     p0_codes = {
         "missing_question",
@@ -316,6 +317,7 @@ def build_quality_gate(
         ("selection", selection_quality or {}),
         ("content_quality", content_quality or {}),
         ("pre_send_cleanliness", cleanliness_quality or {}),
+        ("policy_coordinate", policy_coordinate_quality or {}),
     )
     for module, quality in modules:
         for issue in quality.get("issues") or []:
@@ -799,6 +801,96 @@ def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = No
         return empty
 
 
+def ensure_policy_coordinate_for_render(brief: dict[str, Any], logger: RunLogger | None = None) -> dict[str, Any]:
+    coordinate = brief.get("policy_coordinate") if isinstance(brief.get("policy_coordinate"), dict) else {}
+    if coordinate and coordinate.get("policy_quote") and coordinate.get("policy_source"):
+        return brief
+    brief["policy_coordinate"] = build_policy_coordinate(brief, logger=logger)
+    return brief
+
+
+def enforce_policy_coordinate_quality(
+    brief: dict[str, Any],
+    plain_text: str,
+    html_body: str,
+    logger: RunLogger | None = None,
+) -> dict[str, Any]:
+    from email_renderer import render_email_html, render_plain_text
+    from policy_coordinate_quality import classify_policy_coordinate_issues, evaluate_policy_coordinate_quality
+
+    quality = evaluate_policy_coordinate_quality(brief, plain_text, html_body)
+    changed = False
+    repaired_actions: list[str] = []
+
+    classification = classify_policy_coordinate_issues(quality)
+    if classification.get("has_authoritative_issue"):
+        coordinate = brief.get("policy_coordinate") if isinstance(brief.get("policy_coordinate"), dict) else {}
+        if coordinate:
+            coordinate["authoritative_quote"] = ""
+            coordinate["authoritative_source"] = ""
+            coordinate["matched_qiushi_quote_id"] = ""
+            coordinate["matched_qiushi_article_id"] = ""
+            coordinate["source_type"] = "policy_only"
+            changed = True
+            repaired_actions.append("drop_authoritative_quote")
+
+    if changed:
+        plain_text = render_plain_text(brief)
+        html_body = render_email_html(brief)
+        quality = evaluate_policy_coordinate_quality(brief, plain_text, html_body)
+        classification = classify_policy_coordinate_issues(quality)
+
+    if classification.get("has_policy_critical_issue"):
+        previous = brief.get("policy_coordinate") if isinstance(brief.get("policy_coordinate"), dict) else {}
+        brief["policy_coordinate"] = {}
+        rebuilt = build_policy_coordinate(brief, logger=logger)
+        brief["policy_coordinate"] = rebuilt
+        plain_text = render_plain_text(brief)
+        html_body = render_email_html(brief)
+        rebuilt_quality = evaluate_policy_coordinate_quality(brief, plain_text, html_body)
+        rebuilt_classification = classify_policy_coordinate_issues(rebuilt_quality)
+        if rebuilt and not rebuilt_classification.get("has_policy_critical_issue"):
+            quality = rebuilt_quality
+            classification = rebuilt_classification
+            changed = True
+            repaired_actions.append("rematch_policy_quote")
+        else:
+            brief["policy_coordinate"] = {}
+            brief["_policy_coordinate_disabled_reason"] = "policy_coordinate 已隐藏：政策原文或来源未通过展示前质检。"
+            quality = evaluate_policy_coordinate_quality(brief, render_plain_text(brief), render_email_html(brief))
+            changed = True
+            repaired_actions.append("hide_policy_coordinate")
+            if logger:
+                logger.info(
+                    "policy coordinate hidden",
+                    previous_policy_id=previous.get("matched_policy_id"),
+                    remaining_issues=rebuilt_quality.get("issues", []),
+                )
+
+    if changed:
+        plain_text = render_plain_text(brief)
+        html_body = render_email_html(brief)
+        quality = evaluate_policy_coordinate_quality(brief, plain_text, html_body)
+
+    if logger:
+        logger.info(
+            "policy coordinate quality",
+            status=quality.get("status"),
+            score=quality.get("score"),
+            changed=changed,
+            repaired_actions=repaired_actions,
+            issue_count=len(quality.get("issues") or []),
+        )
+    return {
+        "brief": brief,
+        "plain_text": plain_text,
+        "html_body": html_body,
+        "quality": quality,
+        "changed": changed,
+        "repaired_actions": repaired_actions,
+    }
+
+
 def detect_theme_changes(articles: list[Any], brief: dict[str, Any]) -> list[dict[str, str]]:
     article_theme_by_url = {getattr(item, "url", ""): " / ".join(getattr(item, "themes", [])[:2]) for item in articles}
     article_theme_by_title = {getattr(item, "title", ""): " / ".join(getattr(item, "themes", [])[:2]) for item in articles}
@@ -931,6 +1023,7 @@ def evaluate_all_quality(
     from expression_quality import evaluate_expression_quality
     from framework_quality import evaluate_framework_map
     from module_redundancy_quality import evaluate_module_redundancy
+    from policy_coordinate_quality import evaluate_policy_coordinate_quality
     from question_quality import evaluate_daily_question
     from quick_reads_quality import evaluate_quick_reads
     from takeaway_quality import evaluate_takeaway
@@ -952,6 +1045,7 @@ def evaluate_all_quality(
         "selection": selection_quality,
         "content_quality": evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation),
         "cleanliness": cleanliness_quality,
+        "policy_coordinate": evaluate_policy_coordinate_quality(brief, plain_text, html_body),
     }
 
 
@@ -969,6 +1063,7 @@ def build_gate_from_quality_map(quality: dict[str, Any]) -> dict[str, Any]:
         quality.get("selection", {}),
         quality.get("content_quality", {}),
         quality.get("cleanliness", {}),
+        quality.get("policy_coordinate", {}),
     )
 
 
@@ -984,6 +1079,7 @@ def _log_quality_map(logger: RunLogger, quality: dict[str, Any], suffix: str) ->
         "module_redundancy": "module redundancy quality",
         "content_risk": "content risk quality",
         "content_quality": "content quality",
+        "policy_coordinate": "policy coordinate quality",
     }
     for key, label in labels.items():
         item = quality.get(key)
@@ -1020,6 +1116,7 @@ def recompute_after_brief_change(
     subject = brief.get("email_subject") or f"公考晨读 {today}"
     if not str(subject).startswith(settings.subject_prefix):
         subject = f"{settings.subject_prefix}{subject}"
+    brief = ensure_policy_coordinate_for_render(brief, logger=logger)
     rendered = render_brief_outputs(brief, str(subject))
     quality = evaluate_all_quality(
         brief,
@@ -1874,6 +1971,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
     if not str(subject).startswith(settings.subject_prefix):
         subject = f"{settings.subject_prefix}{subject}"
 
+    brief = ensure_policy_coordinate_for_render(brief, logger=logger)
     plain_text = render_plain_text(brief)
     html_body = render_email_html(brief)
     brief_quality = evaluate_brief_cleanliness(brief, plain_text, html_body)
@@ -1913,6 +2011,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                 logger.info("framework map quality after minor auto fixes", **framework_quality)
                 takeaway_quality = evaluate_takeaway(brief)
                 logger.info("today takeaway quality after minor auto fixes", **takeaway_quality)
+                brief = ensure_policy_coordinate_for_render(brief, logger=logger)
                 plain_text = render_plain_text(brief)
                 html_body = render_email_html(brief)
                 brief_quality = evaluate_brief_cleanliness(brief, plain_text, html_body)
@@ -2072,6 +2171,10 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
         fix_count=len(cleanliness_quality.get("fixes") or []),
         unresolved_count=len(cleanliness_quality.get("unresolved_issues") or []),
     )
+    policy_coordinate_result = enforce_policy_coordinate_quality(brief, plain_text, html_body, logger=logger)
+    brief = policy_coordinate_result["brief"]
+    plain_text = policy_coordinate_result["plain_text"]
+    html_body = policy_coordinate_result["html_body"]
     quality_map = evaluate_all_quality(
         brief,
         plain_text,
@@ -2158,6 +2261,10 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                     fix_count=len(cleanliness_quality.get("fixes") or []),
                     unresolved_count=len(cleanliness_quality.get("unresolved_issues") or []),
                 )
+                policy_coordinate_result = enforce_policy_coordinate_quality(brief, plain_text, html_body, logger=logger)
+                brief = policy_coordinate_result["brief"]
+                plain_text = policy_coordinate_result["plain_text"]
+                html_body = policy_coordinate_result["html_body"]
                 quality_map = evaluate_all_quality(
                     brief,
                     plain_text,
@@ -2196,7 +2303,6 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
         send_mode=settings.send_mode,
     )
 
-    brief["policy_coordinate"] = build_policy_coordinate(brief, logger=logger)
     save_json(settings.output_dir / "latest_articles.json", [a.to_log_dict() for a in articles])
     save_json(settings.output_dir / "latest_brief.json", brief)
     quality_payload = {
@@ -2224,6 +2330,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
             "selection": selection_quality,
             "content_quality": content_quality,
             "cleanliness": cleanliness_quality,
+            "policy_coordinate": quality_map.get("policy_coordinate", {}),
         },
         "rewrite": rewrite_result,
         "minor_auto_fix": minor_fix_result,
