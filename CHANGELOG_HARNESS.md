@@ -35,6 +35,33 @@
 
 ## 最新改动
 
+### 2026-05-31｜知识库 JSONL 加载器预接入
+
+**改动原因**
+
+为后续接入“今日政策坐标”和《求是》专题知识库，先提供独立的 JSONL 读取能力。本阶段只新增加载模块和检查脚本，不把知识库接入 daily JSON、邮件生成、HTML 渲染、发送或质量门禁逻辑。
+
+**已改文件**
+
+- `knowledge_base_loader.py`
+- `scripts/check_knowledge_base_loader.py`
+- `CHANGELOG_HARNESS.md`
+
+**最新版本行为**
+
+- 新增通用 `load_jsonl(path)`，支持读取 UTF-8/UTF-8 BOM JSONL。
+- JSONL 单行解析失败时记录错误并跳过坏行，不中断主流程。
+- 文件不存在时记录 warning 并返回空列表。
+- 同一次运行内按绝对路径缓存读取结果，避免重复读取大文件。
+- 新增加载函数：`load_policy_core`、`load_policy_all`、`load_qiushi_article_index`、`load_qiushi_chunks`、`load_qiushi_quotes_core`、`load_qiushi_quotes_candidates`、`load_topic_frameworks`。
+- 当前不读取 `raw_articles/qiushi/` 全文目录。
+
+**后续注意事项**
+
+1. 正式接入邮件内容前，应优先使用 `load_policy_core()` 作为“今日政策坐标”的展示级政策原文来源。
+2. 扩展候选、切片和权威引用暂时只作为后续检索能力预留，不应在本阶段改变邮件正文。
+3. OSS 模式后续单独实现，当前加载器读取本地 `KNOWLEDGE_BASE_DIR`。
+
 ### 2026-05-31｜知识库目录与配置预接入
 
 **改动原因**
