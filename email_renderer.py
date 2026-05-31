@@ -338,6 +338,86 @@ def render_quick_reads(brief: dict[str, Any]) -> str:
     return quick_cards
 
 
+def coordinate_quote_text(value: Any) -> str:
+    return str(value or "").strip().rstrip("。；;！!？?")
+
+
+def coordinate_source_text(value: Any) -> str:
+    return str(value or "").strip().rstrip("。；;！!？?")
+
+
+def policy_coordinate_lines(brief: dict[str, Any]) -> list[str]:
+    coordinate = ensure_dict(brief.get("policy_coordinate"))
+    policy_quote = coordinate_quote_text(coordinate.get("policy_quote"))
+    policy_source = coordinate_source_text(coordinate.get("policy_source"))
+    if not policy_quote or not policy_source:
+        return []
+
+    lines = [
+        "【今日政策坐标】",
+        f"政策原文：{policy_source}提出，“{policy_quote}”。",
+    ]
+    authoritative_quote = coordinate_quote_text(coordinate.get("authoritative_quote"))
+    authoritative_source = coordinate_source_text(coordinate.get("authoritative_source"))
+    if authoritative_quote and authoritative_source:
+        lines.append(f"权威论述：{authoritative_source}强调，“{authoritative_quote}”。")
+
+    article_connection = str(coordinate.get("article_connection") or "").strip()
+    exam_transfer = str(coordinate.get("exam_transfer") or "").strip()
+    if article_connection:
+        lines.append(f"文章落点：{article_connection}")
+    if exam_transfer:
+        lines.append(f"考场迁移：{exam_transfer}")
+    return lines
+
+
+def render_policy_coordinate_plain(brief: dict[str, Any]) -> list[str]:
+    lines = policy_coordinate_lines(brief)
+    return ["", *lines] if lines else []
+
+
+def render_policy_coordinate_html(brief: dict[str, Any]) -> str:
+    coordinate = ensure_dict(brief.get("policy_coordinate"))
+    policy_quote = coordinate_quote_text(coordinate.get("policy_quote"))
+    policy_source = coordinate_source_text(coordinate.get("policy_source"))
+    if not policy_quote or not policy_source:
+        return ""
+
+    authoritative_quote = coordinate_quote_text(coordinate.get("authoritative_quote"))
+    authoritative_source = coordinate_source_text(coordinate.get("authoritative_source"))
+    authoritative_block = ""
+    if authoritative_quote and authoritative_source:
+        authoritative_block = f"""
+      <div style="font-size:14px;line-height:1.75;color:#334155;margin-top:8px;">
+        <b>权威论述：</b>{h(authoritative_source)}强调，“{h(authoritative_quote)}”。
+      </div>
+        """
+
+    article_connection = str(coordinate.get("article_connection") or "").strip()
+    exam_transfer = str(coordinate.get("exam_transfer") or "").strip()
+    article_block = (
+        f'<div style="font-size:14px;line-height:1.75;color:#334155;margin-top:8px;"><b>文章落点：</b>{h(article_connection)}</div>'
+        if article_connection
+        else ""
+    )
+    exam_block = (
+        f'<div style="font-size:14px;line-height:1.75;color:#334155;margin-top:8px;"><b>考场迁移：</b>{h(exam_transfer)}</div>'
+        if exam_transfer
+        else ""
+    )
+    return f"""
+    <h2 style="font-size:21px;margin:20px 0 10px;">今日政策坐标</h2>
+    <div style="background:#fff;border:1px solid #dbeafe;border-radius:16px;padding:15px;margin-bottom:15px;">
+      <div style="font-size:14px;line-height:1.75;color:#334155;">
+        <b>政策原文：</b>{h(policy_source)}提出，“{h(policy_quote)}”。
+      </div>
+      {authoritative_block}
+      {article_block}
+      {exam_block}
+    </div>
+    """
+
+
 FEEDBACK_FORM_URL = "https://wj.qq.com/s2/26569188/8ddc/"
 FEEDBACK_UID_PLACEHOLDER = "__FEEDBACK_UID__"
 FEEDBACK_EMAIL_HASH_PLACEHOLDER = "__FEEDBACK_EMAIL_HASH__"
@@ -456,6 +536,7 @@ def render_plain_text(brief: dict[str, Any]) -> str:
             f"{idx}. {step.get('label', '')}：{step.get('content', '')}"
             for idx, step in enumerate(steps, start=1)
         ],
+        *render_policy_coordinate_plain(brief),
         "",
         "今日一题｜考场转化训练",
         "题型：" + str(question.get("question_type", "")),
@@ -573,6 +654,8 @@ def render_email_html(brief: dict[str, Any]) -> str:
 
     </div>
 
+
+    {render_policy_coordinate_html(brief)}
 
     <h2 style="font-size:21px;margin:20px 0 10px;">今日一题｜考场转化训练</h2>
     <div style="background:#fff;border:1px solid #e6eaf0;border-radius:16px;padding:16px;margin-bottom:15px;">

@@ -35,6 +35,31 @@
 
 ## 最新改动
 
+### 2026-05-31｜渲染今日政策坐标模块
+
+**改动原因**
+
+在任务 4 已写入 `brief["policy_coordinate"]` 的基础上，把“今日政策坐标”展示到邮件正文，位置放在“今日精读”之后、“今日一题”之前。
+
+**已改文件**
+
+- `email_renderer.py`
+- `CHANGELOG_HARNESS.md`
+
+**最新版本行为**
+
+- HTML 和 plain_text 同步渲染 `policy_coordinate`。
+- `policy_coordinate` 缺少 `policy_source` 或 `policy_quote` 时，整个模块不展示。
+- 权威论述只有在 `authoritative_quote` 和 `authoritative_source` 同时存在时才展示，不会残留空标题。
+- 政策原文行只使用政策语库字段：`policy_source` + `policy_quote`。
+- 《求是》论述只展示在“权威论述”行，不会写成“政策原文”。
+- 本次不修改发送逻辑、不修改 `quality_gate`，也不把“今日政策坐标”标题写入 brief 字段。
+
+**后续注意事项**
+
+1. 后续可基于实际邮件样式微调政策坐标卡片配色和间距。
+2. 如要把政策坐标纳入质量门禁，应另起任务单独设计检查项。
+
 ### 2026-05-31｜daily JSON 写入 policy_coordinate 字段
 
 **改动原因**
