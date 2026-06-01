@@ -704,6 +704,19 @@ def build_policy_coordinate_usage_record(brief: dict[str, Any], today: str) -> d
     }
 
 
+def _policy_transfer_has_specific_angles(text: str) -> bool:
+    keywords = ["平台", "机制", "诉求", "协同", "闭环", "服务", "监管", "数字", "人才", "就业", "民生", "治理", "落实", "反馈", "转化", "场景", "要素", "创新"]
+    combined = _policy_text(text)
+    return sum(1 for keyword in keywords if keyword and keyword in combined) >= 2
+
+
+def _policy_exam_transfer_fallback(featured: dict[str, Any], question: dict[str, Any]) -> str:
+    scenarios = _policy_list(featured.get("exam_use")) + _policy_list(question.get("question_type")) + _policy_list(question.get("topic_category"))
+    if scenarios:
+        return f"遇到{'、'.join(scenarios[:3])}类题目，可从政策目标、现实堵点、协同机制和闭环落实四个层面展开。"
+    return "遇到申论综合分析、基层治理和面试实务类题目，可从政策依据、问题转译、平台机制和落实闭环展开。"
+
+
 def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = None) -> dict[str, Any]:
     empty = {
         "theme": "",
@@ -812,6 +825,9 @@ def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = No
             "matched_chunk_ids": [_policy_text(item.get("chunk_id")) for item in chunks if isinstance(item, dict) and item.get("chunk_id")],
             "source_type": "policy_plus_qiushi" if authoritative_quote else "policy_only",
         }
+        exam_transfer_text = _policy_text(result.get("exam_transfer"))
+        if exam_transfer_text.startswith("适用于") or not _policy_transfer_has_specific_angles(exam_transfer_text):
+            result["exam_transfer"] = _policy_exam_transfer_fallback(featured, question)
         if authoritative_quote and not authoritative_source:
             result["authoritative_quote"] = ""
             result["matched_qiushi_quote_id"] = ""

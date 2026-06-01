@@ -772,3 +772,27 @@ python -m py_compile prompt_templates.py question_quality.py email_renderer.py
 
 1. 当前 usage history 故意不和 `sent_history.json` 共享存储，后续如需 OSS 化，应单独设计新的存储模式，不要直接搬用 `sent_history` 逻辑。
 2. 目前去重历史只针对非 candidate / 非测试 / 非整体阻断运行进行记录，如果后续希望让 preview 也参与去重，应单独评估是否影响正式晨发。
+### 2026-06-02｜政策坐标主题试跑与接入报告
+**改动原因**
+
+在前 7 个任务完成后，需要做 3 个主题试跑，验证 `policy_coordinate` 在 daily JSON、HTML、plain_text、质检和近 14 天去重链路中的实际表现，并沉淀一份可交接的接入报告。
+**已改文件**
+
+- `main.py`
+- `scripts/run_policy_coordinate_trials.py`
+- `docs/POLICY_COORDINATE_INTEGRATION_REPORT.md`
+- `output/policy_coordinate_trials/*`
+- `CHANGELOG_HARNESS.md`
+
+**最新版行为**
+
+- 新增 `scripts/run_policy_coordinate_trials.py`，复用 `candidates/latest.json` 的完整 brief 结构，构造 3 组模拟主题输入并走现有政策匹配、渲染和质检链路。
+- 试跑主题覆盖：基层治理 / 新就业群体 / 城市治理；高质量发展 / 新质生产力；民生保障 / 就业。
+- 试跑会输出 `daily.json`、`email.html`、`plain_text.txt`、`quality.json`、`run.log` 到 `output/policy_coordinate_trials/<slug>/`。
+- 试跑使用隔离的 `policy_coordinate_usage_history.jsonl`，验证 14 天去重逻辑可运行，同时不污染正式生产历史。
+- `main.py` 增加了对 `exam_transfer` 的二次兜底：当匹配到的政策语料 `exam_usage` 过于展示化、缺少具体答题角度时，会回退为程序生成的结构化考场迁移句。
+- 自动生成 `docs/POLICY_COORDINATE_INTEGRATION_REPORT.md`，汇总文件改动、知识库读取、字段、渲染位置、质检规则、3 个样例结果、风险与 OSS 切换说明。
+**后续注意事项**
+
+1. 当前试跑验证的是“政策坐标接入链路”而不是“真实选文质量”，后续上线前仍应结合真实抓取文章抽样复核几轮。
+2. 如果后续实现知识库 OSS 读取，建议同步把试跑脚本改成可切换 `local/oss` 两种模式，避免报告与生产行为分叉。
