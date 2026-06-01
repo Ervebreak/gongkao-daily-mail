@@ -1781,9 +1781,11 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
     from candidate_store import load_candidate
     from daily_archive import archive_daily_content
     from email_sender import get_effective_recipients, send_email
+    from email_renderer import render_email_html, render_plain_text
     from harness_metrics import append_morning_metrics
     from history import append_records
     from policy_coordinate_usage_history import append_policy_coordinate_usage
+    from pre_send_cleanliness import pre_send_cleanliness_guard
 
     settings.output_dir.mkdir(parents=True, exist_ok=True)
     logger = RunLogger(settings.output_dir)
@@ -1837,11 +1839,77 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
         return {"status": "blocked", "reason": "candidate_date_mismatch", "delivery_date": delivery_date, "candidate_date": candidate_date, "log": str(log_path)}
 
     if candidate.get("candidate_type") != "weekly_pdf":
+        brief = candidate.get("brief") if isinstance(candidate.get("brief"), dict) else {}
+        subject = str(candidate.get("subject") or brief.get("email_subject") or f"公考晨读 {delivery_date}")
+        if not subject.startswith(settings.subject_prefix):
+            subject = f"{settings.subject_prefix}{subject}"
+        plain_text = render_plain_text(brief)
+        html_body = render_email_html(brief)
+        guarded, cleanliness_quality = pre_send_cleanliness_guard(
+            {
+                "brief": brief,
+                "subject": subject,
+                "plain_text": plain_text,
+                "html_body": html_body,
+                "quality": candidate.get("quality") or {},
+            }
+        )
+        candidate.update(
+            {
+                "brief": guarded.get("brief") if isinstance(guarded.get("brief"), dict) else brief,
+                "subject": str(guarded.get("subject") or subject),
+                "plain_text": str(guarded.get("plain_text") or plain_text),
+                "html_body": str(guarded.get("html_body") or html_body),
+                "send_time_cleanliness": cleanliness_quality,
+            }
+        )
         logger.info(
-            "candidate send using stored quality gate",
+            "candidate send hydrated from brief",
+            plain_text_chars=len(str(candidate.get("plain_text") or "")),
+            html_body_chars=len(str(candidate.get("html_body") or "")),
+            cleanliness_status=cleanliness_quality.get("status"),
+            cleanliness_unresolved_count=len(cleanliness_quality.get("unresolved_issues") or []),
+        )
+        unresolved_blocking = [
+            issue
+            for issue in (cleanliness_quality.get("unresolved_issues") or [])
+            if isinstance(issue, dict)
+            and (issue.get("blocking") or str(issue.get("severity") or "").lower() == "high")
+        ]
+        if unresolved_blocking:
+            logger.info(
+                "candidate send blocked",
+                reason="send_time_cleanliness_fail",
+                cleanliness_status=cleanliness_quality.get("status"),
+                unresolved_issues=unresolved_blocking,
+            )
+            try:
+                metrics_result = append_morning_metrics(
+                    delivery_date=delivery_date,
+                    test_invocation=test_invocation,
+                    status="blocked",
+                    reason="send_time_cleanliness_fail",
+                    candidate=candidate,
+                    load_meta=load_meta,
+                )
+                logger.info("harness metrics", **metrics_result)
+            except Exception as exc:
+                logger.info("harness metrics failed", error=str(exc))
+            log_path = logger.save("latest_candidate_send.log")
+            logger.dump_to_stdout()
+            return {
+                "status": "blocked",
+                "reason": "send_time_cleanliness_fail",
+                "delivery_date": delivery_date,
+                "cleanliness_quality": cleanliness_quality,
+                "log": str(log_path),
+            }
+    else:
+        logger.info(
+            "weekly pdf candidate send using stored quality gate",
             quality_gate=quality_gate,
             candidate_recheck_skipped=True,
-            reason="trust_nightly_candidate_quality_gate",
+            reason="weekly_pdf_candidate",
         )
     if quality_gate.get("overall") != "ok":
         logger.info("candidate send blocked", reason="quality_gate_fail", quality_gate=quality_gate)
