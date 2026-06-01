@@ -102,6 +102,34 @@ def _get_oss_json(object_key: str) -> tuple[dict[str, Any] | None, dict[str, Any
     return data, meta
 
 
+def normalize_candidate_quality_state(payload: dict[str, Any]) -> dict[str, Any]:
+    """Keep top-level quality_gate and nested quality.gate synchronized.
+
+    Stage 4 invariant: candidate files should expose one final gate state in both
+    places because different callers read different keys. This function does not
+    change any quality verdict; it only normalizes storage so the saved JSON,
+    quality card, and morning send path cannot disagree due to stale duplicate
+    gate fields.
+    """
+    normalized = dict(payload or {})
+    quality = normalized.get("quality") if isinstance(normalized.get("quality"), dict) else {}
+    quality = dict(quality)
+    top_gate = normalized.get("quality_gate") if isinstance(normalized.get("quality_gate"), dict) else {}
+    nested_gate = quality.get("gate") if isinstance(quality.get("gate"), dict) else {}
+    gate = dict(top_gate or nested_gate or {})
+    if gate:
+        quality["gate"] = gate
+        normalized["quality_gate"] = gate
+    normalized["quality"] = quality
+    normalized["quality_state_consistency"] = {
+        "quality_gate_synced": bool(gate) and quality.get("gate") == normalized.get("quality_gate"),
+        "quality_gate_overall": gate.get("overall") if gate else "",
+        "quality_gate_p0_count": gate.get("p0_count") if gate else None,
+        "final_quality_modules": sorted((quality.get("final") or {}).keys()) if isinstance(quality.get("final"), dict) else [],
+    }
+    return normalized
+
+
 def build_candidate_payload(
     *,
     delivery_date: str,
@@ -114,7 +142,7 @@ def build_candidate_payload(
     article_stats: dict[str, Any],
     final_selection: dict[str, Any],
 ) -> dict[str, Any]:
-    return {
+    payload = {
         "schema_version": 1,
         "generated_at": dt.datetime.now(TZ).isoformat(),
         "delivery_date": delivery_date,
@@ -127,9 +155,11 @@ def build_candidate_payload(
         "article_stats": article_stats,
         "final_selection": final_selection,
     }
+    return normalize_candidate_quality_state(payload)
 
 
 def save_candidate(payload: dict[str, Any]) -> dict[str, Any]:
+    payload = normalize_candidate_quality_state(payload)
     delivery_date = str(payload.get("delivery_date") or "")
     if not delivery_date:
         raise ValueError("delivery_date is required.")
