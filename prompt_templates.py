@@ -5,6 +5,7 @@ from pathlib import Path
 
 from article_filter import Article
 from config import settings
+from stage3_structured_constraints import STRUCTURED_FIELD_RULES_V1
 
 
 SYSTEM_PROMPT = """
@@ -466,6 +467,8 @@ def build_final_generation_prompt(
 - 今日精读、文章框架图、今日一题、今日可带走必须分工清楚，不能原句重复。
 
 {RUNTIME_PROMPT_RULES}
+
+{STRUCTURED_FIELD_RULES_V1}
 
 文章框架图要求：
 1. 先判断文章类型：政策解读类、数字治理类、政策评论类、现象分析类、案例经验类、精神价值类、产业发展类、生态治理类、基层治理类、公共服务类、其他。

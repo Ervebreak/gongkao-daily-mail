@@ -23,6 +23,7 @@ from prompt_templates import (
     DAILY_QUESTION_RULES_V1,
     TAKEAWAY_RULES_V1,
     GLOBAL_RULES_V1,
+    STRUCTURED_FIELD_RULES_V1,
     build_final_generation_prompt,
     build_selection_prompt,
     build_user_prompt,
@@ -492,6 +493,8 @@ def build_daily_question_rewrite_prompt(brief: dict[str, Any], article: Article 
 
 {DAILY_QUESTION_RULES_V1}
 
+{STRUCTURED_FIELD_RULES_V1}
+
 你刚刚生成的今日一题存在这些问题：
 {json.dumps(payload['quality_issues'], ensure_ascii=False)}
 
@@ -516,6 +519,8 @@ def build_takeaway_rewrite_prompt(brief: dict[str, Any], article: Article | None
 {GLOBAL_RULES_V1}
 
 {TAKEAWAY_RULES_V1}
+
+{STRUCTURED_FIELD_RULES_V1}
 
 你刚刚生成的今日可带走存在这些问题：
 {json.dumps(payload['quality_issues'], ensure_ascii=False)}
@@ -543,6 +548,8 @@ def build_takeaway_module_prompt(brief: dict[str, Any], article: Article | None,
 {GLOBAL_RULES_V1}
 
 {TAKEAWAY_RULES_V1}
+
+{STRUCTURED_FIELD_RULES_V1}
 
 模块目标：
 1. today_takeaway 是最终记忆卡，只输出关键词、1条安全常识、2条必备金句和1个可迁移框架。
@@ -591,6 +598,8 @@ def build_quick_reads_module_prompt(brief: dict[str, Any], articles: list[Articl
 只输出合法 JSON，不要输出解释。
 
 {GLOBAL_RULES_V1}
+
+{STRUCTURED_FIELD_RULES_V1}
 
 模块目标：
 1. quick_reads 最多2篇，必须来自输入 quick_read_articles 或 current_quick_reads，不得虚构标题、来源、日期、链接。
