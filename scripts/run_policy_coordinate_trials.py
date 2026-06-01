@@ -515,12 +515,14 @@ def build_report_markdown(
         "`matched_policy_id` 必须能在政策库中找到；`matched_qiushi_quote_id` 如存在必须能在《求是》表达库中找到。",
         "不得出现半截句、空泛转译、与今日精读/今日可带走/今日一题大段重复。",
         "《求是》权威论述不合格时自动删除；政策原文不合格时尝试重匹配，仍失败则隐藏整个模块。",
+        "高危政策坐标错误已并入 P0 门禁，命中关键 code 会阻断正式发送。",
     ]
     risks = [
-        "当前知识库加载器仍是本地文件读取，`KNOWLEDGE_BASE_MODE=oss` 只完成了配置预留，尚未实现 OSS 拉取逻辑。",
-        "近 14 天去重目前依赖运行时历史文件；正式去重效果取决于生产环境是否持续保留 `data/policy_coordinate_usage_history.jsonl`。",
+        "OSS 读取目前只预留了配置项，`KNOWLEDGE_BASE_MODE=oss` 和 `KNOWLEDGE_OSS_PREFIX` 还没有接上真实下载逻辑。",
+        "真实文章的匹配效果仍需继续观察，当前三组试跑只能证明链路、门禁和渲染可用。",
+        "后续需要根据真实邮件结果继续微调匹配权重、去重策略和 policy_coordinate prompt。",
+        "近 14 天去重目前依赖运行时历史文件；正式效果取决于生产环境是否持续保留 `data/policy_coordinate_usage_history.jsonl`。",
         "不同主题下《求是》权威论述的可召回性不完全均衡，部分样例可能只展示政策原文而不展示《求是》论述。",
-        "试跑使用的是模拟文章输入，能验证链路和质量门槛，但不等同于真实抓取文章的最终选题表现。",
     ]
 
     checks_lines: list[str] = []
@@ -561,6 +563,7 @@ def build_report_markdown(
             f"- 额外重复探测主题：`{dedupe_probe.get('theme')}`。",
             f"- 首次命中政策 ID：`{dedupe_probe.get('first_policy_id')}`；重复探测命中政策 ID：`{dedupe_probe.get('probe_policy_id')}`。",
             f"- 去重调试信息：`selected_repeat_notes={json.dumps(dedupe_probe.get('selected_repeat_notes') or {}, ensure_ascii=False)}`。",
+            "- nightly candidate 生成不会写正式 usage history；正式晨间发送成功后才会追加 `data/policy_coordinate_usage_history.jsonl`。",
             "",
             "## 9. 目前还有哪些风险",
             *[f"- {item}" for item in risks],

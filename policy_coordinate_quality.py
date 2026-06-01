@@ -261,6 +261,10 @@ POLICY_CRITICAL_CODES = {
     "qiushi_rendered_in_policy_line",
     "matched_policy_id_missing",
     "matched_policy_id_not_found",
+    "authoritative_source_missing",
+    "vague_leader_source",
+    "policy_quote_incomplete",
+    "authoritative_quote_incomplete",
 }
 
 

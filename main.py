@@ -302,6 +302,18 @@ def build_quality_gate(
         "daily_question_missing_scene",
         "daily_question_missing_conflict",
         "daily_question_missing_task",
+        "policy_quote_missing",
+        "policy_quote_too_long",
+        "policy_source_missing",
+        "qiushi_used_as_policy_source",
+        "qiushi_rendered_as_policy_quote",
+        "qiushi_rendered_in_policy_line",
+        "matched_policy_id_missing",
+        "matched_policy_id_not_found",
+        "authoritative_source_missing",
+        "vague_leader_source",
+        "policy_quote_incomplete",
+        "authoritative_quote_incomplete",
     }
     p0_issues: list[dict[str, str]] = []
     modules = (
@@ -704,6 +716,52 @@ def build_policy_coordinate_usage_record(brief: dict[str, Any], today: str) -> d
     }
 
 
+def normalize_exam_transfer(*segments: Any) -> str:
+    candidates: list[str] = []
+    for value in segments:
+        text = _policy_text(value)
+        if not text:
+            continue
+        text = text.replace("。、", "；").replace("，、", "；").replace("、，", "；")
+        text = text.replace("，；", "；").replace("；，", "；")
+        text = text.replace("；；", "；")
+        text = text.strip("；，。 ")
+        if text and text not in candidates:
+            candidates.append(text)
+
+    if not candidates:
+        return ""
+
+    scenario_lines = [text for text in candidates if text.startswith("遇到") and "类题目" in text]
+    if scenario_lines:
+        def _scenario_score(text: str) -> tuple[int, int]:
+            specific_markers = text.count("、") + text.count("：") + text.count("；")
+            return (specific_markers, len(text))
+
+        base = sorted(scenario_lines, key=_scenario_score, reverse=True)[0]
+    else:
+        base = max(candidates, key=len)
+    parts = [part.strip("；，。 ") for part in base.split("；") if part.strip("；，。 ")]
+    normalized = "；".join(parts).strip("；，。 ")
+    if not normalized:
+        return ""
+    if len(normalized) > 140:
+        normalized = _clip_policy_sentence(normalized, 140) or normalized[:140].rstrip("；，。 ")
+    if len(normalized) < 80 and len(candidates) > 1:
+        backup = max(candidates, key=len)
+        if len(backup) > len(normalized):
+            normalized = _clip_policy_sentence(backup, 140) or backup[:140].rstrip("；，。 ")
+    normalized = normalized.strip("；，。 ")
+    if len(normalized) < 80:
+        supplement = "答题时既要点明政策依据，也要落到平台搭建、机制协同和闭环落实等具体抓手上"
+        if "答题时" not in normalized:
+            normalized = f"{normalized}；{supplement}".strip("；，。 ")
+    normalized = normalized.strip("；，。 ")
+    if normalized and not normalized.endswith(("。", "！", "？")):
+        normalized += "。"
+    return normalized
+
+
 def _policy_transfer_has_specific_angles(text: str) -> bool:
     keywords = ["平台", "机制", "诉求", "协同", "闭环", "服务", "监管", "数字", "人才", "就业", "民生", "治理", "落实", "反馈", "转化", "场景", "要素", "创新"]
     combined = _policy_text(text)
@@ -816,7 +874,12 @@ def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = No
             "authoritative_quote": authoritative_quote,
             "authoritative_source": authoritative_source,
             "article_connection": _policy_article_connection(featured, policy, _policy_text(brief.get("today_theme"))),
-            "exam_transfer": _policy_exam_transfer(featured, policy, question),
+            "exam_transfer": normalize_exam_transfer(
+                _policy_exam_transfer(featured, policy, question),
+                _policy_text(policy.get("exam_usage")),
+                _policy_text(featured.get("exam_use")),
+                _policy_exam_transfer_fallback(featured, question),
+            ),
             "answer_angles": _policy_answer_angles(policy, featured, question),
             "matched_policy_id": _policy_text(policy.get("policy_id")),
             "matched_qiushi_quote_id": _policy_text(quote.get("quote_id")) if authoritative_quote else "",
@@ -827,7 +890,7 @@ def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = No
         }
         exam_transfer_text = _policy_text(result.get("exam_transfer"))
         if exam_transfer_text.startswith("适用于") or not _policy_transfer_has_specific_angles(exam_transfer_text):
-            result["exam_transfer"] = _policy_exam_transfer_fallback(featured, question)
+            result["exam_transfer"] = normalize_exam_transfer(_policy_exam_transfer_fallback(featured, question))
         if authoritative_quote and not authoritative_source:
             result["authoritative_quote"] = ""
             result["matched_qiushi_quote_id"] = ""
@@ -1509,6 +1572,7 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
     from email_sender import get_effective_recipients, send_email
     from harness_metrics import append_morning_metrics
     from history import append_records
+    from policy_coordinate_usage_history import append_policy_coordinate_usage
 
     settings.output_dir.mkdir(parents=True, exist_ok=True)
     logger = RunLogger(settings.output_dir)
@@ -1623,6 +1687,11 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
             "daily_archive_saved": False,
             "daily_archive_reason": "candidate send test mode.",
         }
+        policy_usage_history_result = {
+            "usage_history_write_ok": False,
+            "usage_history_appended": 0,
+            "usage_history_skip_reason": "candidate send test mode.",
+        }
     elif send_result and int(send_result.get("success_count", 0)) > 0:
         history_result = append_records(settings.history_path, build_history_records(brief, delivery_date))
         archive_result = archive_daily_content(
@@ -1633,6 +1702,15 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
             subject,
             send_success_count=int(send_result.get("success_count", 0)),
         )
+        policy_usage_record = build_policy_coordinate_usage_record(brief, delivery_date)
+        if policy_usage_record:
+            policy_usage_history_result = append_policy_coordinate_usage(policy_usage_record)
+        else:
+            policy_usage_history_result = {
+                "usage_history_write_ok": False,
+                "usage_history_appended": 0,
+                "usage_history_skip_reason": "candidate send success but policy_coordinate missing displayable payload.",
+            }
     else:
         history_result = {
             "history_write_ok": False,
@@ -1645,8 +1723,14 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
             "daily_archive_saved": False,
             "daily_archive_reason": "candidate email not sent.",
         }
+        policy_usage_history_result = {
+            "usage_history_write_ok": False,
+            "usage_history_appended": 0,
+            "usage_history_skip_reason": "candidate email not sent.",
+        }
     logger.info("candidate sent history updated", **history_result)
     logger.info("candidate daily archive", **archive_result)
+    logger.info("candidate policy coordinate usage history", **policy_usage_history_result)
     try:
         metrics_result = append_morning_metrics(
             delivery_date=delivery_date,
@@ -1672,6 +1756,7 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
         "delivery_date": delivery_date,
         "sent": bool(send_result and int(send_result.get("success_count", 0)) > 0),
         "send_result": send_result,
+        "policy_coordinate_usage_history": policy_usage_history_result,
         "output_dir": str(settings.output_dir),
         "log": str(log_path),
     }
