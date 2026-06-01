@@ -5,60 +5,16 @@ from typing import Any
 
 
 GENERIC_KEYWORDS = {
-    "高质量发展",
-    "基层治理",
-    "民生保障",
-    "科技创新",
-    "中国式现代化",
-    "新质生产力",
-    "社会治理",
+    "高质量发展", "基层治理", "民生保障", "科技创新", "中国式现代化", "新质生产力", "社会治理",
 }
-
 TRUNCATION_MARKERS = ["……", "...", "…", ".."]
-GOLDEN_LABEL_LEAK_MARKERS = (
-    "可用表达：",
-    "换成考场话：",
-    "必备金句：",
-    "参考句式：",
-)
+GOLDEN_LABEL_LEAK_MARKERS = ("可用表达：", "换成考场话：", "必备金句：", "参考句式：")
 GENERIC_SCENARIOS = {"适用场景", "申论", "面试", "公基", "综合分析", "对策题"}
+TRUNCATED_TAILS = ("最", "畅通维", "清退四", "好人条", "探索收", "制度保", "信息透明")
 DANGLING_ENDINGS = (
-    "通过",
-    "由于",
-    "为了",
-    "围绕",
-    "依靠",
-    "立足",
-    "推动",
-    "促进",
-    "实现",
-    "提升",
-    "强化",
-    "完善",
-    "构建",
-    "形成",
-    "建立",
-    "转向",
-    "转为",
-    "赋能",
-    "让",
-    "把",
-    "更需",
-    "更要",
-    "成为",
-    "重塑",
-    "补齐",
-    "配套",
-    "监",
-    "重",
-    "与",
-    "和",
-    "及",
-    "并",
-    "而",
-    "在",
-    "的",
-    "为",
+    "通过", "由于", "为了", "围绕", "依靠", "立足", "推动", "促进", "实现", "提升", "强化", "完善", "构建", "形成",
+    "建立", "转向", "转为", "赋能", "让", "把", "更需", "更要", "成为", "重塑", "补齐", "配套", "提出从",
+    "监", "重", "与", "和", "及", "并", "而", "在", "的", "为",
 )
 
 
@@ -94,6 +50,10 @@ def _gold_scenario(item: Any) -> str:
     return ""
 
 
+def _without_sentence_punctuation(text: str) -> str:
+    return _text(text).rstrip("。！？；.!?」』）】》").strip()
+
+
 def _last_clause(text: str) -> str:
     parts = [part.strip() for part in re.split(r"[，,；;。！？]", text) if part.strip()]
     return parts[-1] if parts else text.strip()
@@ -107,12 +67,17 @@ def _looks_incomplete(text: str) -> bool:
         return True
     if len(value) in {35, 48, 50} and not value.endswith(("。", "！", "？", "；")):
         return True
-    if value.endswith(DANGLING_ENDINGS):
+    stripped = _without_sentence_punctuation(value)
+    if stripped.endswith(TRUNCATED_TAILS):
+        return True
+    if stripped.endswith(DANGLING_ENDINGS):
         return True
     clause = _last_clause(value)
     if clause.startswith(("让", "把")) and len(clause) <= 10:
         return True
-    if clause.startswith(("通过", "依靠", "围绕", "立足")) and len(clause) <= 14:
+    if clause.startswith(("通过", "依靠", "围绕", "立足", "提出从")) and len(clause) <= 18:
+        return True
+    if value.endswith(("，", "、", "：", "；", ",", ":", ";")):
         return True
     return False
 
