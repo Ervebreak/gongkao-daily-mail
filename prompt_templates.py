@@ -226,7 +226,71 @@ def _clip_text(text: str, max_chars: int) -> str:
     if len(text) <= max_chars:
         return text
     # 给模型的候选正文做硬截断，不加省略号，避免污染最终邮件展示。
-    return text[:max_chars]
+    return _clip_to_sentence_boundary(text, max_chars)
+
+
+_SENTENCE_BOUNDARIES = "。！？；.!?;"
+_WEAK_TRAILING_CHARS = "，、：；,、:;([{<\"'“‘`+-/\\"
+_WEAK_TRAILING_WORDS = (
+    "以及",
+    "并且",
+    "或者",
+    "但是",
+    "如果",
+    "为了",
+    "通过",
+    "根据",
+    "对于",
+    "围绕",
+    "和",
+    "与",
+    "及",
+    "或",
+    "并",
+    "且",
+    "但",
+    "而",
+    "把",
+    "将",
+    "向",
+    "在",
+    "为",
+    "就",
+    "来",
+)
+
+
+def _is_ascii_word_char(char: str) -> bool:
+    return char.isascii() and (char.isalnum() or char == "_")
+
+
+def _trim_incomplete_tail(text: str, next_char: str = "") -> str:
+    clipped = text.rstrip()
+    while clipped and clipped[-1] in _WEAK_TRAILING_CHARS:
+        clipped = clipped[:-1].rstrip()
+    while clipped and any(clipped.endswith(word) for word in _WEAK_TRAILING_WORDS):
+        matched = next(word for word in _WEAK_TRAILING_WORDS if clipped.endswith(word))
+        clipped = clipped[: -len(matched)].rstrip()
+    if clipped and next_char and _is_ascii_word_char(clipped[-1]) and _is_ascii_word_char(next_char):
+        while clipped and _is_ascii_word_char(clipped[-1]):
+            clipped = clipped[:-1]
+        clipped = clipped.rstrip()
+    return clipped
+
+
+def _clip_to_sentence_boundary(text: str, max_chars: int) -> str:
+    text = (text or "").strip()
+    if len(text) <= max_chars:
+        return text
+    candidate = text[:max_chars].rstrip()
+    sentence_end = max((candidate.rfind(boundary) for boundary in _SENTENCE_BOUNDARIES), default=-1)
+    if sentence_end >= 0:
+        clipped = candidate[: sentence_end + 1].rstrip()
+        if clipped:
+            return clipped
+    next_char = text[max_chars] if max_chars < len(text) else ""
+    clipped = _trim_incomplete_tail(candidate, next_char)
+    return clipped or candidate
 
 
 def compact_article(article: Article) -> dict[str, object]:
@@ -257,8 +321,10 @@ def _clip_paragraphs_by_total_chars(paragraphs: list[str], max_chars: int) -> li
         if remaining <= 0:
             break
         if len(para) > remaining:
-            cleaned.append(para[:remaining])
-            used += remaining
+            clipped = _clip_to_sentence_boundary(para, remaining)
+            if clipped:
+                cleaned.append(clipped)
+                used += len(clipped)
             break
         cleaned.append(para)
         used += len(para)
