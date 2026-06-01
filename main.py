@@ -688,6 +688,22 @@ def _policy_answer_angles(policy: dict[str, Any], featured: dict[str, Any], ques
     return result[:6]
 
 
+def build_policy_coordinate_usage_record(brief: dict[str, Any], today: str) -> dict[str, Any] | None:
+    coordinate = brief.get("policy_coordinate") if isinstance(brief.get("policy_coordinate"), dict) else {}
+    if not coordinate or not coordinate.get("policy_quote") or not coordinate.get("policy_source"):
+        return None
+    return {
+        "date": today,
+        "theme": _policy_text(coordinate.get("theme")),
+        "matched_policy_id": _policy_text(coordinate.get("matched_policy_id")),
+        "matched_qiushi_quote_id": _policy_text(coordinate.get("matched_qiushi_quote_id")),
+        "matched_qiushi_article_id": _policy_text(coordinate.get("matched_qiushi_article_id")),
+        "matched_framework_id": _policy_text(coordinate.get("matched_framework_id")),
+        "policy_quote": _policy_text(coordinate.get("policy_quote")),
+        "authoritative_quote": _policy_text(coordinate.get("authoritative_quote")),
+    }
+
+
 def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = None) -> dict[str, Any]:
     empty = {
         "theme": "",
@@ -710,10 +726,23 @@ def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = No
     try:
         from knowledge_base_loader import load_qiushi_article_index
         from policy_coordinate_matcher import match_policy_coordinate_candidates
+        from policy_coordinate_usage_history import (
+            load_policy_coordinate_usage_history,
+            recent_policy_coordinate_usage,
+        )
 
         featured = brief.get("featured_article") if isinstance(brief.get("featured_article"), dict) else {}
         question = brief.get("daily_question") if isinstance(brief.get("daily_question"), dict) else {}
         takeaway = brief.get("today_takeaway") if isinstance(brief.get("today_takeaway"), dict) else {}
+        usage_history, usage_meta = load_policy_coordinate_usage_history()
+        recent_usage = recent_policy_coordinate_usage(usage_history, days=14)
+        if logger and usage_meta.get("usage_history_warning"):
+            logger.info(
+                "policy coordinate usage history warning",
+                warning=usage_meta.get("usage_history_warning"),
+                usage_history_path=usage_meta.get("usage_history_path"),
+                usage_history_bad_lines=usage_meta.get("usage_history_bad_lines"),
+            )
         article_text = " ".join(
             _policy_text(featured.get(key))
             for key in [
@@ -747,6 +776,7 @@ def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = No
             sub_themes=_policy_list(takeaway.get("keywords")) + _policy_list(featured.get("theme")),
             keywords=keywords,
             exam_scenarios=exam_scenarios,
+            recent_usage=recent_usage,
         ).get("matched_policy_coordinate_candidates", {})
         policy = matches.get("best_policy") if isinstance(matches.get("best_policy"), dict) else {}
         policy_quote = _choose_policy_quote(policy)
@@ -761,6 +791,8 @@ def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = No
         authoritative_source = _authoritative_source(quote, article_index) if authoritative_quote else ""
         framework = matches.get("best_framework") if isinstance(matches.get("best_framework"), dict) else {}
         chunks = matches.get("matched_chunks") if isinstance(matches.get("matched_chunks"), list) else []
+        debug_scores = matches.get("debug_scores") if isinstance(matches.get("debug_scores"), dict) else {}
+        usage_debug = debug_scores.get("usage_history") if isinstance(debug_scores.get("usage_history"), dict) else {}
         result = {
             **empty,
             "theme": _policy_text(policy.get("theme_level_1") or featured.get("theme") or brief.get("today_theme")),
@@ -794,6 +826,13 @@ def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = No
                 matched_chunk_ids=result["matched_chunk_ids"],
                 source_type=result["source_type"],
             )
+            if usage_debug.get("selected_repeat_notes"):
+                logger.info(
+                    "policy coordinate usage dedup",
+                    usage_history_path=usage_meta.get("usage_history_path"),
+                    recent_usage_count=len(recent_usage),
+                    selected_repeat_notes=usage_debug.get("selected_repeat_notes"),
+                )
         return result
     except Exception as exc:
         if logger:
@@ -2350,6 +2389,44 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
         "quality_gate": quality_gate,
     })
     (settings.output_dir / "latest_quality_card.md").write_text(quality_card_markdown, encoding="utf-8")
+    policy_coordinate_quality = quality_map.get("policy_coordinate", {}) if isinstance(quality_map.get("policy_coordinate"), dict) else {}
+    if candidate_invocation:
+        policy_usage_history_result = {
+            "usage_history_write_ok": False,
+            "usage_history_appended": 0,
+            "usage_history_skip_reason": "nightly candidate mode; usage history tracks final non-candidate outputs only.",
+        }
+    elif test_invocation:
+        policy_usage_history_result = {
+            "usage_history_write_ok": False,
+            "usage_history_appended": 0,
+            "usage_history_skip_reason": "manual test mode; skip policy coordinate usage history.",
+        }
+    elif quality_blocked:
+        policy_usage_history_result = {
+            "usage_history_write_ok": False,
+            "usage_history_appended": 0,
+            "usage_history_skip_reason": "quality gate blocked; skip policy coordinate usage history.",
+        }
+    elif not policy_coordinate_quality.get("ok"):
+        policy_usage_history_result = {
+            "usage_history_write_ok": False,
+            "usage_history_appended": 0,
+            "usage_history_skip_reason": "policy_coordinate quality not ok; skip usage history append.",
+        }
+    else:
+        policy_usage_record = build_policy_coordinate_usage_record(brief, today)
+        if not policy_usage_record:
+            policy_usage_history_result = {
+                "usage_history_write_ok": False,
+                "usage_history_appended": 0,
+                "usage_history_skip_reason": "policy_coordinate missing displayable payload.",
+            }
+        else:
+            from policy_coordinate_usage_history import append_policy_coordinate_usage
+
+            policy_usage_history_result = append_policy_coordinate_usage(policy_usage_record)
+    logger.info("policy coordinate usage history", **policy_usage_history_result)
     candidate_save_result: dict[str, Any] | None = None
     admin_report_result: dict[str, Any] | None = None
     blocked_archive_result: dict[str, Any] | None = None
@@ -2564,6 +2641,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
         "subject": subject,
         "candidate_saved": bool(candidate_save_result and candidate_save_result.get("candidate_saved")),
         "sent": bool(send_result and int(send_result.get("success_count", 0)) > 0),
+        "policy_coordinate_usage_history": policy_usage_history_result,
         "output_dir": str(settings.output_dir),
         "log": str(log_path),
     }

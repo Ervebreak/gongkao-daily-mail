@@ -748,3 +748,27 @@ python -m py_compile prompt_templates.py question_quality.py email_renderer.py
 ## 历史改动
 
 暂无更早人工整理记录。后续如需追溯更早变更，请查看 Git commit history。
+### 2026-06-01｜政策坐标使用历史与 14 天去重
+**改动原因**
+
+“今日政策坐标”已经接入 JSON、渲染和质检，需要再加一层“使用历史 + 近 14 天去重”，避免连续多天重复使用同一政策原文、同一条《求是》表达或同一专题框架。
+**已改文件**
+
+- `policy_coordinate_usage_history.py`
+- `policy_coordinate_matcher.py`
+- `main.py`
+- `scripts/check_policy_coordinate_usage_history.py`
+- `CHANGELOG_HARNESS.md`
+
+**最新版行为**
+
+- 新增 `data/policy_coordinate_usage_history.jsonl` 的独立 JSONL 历史管理模块，缺文件时自动使用空历史，坏行会跳过并返回 warning，不会中断主流程。
+- `match_policy_coordinate_candidates(...)` 新增 `recent_usage` 参数：近 14 天内重复 `matched_policy_id` / `matched_qiushi_quote_id` 会强降权，同一 `matched_framework_id` 连续使用会降权，前两次主题相同时也会避免第 3 天继续用同一主题。
+- 如果没有其他合适材料，允许低优先级重复，但会在 `debug_scores.usage_history.selected_repeat_notes` 和运行日志中说明为什么还是选了重复项。
+- 新增 `build_policy_coordinate_usage_record(...)`，在整封邮件最终通过质检后，单独写入 `policy_coordinate` 使用历史，不影响 `sent_history.json` 原有逻辑。
+- `nightly candidate`、手动测试和被 quality gate 阻断的运行会显示 skip reason，不写入此次去重历史。
+- JSONL 写入失败时只记日志 warning，不会中断生成、发送或其他归档链路。
+**后续注意事项**
+
+1. 当前 usage history 故意不和 `sent_history.json` 共享存储，后续如需 OSS 化，应单独设计新的存储模式，不要直接搬用 `sent_history` 逻辑。
+2. 目前去重历史只针对非 candidate / 非测试 / 非整体阻断运行进行记录，如果后续希望让 preview 也参与去重，应单独评估是否影响正式晨发。
