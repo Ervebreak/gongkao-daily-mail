@@ -19,6 +19,28 @@ python scripts\weekly_quality_review.py --metrics output\harness_metrics.jsonl
 main.handler
 ```
 
+## 部署打包
+
+部署包统一命名为：
+
+```text
+function.zip
+```
+
+Windows 本地推荐执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build_fc_package.ps1
+```
+
+Linux / WSL / Git Bash 可执行：
+
+```bash
+bash scripts/build_fc_package.sh
+```
+
+生成 `function.zip` 后上传到阿里云函数计算。详细步骤见 `docs/deploy_aliyun_fc.md`。
+
 ## 必填环境变量
 
 ```text
@@ -41,6 +63,9 @@ OSS_OBJECT_KEY=gongkao-morning-mailer/sent_history.json
 BLOCK_TITLES=
 BLOCK_URLS=
 QWEN_MODEL=qwen-plus-2025-07-14
+KNOWLEDGE_BASE_MODE=local
+KNOWLEDGE_BASE_DIR=knowledge_base
+KNOWLEDGE_OSS_PREFIX=
 ```
 
 多个收件人用英文逗号分隔。为兼容旧版，也支持 `SMTP_PASS` 和 `MAIL_TO`。
@@ -54,6 +79,36 @@ QWEN_MODEL=qwen-plus-2025-07-14
 如需让历史去重跨 FC 冷启动稳定生效，把 `HISTORY_STORAGE` 改为 `oss`，并填写 `OSS_ENDPOINT`、`OSS_BUCKET`、`OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`OSS_OBJECT_KEY`。
 
 `ATTACH_DAILY_PDF=false` 已预留 PDF/打印版开关，本版本不会默认添加附件。
+
+## 知识库目录配置
+
+本仓库预置 `knowledge_base/`，用于存放政策原文语库和《求是》专题知识库。当前仅接入目录与配置，不会改变每日 JSON 生成、HTML 渲染、发送或质量门禁逻辑。
+
+默认本地读取配置：
+
+```text
+KNOWLEDGE_BASE_MODE=local
+KNOWLEDGE_BASE_DIR=knowledge_base
+KNOWLEDGE_OSS_PREFIX=
+```
+
+当前目录结构：
+
+```text
+knowledge_base/
+  policy_corpus/
+    policy_statements_core.jsonl
+    policy_statements.jsonl
+  topic_knowledge/
+    article_index.jsonl
+    article_chunks.jsonl
+    authoritative_quotes_core.jsonl
+    authoritative_quotes_candidates.jsonl
+    topic_frameworks.jsonl
+    raw_articles/qiushi/
+```
+
+后续如把知识库上传 OSS，可将 `KNOWLEDGE_BASE_MODE` 改为 `oss`，并把 `KNOWLEDGE_OSS_PREFIX` 设置为 bucket 内对象前缀；`OSS_ENDPOINT`、`OSS_BUCKET` 和密钥仍使用现有 OSS 配置项。
 
 ## 夜间候选 + 早晨发送
 
@@ -182,7 +237,7 @@ python main.py
 
 1. 运行环境选 Python 3.10。
 2. 请求处理程序填写 `main.handler`。
-3. 上传 `gongkao-morning-mailer.zip`。
+3. 上传 `function.zip`。
 4. 在“环境变量”里填写 `.env.example` 对应变量，不要把密钥写进代码。
 5. 创建定时触发器，每天 08:00，北京时间。
 

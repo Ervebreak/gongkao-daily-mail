@@ -49,4 +49,5 @@ certifi/
 charset_normalizer/
 idna/
 soupsieve/
+chardet/
 *.dist-info/

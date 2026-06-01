@@ -28,6 +28,7 @@ def _module_rows(quality: dict[str, Any]) -> str:
         "today_takeaway": "今日可带走",
         "brief_cleanliness": "整封邮件清洁度",
         "content_quality": "内容质量审稿",
+        "policy_coordinate": "今日政策坐标",
     }
     rows: list[str] = []
     for key, label in labels.items():
@@ -139,6 +140,7 @@ def _module_rows(quality: dict[str, Any]) -> str:
         "expression_quality": "表达质量",
         "content_risk": "内容风险小修",
         "content_quality": "内容质量审稿",
+        "policy_coordinate": "今日政策坐标",
     }
     rows: list[str] = []
     for key, label in labels.items():

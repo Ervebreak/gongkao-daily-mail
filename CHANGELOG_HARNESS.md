@@ -35,6 +35,373 @@
 
 ## 最新改动
 
+### 2026-05-31｜新增 policy_coordinate 质检与降级
+
+**改动原因**
+
+“今日政策坐标”已进入 JSON 和邮件渲染，需要在最终质量复检中校验政策原文、来源、转译、文章落点、考场迁移和《求是》权威论述，避免错误政策引用或空泛表达直接展示。
+
+**已改文件**
+
+- `policy_coordinate_quality.py`
+- `main.py`
+- `admin_report.py`
+- `CHANGELOG_HARNESS.md`
+
+**最新版本行为**
+
+- 新增 `evaluate_policy_coordinate_quality(...)`，检查政策原文、政策来源、政策转译、文章落点、考场迁移、匹配 ID、半截句、空泛表达、跨模块重复和渲染误放。
+- 最终 `evaluate_all_quality(...)` 已接入 `policy_coordinate` 质检，`quality_payload["final"]` 和质量卡会展示最终剩余问题。
+- 渲染前会确保 `brief["policy_coordinate"]` 已生成，修正此前“字段写入晚于渲染”的时序问题。
+- 如果《求是》权威论述不合格，会删除权威论述，仅保留政策原文、文章落点、考场迁移。
+- 如果政策原文或来源不合格，会尝试重新匹配；仍不合格则隐藏政策坐标模块，并在质量结果中记录降级原因。
+- `policy_coordinate` 质检不进入 P0 阻断码，不会因为该模块影响其他模块正常生成或发送。
+
+**后续注意事项**
+
+1. 后续如需把政策坐标问题升级为发送阻断，应单独评估误伤率后再加入 P0 code。
+2. 当前 `quality_card` 展示的是修复/降级后的最终剩余问题，不展示已删除的权威论述问题。
+
+### 2026-05-31｜渲染今日政策坐标模块
+
+**改动原因**
+
+在任务 4 已写入 `brief["policy_coordinate"]` 的基础上，把“今日政策坐标”展示到邮件正文，位置放在“今日精读”之后、“今日一题”之前。
+
+**已改文件**
+
+- `email_renderer.py`
+- `CHANGELOG_HARNESS.md`
+
+**最新版本行为**
+
+- HTML 和 plain_text 同步渲染 `policy_coordinate`。
+- `policy_coordinate` 缺少 `policy_source` 或 `policy_quote` 时，整个模块不展示。
+- 权威论述只有在 `authoritative_quote` 和 `authoritative_source` 同时存在时才展示，不会残留空标题。
+- 政策原文行只使用政策语库字段：`policy_source` + `policy_quote`。
+- 《求是》论述只展示在“权威论述”行，不会写成“政策原文”。
+- 本次不修改发送逻辑、不修改 `quality_gate`，也不把“今日政策坐标”标题写入 brief 字段。
+
+**后续注意事项**
+
+1. 后续可基于实际邮件样式微调政策坐标卡片配色和间距。
+2. 如要把政策坐标纳入质量门禁，应另起任务单独设计检查项。
+
+### 2026-05-31｜daily JSON 写入 policy_coordinate 字段
+
+**改动原因**
+
+在不改邮件 HTML、发送逻辑和质量门禁的前提下，把政策坐标匹配结果写入每日 brief JSON，为后续渲染“今日政策坐标”模块做数据准备。
+
+**已改文件**
+
+- `main.py`
+- `CHANGELOG_HARNESS.md`
+
+**最新版本行为**
+
+- 在最终保存 `latest_brief.json` 和候选 payload 前，为 `brief` 新增 `policy_coordinate` 字段。
+- `policy_quote` 只来自政策语库，优先使用 `short_quote`，不合适时使用 `policy_quote`，且控制在 90 字以内。
+- `policy_source` 使用政策条目的 `source_title`，`policy_source_type` 使用 `source_type`。
+- `authoritative_quote` 只来自《求是》权威论述库，可为空；存在时必须同时生成 `authoritative_source`。
+- `authoritative_source` 优先使用 `speech_date + speech_event`，否则回退到《求是》期刊文章标题。
+- `article_connection` 和 `exam_transfer` 由最终精选文章、政策解释和考试场景生成，只写入 JSON，不进入正文渲染。
+- `brief` 中不写入“今日政策坐标”标题，保持字段只存结构化正文数据。
+
+**后续注意事项**
+
+1. 下一步若接入 HTML renderer，应只读取 `brief["policy_coordinate"]`，不要重新在渲染层做匹配。
+2. 渲染前建议先人工检查几天 `latest_brief.json` 中 `policy_coordinate` 的匹配质量。
+3. 本阶段没有修改 `quality_gate`，因此政策坐标字段暂不参与拦截。
+
+### 2026-05-31｜政策坐标匹配器预接入
+
+**改动原因**
+
+为后续把“今日政策坐标”接入邮件正文，先新增独立匹配器，从政策原文库和《求是》专题知识库中召回当天文章可用的政策原文、权威论述、相关片段和专题框架。本阶段只返回候选对象，不写入 daily JSON、不修改 HTML、不修改发送逻辑。
+
+**已改文件**
+
+- `policy_coordinate_matcher.py`
+- `scripts/check_policy_coordinate_matcher.py`
+- `CHANGELOG_HARNESS.md`
+
+**最新版本行为**
+
+- 新增 `match_policy_coordinate_candidates(...)`，输入标题、摘要/正文、主题、关键词和考试场景，输出 `matched_policy_coordinate_candidates`。
+- 政策原文优先匹配 `policy_statements_core.jsonl`；核心库无语义命中时，再从扩展库中筛选 `quote_status=clean`、`display_ready=true`、`theme_confidence=high`、`usage_tier` 非 `disabled/background` 的条目。
+- 《求是》权威论述优先匹配 `authoritative_quotes_core.jsonl`，候选库只在核心库无结果时兜底。
+- `article_chunks.jsonl` 最多召回 3 个片段，`topic_frameworks.jsonl` 最多返回 1 个框架。
+- 匹配打分综合主题、二级主题、关键词、考试场景、展示优先级、`usage_tier` 和 `freshness`；`historical_framework` 降权，`disabled` 不使用，`background` 不直接展示。
+- 当前不接入生成链路，脚本 `scripts/check_policy_coordinate_matcher.py` 仅用于本地验证。
+
+**后续注意事项**
+
+1. 下一步接入邮件生成前，应先确认 `best_policy` 的展示质量和 `debug_scores` 是否符合人工预期。
+2. renderer 接入应单独提交，避免匹配逻辑和 HTML 展示逻辑混在一起。
+3. 如果后续切换 OSS 读取，需要先扩展 `knowledge_base_loader.py`，不要直接在匹配器里写 OSS 逻辑。
+
+### 2026-05-31｜知识库 JSONL 加载器预接入
+
+**改动原因**
+
+为后续接入“今日政策坐标”和《求是》专题知识库，先提供独立的 JSONL 读取能力。本阶段只新增加载模块和检查脚本，不把知识库接入 daily JSON、邮件生成、HTML 渲染、发送或质量门禁逻辑。
+
+**已改文件**
+
+- `knowledge_base_loader.py`
+- `scripts/check_knowledge_base_loader.py`
+- `CHANGELOG_HARNESS.md`
+
+**最新版本行为**
+
+- 新增通用 `load_jsonl(path)`，支持读取 UTF-8/UTF-8 BOM JSONL。
+- JSONL 单行解析失败时记录错误并跳过坏行，不中断主流程。
+- 文件不存在时记录 warning 并返回空列表。
+- 同一次运行内按绝对路径缓存读取结果，避免重复读取大文件。
+- 新增加载函数：`load_policy_core`、`load_policy_all`、`load_qiushi_article_index`、`load_qiushi_chunks`、`load_qiushi_quotes_core`、`load_qiushi_quotes_candidates`、`load_topic_frameworks`。
+- 当前不读取 `raw_articles/qiushi/` 全文目录。
+
+**后续注意事项**
+
+1. 正式接入邮件内容前，应优先使用 `load_policy_core()` 作为“今日政策坐标”的展示级政策原文来源。
+2. 扩展候选、切片和权威引用暂时只作为后续检索能力预留，不应在本阶段改变邮件正文。
+3. OSS 模式后续单独实现，当前加载器读取本地 `KNOWLEDGE_BASE_DIR`。
+
+### 2026-05-31｜知识库目录与配置预接入
+
+**改动原因**
+
+为后续接入“今日政策坐标”和《求是》专题知识库，先把已整理好的知识库文件放入仓库，并预留本地/OSS 两种读取模式。本阶段只做目录、配置和打包资产接入，不改变生成、渲染、发送和质量门禁逻辑。
+
+**已改文件**
+
+- `config.py`
+- `.env.example`
+- `README.md`
+- `scripts/build_fc_package.ps1`
+- `content_harness/deployment_rules.md`
+- `knowledge_base/policy_corpus/policy_statements_core.jsonl`
+- `knowledge_base/policy_corpus/policy_statements.jsonl`
+- `knowledge_base/topic_knowledge/`
+- `CHANGELOG_HARNESS.md`
+
+**最新版行为**
+
+- 新增环境变量：`KNOWLEDGE_BASE_MODE=local`、`KNOWLEDGE_BASE_DIR=knowledge_base`、`KNOWLEDGE_OSS_PREFIX=`。
+- `config.Settings` 新增知识库配置和路径属性：`knowledge_base_path`、`policy_corpus_path`、`topic_knowledge_path`。
+- 仓库新增 `knowledge_base/policy_corpus/`，包含政策原文核心展示库和扩展候选库。
+- 仓库新增 `knowledge_base/topic_knowledge/`，包含《求是》专题索引、切片、权威引用、专题框架和 `raw_articles/qiushi/` 原文目录。
+- FC 打包脚本会复制 `knowledge_base/`，并检查核心政策库和专题索引文件存在。
+- 本阶段不读取知识库、不写入 daily JSON、不改 Prompt、不改 renderer、不改发送逻辑、不改 quality_gate。
+
+**后续注意事项**
+
+1. 正式接入“今日政策坐标”时，优先读取 `knowledge_base/policy_corpus/policy_statements_core.jsonl`。
+2. 切换 OSS 时，将 `KNOWLEDGE_BASE_MODE` 改为 `oss`，并设置 `KNOWLEDGE_OSS_PREFIX` 为 bucket 内对象前缀；OSS 鉴权继续复用现有 OSS 配置。
+3. 接入生成逻辑前，应单独增加读取失败兜底，避免知识库缺失影响候选邮件生成。
+
+### 2026-05-28｜阶段 2 抽取统一质量计算 helper
+
+**改动原因**
+
+`main.py` 中多处在 brief 被修复或重写后重复执行“渲染、各模块质检、content quality、quality gate 构造”逻辑。重复代码越多，后续修复字段同步、P0 repair、pre-send guard 时越容易出现“某一路径漏跑某个质检”的问题。
+
+**已改文件**
+
+- `main.py`
+- `CHANGELOG_HARNESS.md`
+
+**最新版行为**
+
+- 新增 `render_brief_outputs`，统一从 brief 生成纯文本和 HTML。
+- 新增 `evaluate_all_quality`，统一计算今日一题、框架图、今日可带走、整封清洁度、速读、重复、表达质感、模块冗余、内容风险、选文质量、content quality 和 pre-send cleanliness。
+- 新增 `build_gate_from_quality_map`，统一把质量 map 转成 `build_quality_gate(...)` 参数，避免各处手写参数顺序。
+- 新增 `recompute_after_brief_change`，用于 brief 变更后统一执行 schema 校验、URL 标注、最终选文摘要、主题变化检查、subject 重算、渲染和质量复算。
+- 候选件复核、content quality minor fix、content issue rewrite、pre-send cleanliness guard、P0 repair 后的部分重复质检代码已改为使用统一 helper。
+- 本阶段只抽函数和替换机械重复块，不拆文件、不改事件模式、不改发送判断、不改质量字段名。
+
+**后续注意事项**
+
+1. 后续继续替换剩余质量重复块时，应优先使用 `evaluate_all_quality` 和 `recompute_after_brief_change`，不要继续复制整段质检调用。
+2. 第 3 阶段拆文件前，应先确认 `quality.final`、`quality_gate`、`latest_quality.json` 和管理员报告结构没有字段缺失。
+
+### 2026-05-28｜阶段 1 部署文档与打包包名统一
+
+**改动原因**
+
+代码优化第一阶段先处理低风险的部署和仓库卫生问题。此前 README 写上传 `gongkao-morning-mailer.zip`，Bash 打包脚本输出 `function.zip`，PowerShell 打包脚本默认输出 `_release\gongkao-morning-mailer.zip`，容易导致本地、GitHub 和阿里云 FC 上传说明不一致。
+
+**已改文件**
+
+- `README.md`
+- `requirements.txt`
+- `.gitignore`
+- `scripts/build_fc_package.ps1`
+- `content_harness/deployment_rules.md`
+- `docs/deploy_aliyun_fc.md`
+- `docs/architecture.md`
+- `docs/code_optimization_execution_plan.md`
+- `docs/code_optimization_execution_plan.docx`
+
+**最新版行为**
+
+- 部署包统一命名为 `function.zip`。
+- PowerShell 打包脚本默认在仓库根目录生成 `function.zip`；如果传入相对路径，会按仓库根目录解析。
+- README 和部署规则文档统一说明上传 `function.zip`。
+- 新增阿里云 FC 部署说明，明确本地检查、打包、上传、触发器和发布后验证步骤。
+- 新增当前运行架构文档，记录 `main.handler`、HTTP 阻断、feedback、夜间候选、早晨发送、周报 PDF 和质量门禁边界。
+- `reportlab` 依赖锁定为 `reportlab==4.5.1`，避免 FC 打包时安装不可预期版本。
+- `.gitignore` 补充 `chardet/`，防止依赖目录误入仓库。
+
+**后续注意事项**
+
+1. 本阶段不删除仓库中已跟踪的 `reportlab/` 目录，后续如要移除 vendored 目录，必须单独验证 PDF 生成和 FC 打包。
+2. 后续拆分 `main.py` 前，应先完成质量计算 helper 抽取，避免在多个文件之间复制重复质检代码。
+
+### 2026-05-27｜渲染层与发送前清洗统一兜底去除展示标签泄漏
+
+**改动原因**
+
+用户继续反馈，最终 `candidate_email_*.html` 中仍反复出现“可用表达：可用表达：”“如果点原文，重点看：如果点原文，重点看：”“审题关键：审题关键：”“作答主线：作答主线：”等展示型小标题重复。单靠上游生成约束和早期渲染去重还不够，需要在渲染层和发送前清洗层同时做更稳的兜底。
+
+**已改文件**
+
+- `email_renderer.py`
+- `pre_send_cleanliness.py`
+- `CHANGELOG_HARNESS.md`
+
+**最新版行为**
+
+- `email_renderer.py` 新增统一的展示前缀剥离逻辑，最终渲染 HTML / 纯文本时会重复剥离以下前缀，直到字段正文恢复为纯内容：
+  - `如果点原文，重点看`
+  - `可用表达`
+  - `作答主线`
+  - `审题关键`
+  - `换成考场话`
+  - `考场话`
+- 纯文本和 HTML 渲染层都会在 `original_reading_focus`、`rewritable_expression`、`exam_focus`、参考句式等展示型字段上应用这层兜底，而不是只依赖上游 brief 已经被修干净。
+- `pre_send_cleanliness.py` 补齐了 `usable_for_exam` 和 `exam_use[*]` 这两个字段别名的前缀清洗，避免质检命中一个字段名、最终渲染却走另一个字段名，导致“修了但邮件里还在”。
+- 这次改动只处理展示标签泄漏，不改模块结构、不改字段含义、不重写正文内容。
+
+**后续注意事项**
+
+1. 如果后续新增新的“标题 + 正文”展示模块，且正文值也可能自带同名小标题，必须同步加入渲染层与 `pre_send_cleanliness.py` 的前缀剥离名单。
+2. 生成侧仍应尽量避免输出这些前缀；当前修复是展示层兜底，不代表可以放松上游 Prompt 约束。
+
+### 2026-05-26｜修复 rewrite 后候选件、HTML、纯文本与质量卡不一致
+
+**改动原因**
+
+用户反馈 `latest_quality_card.md` 的“自动修复摘要”显示某些字段已经修好，但最终 `latest.json`、`candidate_email_*.html`、`plain_text` 里仍残留半截句、小标题前缀或分号结尾；同时质量卡里同一条修复摘要会重复出现。问题本质是 rewrite 后写回、复检、再渲染和质量卡摘要去重没有完全打通。
+
+**已改文件**
+
+- `main.py`
+- `pre_send_cleanliness.py`
+- `admin_report.py`
+- `CHANGELOG_HARNESS.md`
+
+**最新版行为**
+
+- `content_issue_rewrite` 或 `p0 repair` 之后，会重新同步：
+  - `brief`
+  - `plain_text`
+  - `html_body`
+  - `content_quality`
+  - `quality_gate`
+  保证最终候选件里保存的是修复后的最终产物，而不是“摘要说修了，但正文还没换”。
+- 如果 `content_issue_rewrite` 导致内容质量分数明显下降，会整轮回滚，并把该轮 rewrite 标记为 `rolled_back`；被回滚的 rewrite 不再继续污染最终质量卡和候选件摘要。
+- `merge_rewrite_results` 会跳过已回滚轮次，`admin_report.py` 会对自动修复摘要去重，避免同一条修复在质量卡里重复展示两次。
+- `pre_send_cleanliness.py` 补充了字段级兜底：
+  - `today_takeaway.framework` 纳入正文型字段清洁范围
+  - `daily_question.thirty_second_answer`
+  - `daily_question.output_sentence_template`
+  如果只剩末尾分号，会直接字段级改成句号，而不是为这一个标点问题重写整个 `daily_question`
+- `main.py` 在发送前清洁度守卫之后也会重新评估 `content_quality`，避免质量门禁仍沿用清洁前的旧结果。
+
+**后续注意事项**
+
+1. 以后凡是新增“自动修复但不一定重写全文”的字段级清洁逻辑，都要确认 `latest.json`、`plain_text`、`html_body`、`quality_card` 四份产物是否同步更新。
+2. 如果后续再出现“质量卡说修了，但邮件里没修”的问题，优先排查写回顺序、回滚标记和摘要去重，而不是先怀疑单条 Prompt。
+
+### 2026-05-25｜新增正文型字段句末标点守卫与半截句尾检测
+
+**改动原因**
+
+用户反馈生成邮件里经常出现“像字段拼接结果”的正文：有些展示型内容缺句号，有些句子停在“可落地”“有助于”“关键在于”“从而”等明显半截尾巴上，还有个别 30 秒参考句式只剩一个分号结尾。需要在发送前增加确定性的正文收口规则，先把成品感和截断风险稳住。
+
+**已改文件**
+
+- `pre_send_cleanliness.py`
+- `main.py`
+- `CHANGELOG_HARNESS.md`
+
+**最新版行为**
+
+- 发送前清洁度守卫会对以下正文型字段自动补中文句号：只要字段结尾不是 `。！？；.!?」』）】》`，就补成完整句，覆盖范围包括：
+  - `today_focus`
+  - `must_remember_sentence`
+  - `featured_article.one_sentence`
+  - `original_reading_focus`
+  - `three_useful_points`
+  - `exam_use / usable_for_exam`
+  - `rewritable_expression`
+  - `daily_question.exam_focus`
+  - `daily_question.breaking_hint`
+  - `daily_question.candidate_answer`
+  - `daily_question.output_sentence_template`
+  - `daily_question.thirty_second_answer`
+  - `today_takeaway.framework`
+  - `today_takeaway.common_knowledge_points`
+  - `today_takeaway.golden_sentences[*].sentence`
+  - `quick_reads[*].one_sentence`
+  - `quick_reads[*].exam_value`
+- 如果正文型字段以“可落地、可以用于、适合转化为、有助于、体现出、关键在于、主要包括、从而、进而、同时、并且”等高风险尾巴结束，会记为 `suspected_truncated_sentence`，并进入质量门禁。
+- 今日一题的 `thirty_second_answer` / `output_sentence_template` 如果只剩末尾分号，会在字段级直接改成句号，避免因为一个尾标点重写整个题目模块。
+- `main.py` 已把 `suspected_truncated_sentence` 纳入 `quality_gate` 的 P0 集合，确保这类明显半截句不会被放过。
+
+**后续注意事项**
+
+1. 这套规则只负责“收尾”和“识别明显半截句”，不代替内容重写；如果正文逻辑本身不通顺，仍要走原有 rewrite / 质量门禁链路。
+2. 后续如果新增正文型字段，需要同步加入 `BODY_TEXT_PATHS`，否则不会自动补句号或识别半截尾巴。
+
+### 2026-05-25｜新增基层身份越权作答风险质检
+
+**改动原因**
+
+用户指出，今日一题如果题干身份是基层、街道、社区、市场监管所、城管、工作人员等，答案里却直接写“制定行业标准”“修改包装”“推行包装标识”甚至“无明确违法依据处罚普通高糖高油食品商户”，会形成明显越权甚至违法表述。这类问题不能只当普通表达瑕疵处理，需要单独拦截。
+
+**已改文件**
+
+- `question_quality.py`
+- `main.py`
+- `CHANGELOG_HARNESS.md`
+
+**最新版行为**
+
+- `question_quality.py` 新增 `grassroots_authority_overreach` 检查：当题干命中基层身份语境时，会联动扫描 `answer_framework` 与 `candidate_answer`。
+- 对以下高风险表述直接按高风险拦截：
+  - `依法处理持续售卖普通高糖高油食品商户`
+  - `无明确违法依据处罚`
+  - `处罚普通高糖高油食品`
+  - `查处普通高糖高油食品`
+  - `取缔售卖普通高糖高油食品`
+- 对以下“把上级权限写成基层直接权限”的表述按中风险提示：
+  - `制定行业标准`
+  - `修改包装`
+  - `推行包装标识`
+  - `统一包装标识`
+  - `强制包装标识`
+  - `要求商户修改包装`
+- 如果这些表述前面明确写了“建议上级 / 报请上级 / 推动完善 / 上报”等限定语，规则会尽量识别为“建议上级做”，不误伤。
+- `main.py` 已把 `grassroots_authority_overreach` 纳入 `quality_gate` 的 P0 集合。对于基层身份题，这类越权答案不能直接放行。
+
+**后续注意事项**
+
+1. 这条规则的核心不是“越保守越好”，而是明确区分三层权限：基层可直接做、建议上级做、只有明确违法时才依法查处。
+2. 如果后续扩展到教育、住建、市场监管等更多身份题型，应继续补充越权关键词和合法限定语，而不是只靠现有几个示例词。
+
 ### 2026-05-22｜周末候选件改为只生成周 PDF 汇编
 
 **改动原因**
@@ -381,3 +748,51 @@ python -m py_compile prompt_templates.py question_quality.py email_renderer.py
 ## 历史改动
 
 暂无更早人工整理记录。后续如需追溯更早变更，请查看 Git commit history。
+### 2026-06-01｜政策坐标使用历史与 14 天去重
+**改动原因**
+
+“今日政策坐标”已经接入 JSON、渲染和质检，需要再加一层“使用历史 + 近 14 天去重”，避免连续多天重复使用同一政策原文、同一条《求是》表达或同一专题框架。
+**已改文件**
+
+- `policy_coordinate_usage_history.py`
+- `policy_coordinate_matcher.py`
+- `main.py`
+- `scripts/check_policy_coordinate_usage_history.py`
+- `CHANGELOG_HARNESS.md`
+
+**最新版行为**
+
+- 新增 `data/policy_coordinate_usage_history.jsonl` 的独立 JSONL 历史管理模块，缺文件时自动使用空历史，坏行会跳过并返回 warning，不会中断主流程。
+- `match_policy_coordinate_candidates(...)` 新增 `recent_usage` 参数：近 14 天内重复 `matched_policy_id` / `matched_qiushi_quote_id` 会强降权，同一 `matched_framework_id` 连续使用会降权，前两次主题相同时也会避免第 3 天继续用同一主题。
+- 如果没有其他合适材料，允许低优先级重复，但会在 `debug_scores.usage_history.selected_repeat_notes` 和运行日志中说明为什么还是选了重复项。
+- 新增 `build_policy_coordinate_usage_record(...)`，在整封邮件最终通过质检后，单独写入 `policy_coordinate` 使用历史，不影响 `sent_history.json` 原有逻辑。
+- `nightly candidate`、手动测试和被 quality gate 阻断的运行会显示 skip reason，不写入此次去重历史。
+- JSONL 写入失败时只记日志 warning，不会中断生成、发送或其他归档链路。
+**后续注意事项**
+
+1. 当前 usage history 故意不和 `sent_history.json` 共享存储，后续如需 OSS 化，应单独设计新的存储模式，不要直接搬用 `sent_history` 逻辑。
+2. 目前去重历史只针对非 candidate / 非测试 / 非整体阻断运行进行记录，如果后续希望让 preview 也参与去重，应单独评估是否影响正式晨发。
+### 2026-06-02｜政策坐标主题试跑与接入报告
+**改动原因**
+
+在前 7 个任务完成后，需要做 3 个主题试跑，验证 `policy_coordinate` 在 daily JSON、HTML、plain_text、质检和近 14 天去重链路中的实际表现，并沉淀一份可交接的接入报告。
+**已改文件**
+
+- `main.py`
+- `scripts/run_policy_coordinate_trials.py`
+- `docs/POLICY_COORDINATE_INTEGRATION_REPORT.md`
+- `output/policy_coordinate_trials/*`
+- `CHANGELOG_HARNESS.md`
+
+**最新版行为**
+
+- 新增 `scripts/run_policy_coordinate_trials.py`，复用 `candidates/latest.json` 的完整 brief 结构，构造 3 组模拟主题输入并走现有政策匹配、渲染和质检链路。
+- 试跑主题覆盖：基层治理 / 新就业群体 / 城市治理；高质量发展 / 新质生产力；民生保障 / 就业。
+- 试跑会输出 `daily.json`、`email.html`、`plain_text.txt`、`quality.json`、`run.log` 到 `output/policy_coordinate_trials/<slug>/`。
+- 试跑使用隔离的 `policy_coordinate_usage_history.jsonl`，验证 14 天去重逻辑可运行，同时不污染正式生产历史。
+- `main.py` 增加了对 `exam_transfer` 的二次兜底：当匹配到的政策语料 `exam_usage` 过于展示化、缺少具体答题角度时，会回退为程序生成的结构化考场迁移句。
+- 自动生成 `docs/POLICY_COORDINATE_INTEGRATION_REPORT.md`，汇总文件改动、知识库读取、字段、渲染位置、质检规则、3 个样例结果、风险与 OSS 切换说明。
+**后续注意事项**
+
+1. 当前试跑验证的是“政策坐标接入链路”而不是“真实选文质量”，后续上线前仍应结合真实抓取文章抽样复核几轮。
+2. 如果后续实现知识库 OSS 读取，建议同步把试跑脚本改成可切换 `local/oss` 两种模式，避免报告与生产行为分叉。

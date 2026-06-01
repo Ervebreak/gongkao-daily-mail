@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
@@ -240,6 +241,7 @@ def build_quality_gate(
     selection_quality: dict[str, Any] | None = None,
     content_quality: dict[str, Any] | None = None,
     cleanliness_quality: dict[str, Any] | None = None,
+    policy_coordinate_quality: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     p0_codes = {
         "missing_question",
@@ -301,6 +303,18 @@ def build_quality_gate(
         "daily_question_missing_scene",
         "daily_question_missing_conflict",
         "daily_question_missing_task",
+        "policy_quote_missing",
+        "policy_quote_too_long",
+        "policy_source_missing",
+        "qiushi_used_as_policy_source",
+        "qiushi_rendered_as_policy_quote",
+        "qiushi_rendered_in_policy_line",
+        "matched_policy_id_missing",
+        "matched_policy_id_not_found",
+        "authoritative_source_missing",
+        "vague_leader_source",
+        "policy_quote_incomplete",
+        "authoritative_quote_incomplete",
     }
     p0_issues: list[dict[str, str]] = []
     modules = (
@@ -316,6 +330,7 @@ def build_quality_gate(
         ("selection", selection_quality or {}),
         ("content_quality", content_quality or {}),
         ("pre_send_cleanliness", cleanliness_quality or {}),
+        ("policy_coordinate", policy_coordinate_quality or {}),
     )
     for module, quality in modules:
         for issue in quality.get("issues") or []:
@@ -567,6 +582,644 @@ def summarize_final_selection(brief: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _policy_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, list):
+        return " ".join(_policy_text(item) for item in value if item).strip()
+    if isinstance(value, dict):
+        return " ".join(_policy_text(item) for item in value.values() if item).strip()
+    return " ".join(str(value).split()).strip()
+
+
+def _policy_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        parts = []
+        for segment in value.replace("；", ";").replace("，", ",").replace("、", ",").split(","):
+            for item in segment.split(";"):
+                item = _policy_text(item)
+                if item:
+                    parts.append(item)
+        return parts
+    if isinstance(value, list):
+        return [_policy_text(item) for item in value if _policy_text(item)]
+    return [_policy_text(value)] if _policy_text(value) else []
+
+
+def _clip_policy_sentence(value: Any, limit: int = 90) -> str:
+    text = _policy_text(value)
+    if not text:
+        return ""
+    if len(text) <= limit:
+        return text
+    for mark in "。；;":
+        index = text.rfind(mark, 0, limit + 1)
+        if index >= 20:
+            return text[: index + 1].strip()
+    return ""
+
+
+def _choose_policy_quote(policy: dict[str, Any]) -> str:
+    short_quote = _clip_policy_sentence(policy.get("short_quote"), 90)
+    if short_quote:
+        return short_quote
+    return _clip_policy_sentence(policy.get("policy_quote"), 90)
+
+
+def _choose_authoritative_quote(quote: dict[str, Any]) -> str:
+    for key in ("short_quote", "quote_text"):
+        text = _policy_text(quote.get(key))
+        if text and "“" in text and "”" not in text:
+            continue
+        if text and len(text) <= 90 and text[-1] in "。；;！!？?”」』":
+            return text
+        clipped = _clip_policy_sentence(text, 90)
+        if clipped and "“" in clipped and "”" not in clipped:
+            continue
+        if clipped and clipped[-1] in "。；;！!？?”」』":
+            return clipped
+    return ""
+
+
+def _authoritative_source(quote: dict[str, Any], article_index: dict[str, dict[str, Any]]) -> str:
+    article = article_index.get(str(quote.get("article_id") or "")) or {}
+    speech_date = _policy_text(quote.get("speech_date") or article.get("speech_date"))
+    speech_event = _policy_text(quote.get("speech_event") or article.get("speech_event"))
+    if speech_date and speech_event:
+        return f"{speech_date}在{speech_event}上的讲话。"
+    publish_date = _policy_text(quote.get("publish_date") or article.get("publish_date"))
+    issue = _policy_text(article.get("journal"))
+    title = _policy_text(quote.get("source_title") or article.get("title"))
+    if issue and title:
+        return f"{issue}文章《{title}》。"
+    if publish_date and title:
+        return f"{publish_date}《求是》文章《{title}》。"
+    return f"《求是》文章《{title}》。" if title else ""
+
+
+def _policy_article_connection(featured: dict[str, Any], policy: dict[str, Any], theme: str) -> str:
+    title = _policy_text(featured.get("title")) or "当天文章"
+    article_point = _policy_text(
+        featured.get("one_sentence")
+        or featured.get("core_viewpoint")
+        or featured.get("main_thread")
+        or featured.get("theme")
+    )
+    policy_theme = _policy_text(policy.get("theme_level_1") or theme)
+    if article_point:
+        return _clip_policy_sentence(
+            f"本文以《{title}》中的具体案例，呈现了{policy_theme}从政策要求到基层场景的落点：{article_point}",
+            140,
+        ) or f"本文以《{title}》中的具体案例，说明{policy_theme}不能停留在文件表述中，而要落到具体治理场景和执行环节。"
+    return f"本文以《{title}》为案例，说明{policy_theme}需要通过具体平台、机制和行动转化为治理成效。"
+
+
+def _policy_exam_transfer(featured: dict[str, Any], policy: dict[str, Any], question: dict[str, Any]) -> str:
+    exam_usage = _policy_text(policy.get("exam_usage"))
+    if exam_usage:
+        return _clip_policy_sentence(exam_usage, 140) or exam_usage[:140].rstrip("，、；; ")
+    scenarios = _policy_list(featured.get("exam_use")) + _policy_list(question.get("question_type")) + _policy_list(question.get("topic_category"))
+    if scenarios:
+        return f"遇到{ '、'.join(scenarios[:3]) }类题目，可从政策目标、现实堵点、协同机制和闭环落实四个层面展开。"
+    return "遇到申论综合分析、基层治理和面试实务类题目，可从政策依据、问题转译、平台机制和落实闭环展开。"
+
+
+def _policy_answer_angles(policy: dict[str, Any], featured: dict[str, Any], question: dict[str, Any]) -> list[str]:
+    angles = _policy_list(policy.get("answer_angles"))
+    angles.extend(_policy_list(featured.get("article_framework"))[:2])
+    angles.extend(_policy_list(question.get("answer_framework"))[:2])
+    fallback = ["找准政策依据", "连接文章案例", "分析现实堵点", "提出机制化做法", "形成落实闭环"]
+    result: list[str] = []
+    for item in angles + fallback:
+        item = _clip_policy_sentence(item, 24) or _policy_text(item)[:24]
+        if item and item not in result:
+            result.append(item)
+        if len(result) >= 6:
+            break
+    return result[:6]
+
+
+def build_policy_coordinate_usage_record(brief: dict[str, Any], today: str) -> dict[str, Any] | None:
+    coordinate = brief.get("policy_coordinate") if isinstance(brief.get("policy_coordinate"), dict) else {}
+    display_type = _policy_text(coordinate.get("display_evidence_type"))
+    if not coordinate or display_type in {"", "none"}:
+        return None
+    if not _policy_text(coordinate.get("policy_quote")) and not _policy_text(coordinate.get("authoritative_quote")):
+        return None
+    return {
+        "date": today,
+        "theme": _policy_text(coordinate.get("theme")),
+        "matched_policy_id": _policy_text(coordinate.get("matched_policy_id")),
+        "matched_qiushi_quote_id": _policy_text(coordinate.get("matched_qiushi_quote_id")),
+        "matched_qiushi_article_id": _policy_text(coordinate.get("matched_qiushi_article_id")),
+        "matched_framework_id": _policy_text(coordinate.get("matched_framework_id")),
+        "policy_quote": _policy_text(coordinate.get("policy_quote")),
+        "authoritative_quote": _policy_text(coordinate.get("authoritative_quote")),
+    }
+
+
+def normalize_exam_transfer(*segments: Any) -> str:
+    candidates: list[str] = []
+    for value in segments:
+        text = _policy_text(value)
+        if not text:
+            continue
+        text = text.replace("。、", "；").replace("，、", "；").replace("、，", "；")
+        text = text.replace("，；", "；").replace("；，", "；")
+        text = text.replace("；；", "；")
+        text = text.strip("；，。 ")
+        if text and text not in candidates:
+            candidates.append(text)
+
+    if not candidates:
+        return ""
+
+    scenario_lines = [text for text in candidates if text.startswith("遇到") and "类题目" in text]
+    if scenario_lines:
+        def _scenario_score(text: str) -> tuple[int, int]:
+            specific_markers = text.count("、") + text.count("：") + text.count("；")
+            return (specific_markers, len(text))
+
+        base = sorted(scenario_lines, key=_scenario_score, reverse=True)[0]
+    else:
+        base = max(candidates, key=len)
+    parts = [part.strip("；，。 ") for part in base.split("；") if part.strip("；，。 ")]
+    normalized = "；".join(parts).strip("；，。 ")
+    if not normalized:
+        return ""
+    if len(normalized) > 140:
+        normalized = _clip_policy_sentence(normalized, 140) or normalized[:140].rstrip("；，。 ")
+    if len(normalized) < 80 and len(candidates) > 1:
+        backup = max(candidates, key=len)
+        if len(backup) > len(normalized):
+            normalized = _clip_policy_sentence(backup, 140) or backup[:140].rstrip("；，。 ")
+    normalized = normalized.strip("；，。 ")
+    if len(normalized) < 80:
+        supplement = "答题时既要点明政策依据，也要落到平台搭建、机制协同和闭环落实等具体抓手上"
+        if "答题时" not in normalized:
+            normalized = f"{normalized}；{supplement}".strip("；，。 ")
+    normalized = normalized.strip("；，。 ")
+    if normalized and not normalized.endswith(("。", "！", "？")):
+        normalized += "。"
+    return normalized
+
+
+def _policy_float(value: Any) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _evidence_similarity(left: Any, right: Any) -> float:
+    left_text = _policy_text(left).replace(" ", "")
+    right_text = _policy_text(right).replace(" ", "")
+    if not left_text or not right_text:
+        return 0.0
+    return SequenceMatcher(None, left_text[:300], right_text[:300]).ratio()
+
+
+def _evidence_redundant(left: Any, right: Any) -> bool:
+    left_text = _policy_text(left).replace(" ", "")
+    right_text = _policy_text(right).replace(" ", "")
+    if not left_text or not right_text:
+        return False
+    if left_text in right_text or right_text in left_text:
+        return True
+    return _evidence_similarity(left_text, right_text) >= 0.72
+
+
+def _policy_coordinate_display_fields(
+    *,
+    policy_quote: str,
+    policy_source: str,
+    authoritative_quote: str,
+    authoritative_source: str,
+    policy_score: float,
+    qiushi_score: float,
+) -> dict[str, Any]:
+    has_policy = bool(policy_quote and policy_source)
+    has_qiushi = bool(authoritative_quote and authoritative_source)
+    max_score = max(policy_score if has_policy else 0.0, qiushi_score if has_qiushi else 0.0)
+    redundant = has_policy and has_qiushi and _evidence_redundant(policy_quote, authoritative_quote)
+    score_gap = abs(policy_score - qiushi_score)
+
+    if not has_policy and not has_qiushi:
+        return {
+            "display_evidence_type": "none",
+            "display_evidence_label": "",
+            "display_evidence_quote": "",
+            "display_evidence_source": "",
+            "evidence_selection_reason": "policy_quote 和 authoritative_quote 都不可展示。",
+        }
+
+    if max_score < 30:
+        return {
+            "display_evidence_type": "none",
+            "display_evidence_label": "",
+            "display_evidence_quote": "",
+            "display_evidence_source": "",
+            "evidence_selection_reason": f"policy_score={policy_score:.1f}、qiushi_score={qiushi_score:.1f}，整体贴合度不足，隐藏模块。",
+        }
+
+    if has_policy and not has_qiushi:
+        return {
+            "display_evidence_type": "policy",
+            "display_evidence_label": "政策原文",
+            "display_evidence_quote": policy_quote,
+            "display_evidence_source": policy_source,
+            "evidence_selection_reason": f"仅政策原文可稳定展示，policy_score={policy_score:.1f}。",
+        }
+
+    if has_qiushi and not has_policy:
+        return {
+            "display_evidence_type": "qiushi",
+            "display_evidence_label": "权威论述",
+            "display_evidence_quote": authoritative_quote,
+            "display_evidence_source": authoritative_source,
+            "evidence_selection_reason": f"仅权威论述可稳定展示，qiushi_score={qiushi_score:.1f}。",
+        }
+
+    if redundant:
+        if policy_score >= qiushi_score:
+            return {
+                "display_evidence_type": "policy",
+                "display_evidence_label": "政策原文",
+                "display_evidence_quote": policy_quote,
+                "display_evidence_source": policy_source,
+                "evidence_selection_reason": f"两条依据语义重复，优先保留更具体的政策原文，policy_score={policy_score:.1f}，qiushi_score={qiushi_score:.1f}。",
+            }
+        return {
+            "display_evidence_type": "qiushi",
+            "display_evidence_label": "权威论述",
+            "display_evidence_quote": authoritative_quote,
+            "display_evidence_source": authoritative_source,
+            "evidence_selection_reason": f"两条依据语义重复，优先保留更贴近文章的权威论述，policy_score={policy_score:.1f}，qiushi_score={qiushi_score:.1f}。",
+        }
+
+    if policy_score >= 45 and qiushi_score >= 45:
+        if score_gap >= 12:
+            if policy_score > qiushi_score:
+                return {
+                    "display_evidence_type": "policy",
+                    "display_evidence_label": "政策原文",
+                    "display_evidence_quote": policy_quote,
+                    "display_evidence_source": policy_source,
+                    "evidence_selection_reason": f"两条依据都可用，但政策原文贴合度明显更高，policy_score={policy_score:.1f}，qiushi_score={qiushi_score:.1f}。",
+                }
+            return {
+                "display_evidence_type": "qiushi",
+                "display_evidence_label": "权威论述",
+                "display_evidence_quote": authoritative_quote,
+                "display_evidence_source": authoritative_source,
+                "evidence_selection_reason": f"两条依据都可用，但权威论述贴合度明显更高，policy_score={policy_score:.1f}，qiushi_score={qiushi_score:.1f}。",
+            }
+        return {
+            "display_evidence_type": "both",
+            "display_evidence_label": "政策原文 / 权威论述",
+            "display_evidence_quote": f"{policy_quote} / {authoritative_quote}",
+            "display_evidence_source": f"{policy_source} / {authoritative_source}",
+            "evidence_selection_reason": f"政策原文和权威论述都高度贴切且不重复，policy_score={policy_score:.1f}，qiushi_score={qiushi_score:.1f}。",
+        }
+
+    if policy_score >= 45 and policy_score >= qiushi_score:
+        return {
+            "display_evidence_type": "policy",
+            "display_evidence_label": "政策原文",
+            "display_evidence_quote": policy_quote,
+            "display_evidence_source": policy_source,
+            "evidence_selection_reason": f"政策原文更贴合当天文章，policy_score={policy_score:.1f}，qiushi_score={qiushi_score:.1f}。",
+        }
+
+    if qiushi_score >= 45 and qiushi_score >= policy_score:
+        return {
+            "display_evidence_type": "qiushi",
+            "display_evidence_label": "权威论述",
+            "display_evidence_quote": authoritative_quote,
+            "display_evidence_source": authoritative_source,
+            "evidence_selection_reason": f"权威论述更贴合当天文章，policy_score={policy_score:.1f}，qiushi_score={qiushi_score:.1f}。",
+        }
+
+    if policy_score >= qiushi_score:
+        return {
+            "display_evidence_type": "policy",
+            "display_evidence_label": "政策原文",
+            "display_evidence_quote": policy_quote,
+            "display_evidence_source": policy_source,
+            "evidence_selection_reason": f"中等贴合度场景下优先展示分数更高的政策原文，policy_score={policy_score:.1f}，qiushi_score={qiushi_score:.1f}。",
+        }
+
+    return {
+        "display_evidence_type": "qiushi",
+        "display_evidence_label": "权威论述",
+        "display_evidence_quote": authoritative_quote,
+        "display_evidence_source": authoritative_source,
+        "evidence_selection_reason": f"中等贴合度场景下优先展示分数更高的权威论述，policy_score={policy_score:.1f}，qiushi_score={qiushi_score:.1f}。",
+    }
+
+
+def _refresh_policy_coordinate_display_fields(coordinate: dict[str, Any]) -> dict[str, Any]:
+    if not coordinate:
+        return coordinate
+    coordinate.update(
+        _policy_coordinate_display_fields(
+            policy_quote=_policy_text(coordinate.get("policy_quote")),
+            policy_source=_policy_text(coordinate.get("policy_source")),
+            authoritative_quote=_policy_text(coordinate.get("authoritative_quote")),
+            authoritative_source=_policy_text(coordinate.get("authoritative_source")),
+            policy_score=_policy_float(coordinate.get("policy_match_score")),
+            qiushi_score=_policy_float(coordinate.get("qiushi_match_score")),
+        )
+    )
+    display_type = _policy_text(coordinate.get("display_evidence_type")) or "none"
+    coordinate["source_type"] = {
+        "policy": "policy_only",
+        "qiushi": "qiushi_only",
+        "both": "policy_plus_qiushi",
+        "none": "none",
+    }.get(display_type, "none")
+    return coordinate
+
+
+def _policy_transfer_has_specific_angles(text: str) -> bool:
+    keywords = ["平台", "机制", "诉求", "协同", "闭环", "服务", "监管", "数字", "人才", "就业", "民生", "治理", "落实", "反馈", "转化", "场景", "要素", "创新"]
+    combined = _policy_text(text)
+    return sum(1 for keyword in keywords if keyword and keyword in combined) >= 2
+
+
+def _policy_exam_transfer_fallback(featured: dict[str, Any], question: dict[str, Any]) -> str:
+    scenarios = _policy_list(featured.get("exam_use")) + _policy_list(question.get("question_type")) + _policy_list(question.get("topic_category"))
+    if scenarios:
+        return f"遇到{'、'.join(scenarios[:3])}类题目，可从政策目标、现实堵点、协同机制和闭环落实四个层面展开。"
+    return "遇到申论综合分析、基层治理和面试实务类题目，可从政策依据、问题转译、平台机制和落实闭环展开。"
+
+
+def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = None) -> dict[str, Any]:
+    empty = {
+        "theme": "",
+        "policy_quote": "",
+        "policy_source": "",
+        "policy_source_type": "",
+        "policy_translation": "",
+        "authoritative_quote": "",
+        "authoritative_source": "",
+        "article_connection": "",
+        "exam_transfer": "",
+        "answer_angles": [],
+        "matched_policy_id": "",
+        "matched_qiushi_quote_id": "",
+        "matched_qiushi_article_id": "",
+        "matched_framework_id": "",
+        "matched_chunk_ids": [],
+        "source_type": "none",
+        "policy_match_score": 0.0,
+        "qiushi_match_score": 0.0,
+        "display_evidence_type": "none",
+        "display_evidence_label": "",
+        "display_evidence_quote": "",
+        "display_evidence_source": "",
+        "evidence_selection_reason": "",
+    }
+    try:
+        from knowledge_base_loader import load_qiushi_article_index
+        from policy_coordinate_matcher import match_policy_coordinate_candidates
+        from policy_coordinate_usage_history import (
+            load_policy_coordinate_usage_history,
+            recent_policy_coordinate_usage,
+        )
+
+        featured = brief.get("featured_article") if isinstance(brief.get("featured_article"), dict) else {}
+        question = brief.get("daily_question") if isinstance(brief.get("daily_question"), dict) else {}
+        takeaway = brief.get("today_takeaway") if isinstance(brief.get("today_takeaway"), dict) else {}
+        usage_history, usage_meta = load_policy_coordinate_usage_history()
+        recent_usage = recent_policy_coordinate_usage(usage_history, days=14)
+        if logger and usage_meta.get("usage_history_warning"):
+            logger.info(
+                "policy coordinate usage history warning",
+                warning=usage_meta.get("usage_history_warning"),
+                usage_history_path=usage_meta.get("usage_history_path"),
+                usage_history_bad_lines=usage_meta.get("usage_history_bad_lines"),
+            )
+        article_text = " ".join(
+            _policy_text(featured.get(key))
+            for key in [
+                "one_sentence",
+                "core_viewpoint",
+                "main_thread",
+                "original_overview",
+                "three_useful_points",
+                "exam_use",
+                "article_framework",
+            ]
+        )
+        keywords = (
+            _policy_list(takeaway.get("keywords"))
+            + _policy_list(featured.get("theme"))
+            + _policy_list(featured.get("title"))
+            + _policy_list(featured.get("article_framework_map"))
+        )
+        exam_scenarios = (
+            _policy_list(featured.get("exam_use"))
+            + _policy_list(featured.get("usable_for_exam"))
+            + _policy_list(question.get("question_type"))
+            + _policy_list(question.get("topic_category"))
+            + _policy_list(question.get("exam_focus"))
+        )
+        matches = match_policy_coordinate_candidates(
+            article_title=_policy_text(featured.get("title")),
+            article_summary=_policy_text(featured.get("one_sentence") or featured.get("core_viewpoint")),
+            article_text=article_text,
+            main_theme=_policy_text(featured.get("theme") or brief.get("today_theme")),
+            sub_themes=_policy_list(takeaway.get("keywords")) + _policy_list(featured.get("theme")),
+            keywords=keywords,
+            exam_scenarios=exam_scenarios,
+            recent_usage=recent_usage,
+        ).get("matched_policy_coordinate_candidates", {})
+        policy = matches.get("best_policy") if isinstance(matches.get("best_policy"), dict) else {}
+        policy_quote = _choose_policy_quote(policy)
+        quote = matches.get("best_qiushi_quote") if isinstance(matches.get("best_qiushi_quote"), dict) else {}
+        article_index = {str(item.get("article_id") or ""): item for item in load_qiushi_article_index()}
+        authoritative_quote = _choose_authoritative_quote(quote) if quote else ""
+        authoritative_source = _authoritative_source(quote, article_index) if authoritative_quote else ""
+        framework = matches.get("best_framework") if isinstance(matches.get("best_framework"), dict) else {}
+        chunks = matches.get("matched_chunks") if isinstance(matches.get("matched_chunks"), list) else []
+        debug_scores = matches.get("debug_scores") if isinstance(matches.get("debug_scores"), dict) else {}
+        usage_debug = debug_scores.get("usage_history") if isinstance(debug_scores.get("usage_history"), dict) else {}
+        policy_score = _policy_float(policy.get("_match_score"))
+        qiushi_score = _policy_float(quote.get("_match_score"))
+        result = {
+            **empty,
+            "theme": _policy_text(
+                policy.get("theme_level_1")
+                or quote.get("theme_level_1")
+                or featured.get("theme")
+                or brief.get("today_theme")
+            ),
+            "policy_quote": policy_quote,
+            "policy_source": _policy_text(policy.get("source_title")),
+            "policy_source_type": _policy_text(policy.get("source_type")),
+            "policy_translation": _policy_text(policy.get("plain_explanation")),
+            "authoritative_quote": authoritative_quote,
+            "authoritative_source": authoritative_source,
+            "article_connection": _policy_article_connection(
+                featured,
+                policy,
+                _policy_text(policy.get("theme_level_1") or quote.get("theme_level_1") or brief.get("today_theme")),
+            ),
+            "exam_transfer": normalize_exam_transfer(
+                _policy_exam_transfer(featured, policy, question),
+                _policy_text(policy.get("exam_usage")),
+                _policy_text(quote.get("exam_usage")),
+                _policy_text(featured.get("exam_use")),
+                _policy_exam_transfer_fallback(featured, question),
+            ),
+            "answer_angles": _policy_answer_angles(policy, featured, question),
+            "matched_policy_id": _policy_text(policy.get("policy_id")),
+            "matched_qiushi_quote_id": _policy_text(quote.get("quote_id")) if authoritative_quote else "",
+            "matched_qiushi_article_id": _policy_text(quote.get("article_id")) if authoritative_quote else "",
+            "matched_framework_id": _policy_text(framework.get("framework_id")),
+            "matched_chunk_ids": [_policy_text(item.get("chunk_id")) for item in chunks if isinstance(item, dict) and item.get("chunk_id")],
+            "policy_match_score": policy_score,
+            "qiushi_match_score": qiushi_score,
+        }
+        exam_transfer_text = _policy_text(result.get("exam_transfer"))
+        if exam_transfer_text.startswith("适用于") or not _policy_transfer_has_specific_angles(exam_transfer_text):
+            result["exam_transfer"] = normalize_exam_transfer(_policy_exam_transfer_fallback(featured, question))
+        if authoritative_quote and not authoritative_source:
+            result["authoritative_quote"] = ""
+            result["matched_qiushi_quote_id"] = ""
+            result["matched_qiushi_article_id"] = ""
+            result["qiushi_match_score"] = 0.0
+        result = _refresh_policy_coordinate_display_fields(result)
+        if result.get("display_evidence_type") == "none":
+            if logger:
+                logger.info(
+                    "policy coordinate skipped",
+                    reason=result.get("evidence_selection_reason") or "no_fit_evidence",
+                    policy_score=policy_score,
+                    qiushi_score=qiushi_score,
+                )
+            return empty
+        if logger:
+            logger.info(
+                "policy coordinate matched",
+                display_evidence_type=result["display_evidence_type"],
+                evidence_selection_reason=result["evidence_selection_reason"],
+                policy_score=result["policy_match_score"],
+                qiushi_score=result["qiushi_match_score"],
+                matched_policy_id=result["matched_policy_id"],
+                matched_qiushi_quote_id=result["matched_qiushi_quote_id"],
+                matched_framework_id=result["matched_framework_id"],
+                matched_chunk_ids=result["matched_chunk_ids"],
+                source_type=result["source_type"],
+            )
+            if usage_debug.get("selected_repeat_notes"):
+                logger.info(
+                    "policy coordinate usage dedup",
+                    usage_history_path=usage_meta.get("usage_history_path"),
+                    recent_usage_count=len(recent_usage),
+                    selected_repeat_notes=usage_debug.get("selected_repeat_notes"),
+                )
+        return result
+    except Exception as exc:
+        if logger:
+            logger.info("policy coordinate failed", error=str(exc))
+        return empty
+
+
+def ensure_policy_coordinate_for_render(brief: dict[str, Any], logger: RunLogger | None = None) -> dict[str, Any]:
+    coordinate = brief.get("policy_coordinate") if isinstance(brief.get("policy_coordinate"), dict) else {}
+    if coordinate and _policy_text(coordinate.get("display_evidence_type")) not in {"", "none"}:
+        return brief
+    brief["policy_coordinate"] = build_policy_coordinate(brief, logger=logger)
+    return brief
+
+
+def enforce_policy_coordinate_quality(
+    brief: dict[str, Any],
+    plain_text: str,
+    html_body: str,
+    logger: RunLogger | None = None,
+) -> dict[str, Any]:
+    from email_renderer import render_email_html, render_plain_text
+    from policy_coordinate_quality import classify_policy_coordinate_issues, evaluate_policy_coordinate_quality
+
+    quality = evaluate_policy_coordinate_quality(brief, plain_text, html_body)
+    changed = False
+    repaired_actions: list[str] = []
+
+    classification = classify_policy_coordinate_issues(quality)
+    if classification.get("has_authoritative_issue"):
+        coordinate = brief.get("policy_coordinate") if isinstance(brief.get("policy_coordinate"), dict) else {}
+        if coordinate:
+            coordinate["authoritative_quote"] = ""
+            coordinate["authoritative_source"] = ""
+            coordinate["matched_qiushi_quote_id"] = ""
+            coordinate["matched_qiushi_article_id"] = ""
+            coordinate["qiushi_match_score"] = 0.0
+            _refresh_policy_coordinate_display_fields(coordinate)
+            changed = True
+            repaired_actions.append("drop_authoritative_quote")
+
+    if changed:
+        plain_text = render_plain_text(brief)
+        html_body = render_email_html(brief)
+        quality = evaluate_policy_coordinate_quality(brief, plain_text, html_body)
+        classification = classify_policy_coordinate_issues(quality)
+
+    if classification.get("has_policy_critical_issue"):
+        previous = brief.get("policy_coordinate") if isinstance(brief.get("policy_coordinate"), dict) else {}
+        brief["policy_coordinate"] = {}
+        rebuilt = build_policy_coordinate(brief, logger=logger)
+        brief["policy_coordinate"] = rebuilt
+        plain_text = render_plain_text(brief)
+        html_body = render_email_html(brief)
+        rebuilt_quality = evaluate_policy_coordinate_quality(brief, plain_text, html_body)
+        rebuilt_classification = classify_policy_coordinate_issues(rebuilt_quality)
+        if rebuilt and not rebuilt_classification.get("has_policy_critical_issue"):
+            quality = rebuilt_quality
+            classification = rebuilt_classification
+            changed = True
+            repaired_actions.append("rematch_policy_quote")
+        else:
+            brief["policy_coordinate"] = {}
+            brief["_policy_coordinate_disabled_reason"] = "policy_coordinate 已隐藏：政策原文或来源未通过展示前质检。"
+            quality = evaluate_policy_coordinate_quality(brief, render_plain_text(brief), render_email_html(brief))
+            changed = True
+            repaired_actions.append("hide_policy_coordinate")
+            if logger:
+                logger.info(
+                    "policy coordinate hidden",
+                    previous_policy_id=previous.get("matched_policy_id"),
+                    remaining_issues=rebuilt_quality.get("issues", []),
+                )
+
+    if changed:
+        plain_text = render_plain_text(brief)
+        html_body = render_email_html(brief)
+        quality = evaluate_policy_coordinate_quality(brief, plain_text, html_body)
+
+    if logger:
+        logger.info(
+            "policy coordinate quality",
+            status=quality.get("status"),
+            score=quality.get("score"),
+            changed=changed,
+            repaired_actions=repaired_actions,
+            issue_count=len(quality.get("issues") or []),
+        )
+    return {
+        "brief": brief,
+        "plain_text": plain_text,
+        "html_body": html_body,
+        "quality": quality,
+        "changed": changed,
+        "repaired_actions": repaired_actions,
+    }
+
+
 def detect_theme_changes(articles: list[Any], brief: dict[str, Any]) -> list[dict[str, str]]:
     article_theme_by_url = {getattr(item, "url", ""): " / ".join(getattr(item, "themes", [])[:2]) for item in articles}
     article_theme_by_title = {getattr(item, "title", ""): " / ".join(getattr(item, "themes", [])[:2]) for item in articles}
@@ -668,6 +1321,151 @@ def should_attach_weekly_pdf_today(event: Any, today: str, test_invocation: bool
         "should_attach": should,
     }
     return should, meta
+
+
+def render_brief_outputs(brief: dict[str, Any], subject: str) -> dict[str, Any]:
+    from email_renderer import render_email_html, render_plain_text
+
+    plain_text = render_plain_text(brief)
+    html_body = render_email_html(brief)
+    return {
+        "brief": brief,
+        "subject": subject,
+        "plain_text": plain_text,
+        "html_body": html_body,
+    }
+
+
+def evaluate_all_quality(
+    brief: dict[str, Any],
+    plain_text: str,
+    html_body: str,
+    *,
+    test_invocation: bool,
+    selection_quality: dict[str, Any] | None = None,
+    cleanliness_quality: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    from brief_quality import evaluate_brief_cleanliness
+    from content_quality_reviewer import evaluate_content_quality
+    from content_risk_quality import evaluate_content_risks
+    from duplication_quality import evaluate_duplication
+    from expression_quality import evaluate_expression_quality
+    from framework_quality import evaluate_framework_map
+    from module_redundancy_quality import evaluate_module_redundancy
+    from policy_coordinate_quality import evaluate_policy_coordinate_quality
+    from question_quality import evaluate_daily_question
+    from quick_reads_quality import evaluate_quick_reads
+    from takeaway_quality import evaluate_takeaway
+
+    if selection_quality is None:
+        selection_quality = evaluate_selection_quality(brief)
+    if cleanliness_quality is None:
+        cleanliness_quality = {}
+    return {
+        "daily_question": evaluate_daily_question(brief),
+        "framework_map": evaluate_framework_map(brief),
+        "today_takeaway": evaluate_takeaway(brief),
+        "brief_cleanliness": evaluate_brief_cleanliness(brief, plain_text, html_body),
+        "quick_reads": evaluate_quick_reads(brief),
+        "duplication": evaluate_duplication(brief),
+        "expression_quality": evaluate_expression_quality(brief),
+        "module_redundancy": evaluate_module_redundancy(brief),
+        "content_risk": evaluate_content_risks(brief, plain_text, html_body),
+        "selection": selection_quality,
+        "content_quality": evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation),
+        "cleanliness": cleanliness_quality,
+        "policy_coordinate": evaluate_policy_coordinate_quality(brief, plain_text, html_body),
+    }
+
+
+def build_gate_from_quality_map(quality: dict[str, Any]) -> dict[str, Any]:
+    return build_quality_gate(
+        quality.get("daily_question", {}),
+        quality.get("framework_map", {}),
+        quality.get("today_takeaway", {}),
+        quality.get("brief_cleanliness", {}),
+        quality.get("quick_reads", {}),
+        quality.get("duplication", {}),
+        quality.get("expression_quality", {}),
+        quality.get("module_redundancy", {}),
+        quality.get("content_risk", {}),
+        quality.get("selection", {}),
+        quality.get("content_quality", {}),
+        quality.get("cleanliness", {}),
+        quality.get("policy_coordinate", {}),
+    )
+
+
+def _log_quality_map(logger: RunLogger, quality: dict[str, Any], suffix: str) -> None:
+    labels = {
+        "daily_question": "today question quality",
+        "framework_map": "framework map quality",
+        "today_takeaway": "today takeaway quality",
+        "brief_cleanliness": "brief cleanliness quality",
+        "quick_reads": "quick reads quality",
+        "duplication": "duplication quality",
+        "expression_quality": "expression quality",
+        "module_redundancy": "module redundancy quality",
+        "content_risk": "content risk quality",
+        "content_quality": "content quality",
+        "policy_coordinate": "policy coordinate quality",
+    }
+    for key, label in labels.items():
+        item = quality.get(key)
+        if isinstance(item, dict):
+            logger.info(f"{label} {suffix}".strip(), **item)
+
+
+def recompute_after_brief_change(
+    brief: dict[str, Any],
+    today: str,
+    *,
+    test_invocation: bool,
+    logger: RunLogger,
+    reason: str,
+    articles: list[Any] | None = None,
+    cleanliness_quality: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    from brief_schema import ensure_brief_schema
+    from url_checker import annotate_brief_urls
+
+    brief, schema_warnings = ensure_brief_schema(brief, today)
+    if schema_warnings:
+        logger.info(f"{reason} warnings", warnings=schema_warnings)
+    brief, url_checks = annotate_brief_urls(brief)
+    logger.info(f"source url checks {reason}", checks=url_checks)
+    final_selection = summarize_final_selection(brief)
+    logger.info(f"final article roles {reason}", **final_selection)
+    theme_changes: list[dict[str, str]] = []
+    if articles is not None:
+        theme_changes = detect_theme_changes(articles, brief)
+        logger.info(f"theme comparison {reason}", theme_changes=theme_changes)
+    selection_quality = evaluate_selection_quality(brief)
+    logger.info(f"selection quality {reason}", **selection_quality)
+    subject = brief.get("email_subject") or f"公考晨读 {today}"
+    if not str(subject).startswith(settings.subject_prefix):
+        subject = f"{settings.subject_prefix}{subject}"
+    brief = ensure_policy_coordinate_for_render(brief, logger=logger)
+    rendered = render_brief_outputs(brief, str(subject))
+    quality = evaluate_all_quality(
+        brief,
+        str(rendered.get("plain_text") or ""),
+        str(rendered.get("html_body") or ""),
+        test_invocation=test_invocation,
+        selection_quality=selection_quality,
+        cleanliness_quality=cleanliness_quality,
+    )
+    _log_quality_map(logger, quality, reason)
+    return {
+        "brief": brief,
+        "subject": str(rendered.get("subject") or subject),
+        "plain_text": str(rendered.get("plain_text") or ""),
+        "html_body": str(rendered.get("html_body") or ""),
+        "schema_warnings": schema_warnings,
+        "final_selection": final_selection,
+        "theme_changes": theme_changes,
+        "quality": quality,
+    }
 
 
 def send_feedback_test_email(event: Any | None = None) -> dict[str, Any]:
@@ -926,18 +1724,8 @@ def evaluate_candidate_with_current_quality(
     test_invocation: bool = False,
 ) -> dict[str, Any]:
     from brief_schema import ensure_brief_schema
-    from brief_quality import evaluate_brief_cleanliness
-    from content_quality_reviewer import evaluate_content_quality, get_content_quality_model_plan
-    from content_risk_quality import evaluate_content_risks
-    from duplication_quality import evaluate_duplication
     from email_renderer import render_email_html, render_plain_text
-    from expression_quality import evaluate_expression_quality
-    from framework_quality import evaluate_framework_map
-    from module_redundancy_quality import evaluate_module_redundancy
     from pre_send_cleanliness import pre_send_cleanliness_guard
-    from question_quality import evaluate_daily_question
-    from quick_reads_quality import evaluate_quick_reads
-    from takeaway_quality import evaluate_takeaway
 
     brief = candidate.get("brief") if isinstance(candidate.get("brief"), dict) else {}
     if not brief:
@@ -966,31 +1754,16 @@ def evaluate_candidate_with_current_quality(
     subject = str(guarded.get("subject") or subject)
     plain_text = str(guarded.get("plain_text") or plain_text)
     html_body = str(guarded.get("html_body") or html_body)
-    question_quality = evaluate_daily_question(brief)
-    framework_quality = evaluate_framework_map(brief)
-    takeaway_quality = evaluate_takeaway(brief)
-    brief_quality = evaluate_brief_cleanliness(brief, plain_text, html_body)
-    quick_reads_quality = evaluate_quick_reads(brief)
-    duplication_quality = evaluate_duplication(brief)
-    expression_quality = evaluate_expression_quality(brief)
-    module_redundancy_quality = evaluate_module_redundancy(brief)
-    content_risk_quality = evaluate_content_risks(brief, plain_text, html_body)
     selection_quality = evaluate_selection_quality(brief)
-    content_quality = evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation)
-    quality_gate = build_quality_gate(
-        question_quality,
-        framework_quality,
-        takeaway_quality,
-        brief_quality,
-        quick_reads_quality,
-        duplication_quality,
-        expression_quality,
-        module_redundancy_quality,
-        content_risk_quality,
-        selection_quality,
-        content_quality,
-        cleanliness_quality,
+    quality_map = evaluate_all_quality(
+        brief,
+        plain_text,
+        html_body,
+        test_invocation=test_invocation,
+        selection_quality=selection_quality,
+        cleanliness_quality=cleanliness_quality,
     )
+    quality_gate = build_gate_from_quality_map(quality_map)
     return {
         "brief": brief,
         "plain_text": plain_text,
@@ -999,20 +1772,7 @@ def evaluate_candidate_with_current_quality(
         "schema_warnings": schema_warnings,
         "quality_gate": quality_gate,
         "quality": {
-            "final": {
-                "daily_question": question_quality,
-                "framework_map": framework_quality,
-                "today_takeaway": takeaway_quality,
-                "brief_cleanliness": brief_quality,
-                "quick_reads": quick_reads_quality,
-                "duplication": duplication_quality,
-                "expression_quality": expression_quality,
-                "module_redundancy": module_redundancy_quality,
-                "content_risk": content_risk_quality,
-                "selection": selection_quality,
-                "content_quality": content_quality,
-                "cleanliness": cleanliness_quality,
-            }
+            "final": quality_map
         },
     }
 
@@ -1023,6 +1783,7 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
     from email_sender import get_effective_recipients, send_email
     from harness_metrics import append_morning_metrics
     from history import append_records
+    from policy_coordinate_usage_history import append_policy_coordinate_usage
 
     settings.output_dir.mkdir(parents=True, exist_ok=True)
     logger = RunLogger(settings.output_dir)
@@ -1137,6 +1898,11 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
             "daily_archive_saved": False,
             "daily_archive_reason": "candidate send test mode.",
         }
+        policy_usage_history_result = {
+            "usage_history_write_ok": False,
+            "usage_history_appended": 0,
+            "usage_history_skip_reason": "candidate send test mode.",
+        }
     elif send_result and int(send_result.get("success_count", 0)) > 0:
         history_result = append_records(settings.history_path, build_history_records(brief, delivery_date))
         archive_result = archive_daily_content(
@@ -1147,6 +1913,15 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
             subject,
             send_success_count=int(send_result.get("success_count", 0)),
         )
+        policy_usage_record = build_policy_coordinate_usage_record(brief, delivery_date)
+        if policy_usage_record:
+            policy_usage_history_result = append_policy_coordinate_usage(policy_usage_record)
+        else:
+            policy_usage_history_result = {
+                "usage_history_write_ok": False,
+                "usage_history_appended": 0,
+                "usage_history_skip_reason": "candidate send success but policy_coordinate missing displayable payload.",
+            }
     else:
         history_result = {
             "history_write_ok": False,
@@ -1159,8 +1934,14 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
             "daily_archive_saved": False,
             "daily_archive_reason": "candidate email not sent.",
         }
+        policy_usage_history_result = {
+            "usage_history_write_ok": False,
+            "usage_history_appended": 0,
+            "usage_history_skip_reason": "candidate email not sent.",
+        }
     logger.info("candidate sent history updated", **history_result)
     logger.info("candidate daily archive", **archive_result)
+    logger.info("candidate policy coordinate usage history", **policy_usage_history_result)
     try:
         metrics_result = append_morning_metrics(
             delivery_date=delivery_date,
@@ -1186,6 +1967,7 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
         "delivery_date": delivery_date,
         "sent": bool(send_result and int(send_result.get("success_count", 0)) > 0),
         "send_result": send_result,
+        "policy_coordinate_usage_history": policy_usage_history_result,
         "output_dir": str(settings.output_dir),
         "log": str(log_path),
     }
@@ -1559,6 +2341,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
     if not str(subject).startswith(settings.subject_prefix):
         subject = f"{settings.subject_prefix}{subject}"
 
+    brief = ensure_policy_coordinate_for_render(brief, logger=logger)
     plain_text = render_plain_text(brief)
     html_body = render_email_html(brief)
     brief_quality = evaluate_brief_cleanliness(brief, plain_text, html_body)
@@ -1598,6 +2381,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                 logger.info("framework map quality after minor auto fixes", **framework_quality)
                 takeaway_quality = evaluate_takeaway(brief)
                 logger.info("today takeaway quality after minor auto fixes", **takeaway_quality)
+                brief = ensure_policy_coordinate_for_render(brief, logger=logger)
                 plain_text = render_plain_text(brief)
                 html_body = render_email_html(brief)
                 brief_quality = evaluate_brief_cleanliness(brief, plain_text, html_body)
@@ -1628,33 +2412,32 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                     minor_fix_result["changed_modules"] = list(dict.fromkeys(list(minor_fix_result.get("changed_modules") or []) + list(content_minor_fix.get("changed_modules") or [])))
                 else:
                     minor_fix_result = content_minor_fix
-                brief, content_minor_warnings = ensure_brief_schema(content_minor_fix.get("brief") or brief, today)
-                if content_minor_warnings:
-                    logger.info("content quality minor fix warnings", warnings=content_minor_warnings)
-                brief, url_checks = annotate_brief_urls(brief)
-                logger.info("source url checks after content quality minor fixes", checks=url_checks)
-                final_selection = summarize_final_selection(brief)
-                logger.info("final article roles after content quality minor fixes", **final_selection)
-                theme_changes = detect_theme_changes(articles, brief)
-                logger.info("theme comparison after content quality minor fixes", theme_changes=theme_changes)
-                selection_quality = evaluate_selection_quality(brief)
-                logger.info("selection quality after content quality minor fixes", **selection_quality)
-                subject = brief.get("email_subject") or f"公考晨读 {today}"
-                if not str(subject).startswith(settings.subject_prefix):
-                    subject = f"{settings.subject_prefix}{subject}"
-                plain_text = render_plain_text(brief)
-                html_body = render_email_html(brief)
-                question_quality = evaluate_daily_question(brief)
-                framework_quality = evaluate_framework_map(brief)
-                takeaway_quality = evaluate_takeaway(brief)
-                brief_quality = evaluate_brief_cleanliness(brief, plain_text, html_body)
-                quick_reads_quality = evaluate_quick_reads(brief)
-                duplication_quality = evaluate_duplication(brief)
-                expression_quality = evaluate_expression_quality(brief)
-                module_redundancy_quality = evaluate_module_redundancy(brief)
-                content_risk_quality = evaluate_content_risks(brief, plain_text, html_body)
-                content_quality = evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation)
-                logger.info("content quality after content minor fixes", **content_quality)
+                recomputed = recompute_after_brief_change(
+                    content_minor_fix.get("brief") or brief,
+                    today,
+                    test_invocation=test_invocation,
+                    logger=logger,
+                    reason="after content quality minor fixes",
+                    articles=articles,
+                )
+                brief = recomputed["brief"]
+                subject = recomputed["subject"]
+                plain_text = recomputed["plain_text"]
+                html_body = recomputed["html_body"]
+                final_selection = recomputed["final_selection"]
+                theme_changes = recomputed["theme_changes"]
+                quality_map = recomputed["quality"]
+                question_quality = quality_map["daily_question"]
+                framework_quality = quality_map["framework_map"]
+                takeaway_quality = quality_map["today_takeaway"]
+                brief_quality = quality_map["brief_cleanliness"]
+                quick_reads_quality = quality_map["quick_reads"]
+                duplication_quality = quality_map["duplication"]
+                expression_quality = quality_map["expression_quality"]
+                module_redundancy_quality = quality_map["module_redundancy"]
+                content_risk_quality = quality_map["content_risk"]
+                selection_quality = quality_map["selection"]
+                content_quality = quality_map["content_quality"]
 
             content_issue_rewrite_result = rewrite_content_issues(brief, content_quality, test_mode=test_invocation, today=today)
             if content_issue_rewrite_result.get("changed"):
@@ -1681,42 +2464,32 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                     rewritten_modules=content_issue_rewrite_result.get("rewritten_modules", []),
                     changed_fields=content_issue_rewrite_result.get("changed_fields", []),
                 )
-                brief, content_rewrite_warnings = ensure_brief_schema(content_issue_rewrite_result.get("brief") or brief, today)
-                if content_rewrite_warnings:
-                    logger.info("content issue rewrite warnings", warnings=content_rewrite_warnings)
-                brief, url_checks = annotate_brief_urls(brief)
-                logger.info("source url checks after content issue rewrite", checks=url_checks)
-                final_selection = summarize_final_selection(brief)
-                logger.info("final article roles after content issue rewrite", **final_selection)
-                theme_changes = detect_theme_changes(articles, brief)
-                logger.info("theme comparison after content issue rewrite", theme_changes=theme_changes)
-                selection_quality = evaluate_selection_quality(brief)
-                logger.info("selection quality after content issue rewrite", **selection_quality)
-                subject = brief.get("email_subject") or f"公考晨读 {today}"
-                if not str(subject).startswith(settings.subject_prefix):
-                    subject = f"{settings.subject_prefix}{subject}"
-                plain_text = render_plain_text(brief)
-                html_body = render_email_html(brief)
-                question_quality = evaluate_daily_question(brief)
-                logger.info("today question quality after content issue rewrite", **question_quality)
-                framework_quality = evaluate_framework_map(brief)
-                logger.info("framework map quality after content issue rewrite", **framework_quality)
-                takeaway_quality = evaluate_takeaway(brief)
-                logger.info("today takeaway quality after content issue rewrite", **takeaway_quality)
-                brief_quality = evaluate_brief_cleanliness(brief, plain_text, html_body)
-                logger.info("brief cleanliness quality after content issue rewrite", **brief_quality)
-                quick_reads_quality = evaluate_quick_reads(brief)
-                logger.info("quick reads quality after content issue rewrite", **quick_reads_quality)
-                duplication_quality = evaluate_duplication(brief)
-                logger.info("duplication quality after content issue rewrite", **duplication_quality)
-                expression_quality = evaluate_expression_quality(brief)
-                logger.info("expression quality after content issue rewrite", **expression_quality)
-                module_redundancy_quality = evaluate_module_redundancy(brief)
-                logger.info("module redundancy quality after content issue rewrite", **module_redundancy_quality)
-                content_risk_quality = evaluate_content_risks(brief, plain_text, html_body)
-                logger.info("content risk quality after content issue rewrite", **content_risk_quality)
-                content_quality = evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation)
-                logger.info("content quality after content issue rewrite", **content_quality)
+                recomputed = recompute_after_brief_change(
+                    content_issue_rewrite_result.get("brief") or brief,
+                    today,
+                    test_invocation=test_invocation,
+                    logger=logger,
+                    reason="after content issue rewrite",
+                    articles=articles,
+                )
+                brief = recomputed["brief"]
+                subject = recomputed["subject"]
+                plain_text = recomputed["plain_text"]
+                html_body = recomputed["html_body"]
+                final_selection = recomputed["final_selection"]
+                theme_changes = recomputed["theme_changes"]
+                quality_map = recomputed["quality"]
+                question_quality = quality_map["daily_question"]
+                framework_quality = quality_map["framework_map"]
+                takeaway_quality = quality_map["today_takeaway"]
+                brief_quality = quality_map["brief_cleanliness"]
+                quick_reads_quality = quality_map["quick_reads"]
+                duplication_quality = quality_map["duplication"]
+                expression_quality = quality_map["expression_quality"]
+                module_redundancy_quality = quality_map["module_redundancy"]
+                content_risk_quality = quality_map["content_risk"]
+                selection_quality = quality_map["selection"]
+                content_quality = quality_map["content_quality"]
                 after_content_score = int(content_quality.get("score") or 0)
                 if after_content_score + 2 < before_content_score:
                     logger.info(
@@ -1768,31 +2541,30 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
         fix_count=len(cleanliness_quality.get("fixes") or []),
         unresolved_count=len(cleanliness_quality.get("unresolved_issues") or []),
     )
-    question_quality = evaluate_daily_question(brief)
-    framework_quality = evaluate_framework_map(brief)
-    takeaway_quality = evaluate_takeaway(brief)
-    brief_quality = evaluate_brief_cleanliness(brief, plain_text, html_body)
-    quick_reads_quality = evaluate_quick_reads(brief)
-    duplication_quality = evaluate_duplication(brief)
-    expression_quality = evaluate_expression_quality(brief)
-    module_redundancy_quality = evaluate_module_redundancy(brief)
-    content_risk_quality = evaluate_content_risks(brief, plain_text, html_body)
-    content_quality = evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation)
-    logger.info("content quality after pre-send cleanliness guard", **content_quality)
-    quality_gate = build_quality_gate(
-        question_quality,
-        framework_quality,
-        takeaway_quality,
-        brief_quality,
-        quick_reads_quality,
-        duplication_quality,
-        expression_quality,
-        module_redundancy_quality,
-        content_risk_quality,
-        selection_quality,
-        content_quality,
-        cleanliness_quality,
+    policy_coordinate_result = enforce_policy_coordinate_quality(brief, plain_text, html_body, logger=logger)
+    brief = policy_coordinate_result["brief"]
+    plain_text = policy_coordinate_result["plain_text"]
+    html_body = policy_coordinate_result["html_body"]
+    quality_map = evaluate_all_quality(
+        brief,
+        plain_text,
+        html_body,
+        test_invocation=test_invocation,
+        selection_quality=selection_quality,
+        cleanliness_quality=cleanliness_quality,
     )
+    question_quality = quality_map["daily_question"]
+    framework_quality = quality_map["framework_map"]
+    takeaway_quality = quality_map["today_takeaway"]
+    brief_quality = quality_map["brief_cleanliness"]
+    quick_reads_quality = quality_map["quick_reads"]
+    duplication_quality = quality_map["duplication"]
+    expression_quality = quality_map["expression_quality"]
+    module_redundancy_quality = quality_map["module_redundancy"]
+    content_risk_quality = quality_map["content_risk"]
+    content_quality = quality_map["content_quality"]
+    logger.info("content quality after pre-send cleanliness guard", **content_quality)
+    quality_gate = build_gate_from_quality_map(quality_map)
     logger.info("quality gate", **quality_gate, blocked=(not test_invocation) and quality_gate.get("overall") == "fail")
     if settings.quality_rewrite_enabled and quality_gate.get("overall") == "fail":
         try:
@@ -1819,42 +2591,32 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                 details=p0_repair_result.get("details", {}),
             )
             if p0_repair_result.get("rewritten_modules"):
-                brief, p0_repair_warnings = ensure_brief_schema(p0_repair_result.get("brief") or brief, today)
-                if p0_repair_warnings:
-                    logger.info("p0 repair warnings", warnings=p0_repair_warnings)
-                brief, url_checks = annotate_brief_urls(brief)
-                logger.info("source url checks after p0 repair", checks=url_checks)
-                final_selection = summarize_final_selection(brief)
-                logger.info("final article roles after p0 repair", **final_selection)
-                theme_changes = detect_theme_changes(articles, brief)
-                logger.info("theme comparison after p0 repair", theme_changes=theme_changes)
-                selection_quality = evaluate_selection_quality(brief)
-                logger.info("selection quality after p0 repair", **selection_quality)
-                subject = brief.get("email_subject") or f"公考晨读 {today}"
-                if not str(subject).startswith(settings.subject_prefix):
-                    subject = f"{settings.subject_prefix}{subject}"
-                question_quality = evaluate_daily_question(brief)
-                logger.info("today question quality after p0 repair", **question_quality)
-                framework_quality = evaluate_framework_map(brief)
-                logger.info("framework map quality after p0 repair", **framework_quality)
-                takeaway_quality = evaluate_takeaway(brief)
-                logger.info("today takeaway quality after p0 repair", **takeaway_quality)
-                plain_text = render_plain_text(brief)
-                html_body = render_email_html(brief)
-                brief_quality = evaluate_brief_cleanliness(brief, plain_text, html_body)
-                logger.info("brief cleanliness quality after p0 repair", **brief_quality)
-                quick_reads_quality = evaluate_quick_reads(brief)
-                logger.info("quick reads quality after p0 repair", **quick_reads_quality)
-                duplication_quality = evaluate_duplication(brief)
-                logger.info("duplication quality after p0 repair", **duplication_quality)
-                expression_quality = evaluate_expression_quality(brief)
-                logger.info("expression quality after p0 repair", **expression_quality)
-                module_redundancy_quality = evaluate_module_redundancy(brief)
-                logger.info("module redundancy quality after p0 repair", **module_redundancy_quality)
-                content_risk_quality = evaluate_content_risks(brief, plain_text, html_body)
-                logger.info("content risk quality after p0 repair", **content_risk_quality)
-                content_quality = evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation)
-                logger.info("content quality after p0 repair", **content_quality)
+                recomputed = recompute_after_brief_change(
+                    p0_repair_result.get("brief") or brief,
+                    today,
+                    test_invocation=test_invocation,
+                    logger=logger,
+                    reason="after p0 repair",
+                    articles=articles,
+                )
+                brief = recomputed["brief"]
+                subject = recomputed["subject"]
+                plain_text = recomputed["plain_text"]
+                html_body = recomputed["html_body"]
+                final_selection = recomputed["final_selection"]
+                theme_changes = recomputed["theme_changes"]
+                quality_map = recomputed["quality"]
+                question_quality = quality_map["daily_question"]
+                framework_quality = quality_map["framework_map"]
+                takeaway_quality = quality_map["today_takeaway"]
+                brief_quality = quality_map["brief_cleanliness"]
+                quick_reads_quality = quality_map["quick_reads"]
+                duplication_quality = quality_map["duplication"]
+                expression_quality = quality_map["expression_quality"]
+                module_redundancy_quality = quality_map["module_redundancy"]
+                content_risk_quality = quality_map["content_risk"]
+                selection_quality = quality_map["selection"]
+                content_quality = quality_map["content_quality"]
                 guarded, cleanliness_quality = pre_send_cleanliness_guard(
                     {"brief": brief, "subject": str(subject), "plain_text": plain_text, "html_body": html_body, "quality": {}}
                 )
@@ -1869,31 +2631,30 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                     fix_count=len(cleanliness_quality.get("fixes") or []),
                     unresolved_count=len(cleanliness_quality.get("unresolved_issues") or []),
                 )
-                question_quality = evaluate_daily_question(brief)
-                framework_quality = evaluate_framework_map(brief)
-                takeaway_quality = evaluate_takeaway(brief)
-                brief_quality = evaluate_brief_cleanliness(brief, plain_text, html_body)
-                quick_reads_quality = evaluate_quick_reads(brief)
-                duplication_quality = evaluate_duplication(brief)
-                expression_quality = evaluate_expression_quality(brief)
-                module_redundancy_quality = evaluate_module_redundancy(brief)
-                content_risk_quality = evaluate_content_risks(brief, plain_text, html_body)
-                content_quality = evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation)
-                logger.info("content quality after pre-send cleanliness guard after p0 repair", **content_quality)
-                quality_gate = build_quality_gate(
-                    question_quality,
-                    framework_quality,
-                    takeaway_quality,
-                    brief_quality,
-                    quick_reads_quality,
-                    duplication_quality,
-                    expression_quality,
-                    module_redundancy_quality,
-                    content_risk_quality,
-                    selection_quality,
-                    content_quality,
-                    cleanliness_quality,
+                policy_coordinate_result = enforce_policy_coordinate_quality(brief, plain_text, html_body, logger=logger)
+                brief = policy_coordinate_result["brief"]
+                plain_text = policy_coordinate_result["plain_text"]
+                html_body = policy_coordinate_result["html_body"]
+                quality_map = evaluate_all_quality(
+                    brief,
+                    plain_text,
+                    html_body,
+                    test_invocation=test_invocation,
+                    selection_quality=selection_quality,
+                    cleanliness_quality=cleanliness_quality,
                 )
+                question_quality = quality_map["daily_question"]
+                framework_quality = quality_map["framework_map"]
+                takeaway_quality = quality_map["today_takeaway"]
+                brief_quality = quality_map["brief_cleanliness"]
+                quick_reads_quality = quality_map["quick_reads"]
+                duplication_quality = quality_map["duplication"]
+                expression_quality = quality_map["expression_quality"]
+                module_redundancy_quality = quality_map["module_redundancy"]
+                content_risk_quality = quality_map["content_risk"]
+                content_quality = quality_map["content_quality"]
+                logger.info("content quality after pre-send cleanliness guard after p0 repair", **content_quality)
+                quality_gate = build_gate_from_quality_map(quality_map)
                 logger.info("quality gate after p0 repair", **quality_gate, blocked=(not test_invocation) and quality_gate.get("overall") == "fail")
         except Exception as exc:
             logger.info("p0 repair failed", error=str(exc))
@@ -1939,6 +2700,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
             "selection": selection_quality,
             "content_quality": content_quality,
             "cleanliness": cleanliness_quality,
+            "policy_coordinate": quality_map.get("policy_coordinate", {}),
         },
         "rewrite": rewrite_result,
         "minor_auto_fix": minor_fix_result,
@@ -1958,6 +2720,44 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
         "quality_gate": quality_gate,
     })
     (settings.output_dir / "latest_quality_card.md").write_text(quality_card_markdown, encoding="utf-8")
+    policy_coordinate_quality = quality_map.get("policy_coordinate", {}) if isinstance(quality_map.get("policy_coordinate"), dict) else {}
+    if candidate_invocation:
+        policy_usage_history_result = {
+            "usage_history_write_ok": False,
+            "usage_history_appended": 0,
+            "usage_history_skip_reason": "nightly candidate mode; usage history tracks final non-candidate outputs only.",
+        }
+    elif test_invocation:
+        policy_usage_history_result = {
+            "usage_history_write_ok": False,
+            "usage_history_appended": 0,
+            "usage_history_skip_reason": "manual test mode; skip policy coordinate usage history.",
+        }
+    elif quality_blocked:
+        policy_usage_history_result = {
+            "usage_history_write_ok": False,
+            "usage_history_appended": 0,
+            "usage_history_skip_reason": "quality gate blocked; skip policy coordinate usage history.",
+        }
+    elif not policy_coordinate_quality.get("ok"):
+        policy_usage_history_result = {
+            "usage_history_write_ok": False,
+            "usage_history_appended": 0,
+            "usage_history_skip_reason": "policy_coordinate quality not ok; skip usage history append.",
+        }
+    else:
+        policy_usage_record = build_policy_coordinate_usage_record(brief, today)
+        if not policy_usage_record:
+            policy_usage_history_result = {
+                "usage_history_write_ok": False,
+                "usage_history_appended": 0,
+                "usage_history_skip_reason": "policy_coordinate missing displayable payload.",
+            }
+        else:
+            from policy_coordinate_usage_history import append_policy_coordinate_usage
+
+            policy_usage_history_result = append_policy_coordinate_usage(policy_usage_record)
+    logger.info("policy coordinate usage history", **policy_usage_history_result)
     candidate_save_result: dict[str, Any] | None = None
     admin_report_result: dict[str, Any] | None = None
     blocked_archive_result: dict[str, Any] | None = None
@@ -2172,6 +2972,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
         "subject": subject,
         "candidate_saved": bool(candidate_save_result and candidate_save_result.get("candidate_saved")),
         "sent": bool(send_result and int(send_result.get("success_count", 0)) > 0),
+        "policy_coordinate_usage_history": policy_usage_history_result,
         "output_dir": str(settings.output_dir),
         "log": str(log_path),
     }

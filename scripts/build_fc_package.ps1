@@ -1,5 +1,5 @@
 param(
-    [string]$OutputZip = "C:\edgeDownlods\公考真题\邮件产品\_release\gongkao-morning-mailer.zip",
+    [string]$OutputZip = "",
     [string]$BuildDir = "",
     [string]$PythonVersion = "310",
     [string]$Platform = "manylinux2014_x86_64"
@@ -9,6 +9,12 @@ $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $root = Split-Path -Parent $scriptDir
+if (-not $OutputZip) {
+    $OutputZip = Join-Path $root "function.zip"
+}
+elseif (-not [System.IO.Path]::IsPathRooted($OutputZip)) {
+    $OutputZip = Join-Path $root $OutputZip
+}
 if (-not $BuildDir) {
     $BuildDir = Join-Path $root "build\fc_linux_py$PythonVersion`_package"
 }
@@ -43,7 +49,7 @@ New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
 Get-ChildItem -LiteralPath $root -File -Filter "*.py" | Copy-Item -Destination $BuildDir
 Copy-Item -LiteralPath (Join-Path $root "requirements.txt") -Destination $BuildDir
 
-foreach ($dir in @("content_harness", "knowledge", "scripts", "data")) {
+foreach ($dir in @("content_harness", "knowledge", "knowledge_base", "scripts", "data")) {
     $src = Join-Path $root $dir
     if (Test-Path -LiteralPath $src) {
         Copy-Item -LiteralPath $src -Destination (Join-Path $BuildDir $dir) -Recurse
@@ -93,6 +99,8 @@ try {
     Assert-Entry $zip @("question_bank.py")
     Assert-Entry $zip @("scripts/validate_daily_brief.py", "scripts\validate_daily_brief.py")
     Assert-Entry $zip @("data/question_bank/shenlun_question_bank_v3_a.csv", "data\question_bank\shenlun_question_bank_v3_a.csv")
+    Assert-Entry $zip @("knowledge_base/policy_corpus/policy_statements_core.jsonl", "knowledge_base\policy_corpus\policy_statements_core.jsonl")
+    Assert-Entry $zip @("knowledge_base/topic_knowledge/article_index.jsonl", "knowledge_base\topic_knowledge\article_index.jsonl")
 
     $pydCount = ($zip.Entries | Where-Object { $_.FullName -like "*.pyd" }).Count
     $pycacheCount = ($zip.Entries | Where-Object { $_.FullName -like "*__pycache__*" -or $_.FullName -like "*.pyc" }).Count

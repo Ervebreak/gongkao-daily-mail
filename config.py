@@ -109,6 +109,9 @@ class Settings:
     question_bank_match_limit: int = int(get_env("QUESTION_BANK_MATCH_LIMIT", "3"))
     question_bank_recent_days_dedup: int = int(get_env("QUESTION_BANK_RECENT_DAYS_DEDUP", "7"))
     question_bank_fail_open: bool = get_bool("QUESTION_BANK_FAIL_OPEN", True)
+    knowledge_base_mode: str = get_env("KNOWLEDGE_BASE_MODE", "local").lower()
+    knowledge_base_dir: Path = Path(get_env("KNOWLEDGE_BASE_DIR", "knowledge_base"))
+    knowledge_oss_prefix: str = get_env("KNOWLEDGE_OSS_PREFIX", "").strip().strip("/")
 
     smtp_host: str = get_env("SMTP_HOST", "smtp.qq.com")
     smtp_port: int = int(get_env("SMTP_PORT", "465"))
@@ -138,6 +141,18 @@ class Settings:
     def harness_metrics_path(self) -> Path:
         path = Path(self.harness_metrics_file or "harness_metrics.jsonl")
         return path if path.is_absolute() else self.output_dir / path
+
+    @property
+    def knowledge_base_path(self) -> Path:
+        return self.knowledge_base_dir if self.knowledge_base_dir.is_absolute() else Path(__file__).resolve().parent / self.knowledge_base_dir
+
+    @property
+    def policy_corpus_path(self) -> Path:
+        return self.knowledge_base_path / "policy_corpus"
+
+    @property
+    def topic_knowledge_path(self) -> Path:
+        return self.knowledge_base_path / "topic_knowledge"
 
     @property
     def recipients(self) -> list[str]:
