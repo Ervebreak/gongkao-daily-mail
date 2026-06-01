@@ -136,6 +136,11 @@ def _large_repetition(brief: dict[str, Any], coordinate: dict[str, Any]) -> bool
     return any(_similarity(coordinate_text, surface) >= 0.78 and len(coordinate_text) >= 80 for surface in surfaces)
 
 
+def _display_type(coordinate: dict[str, Any]) -> str:
+    value = _text(coordinate.get("display_evidence_type")).lower()
+    return value or "none"
+
+
 def evaluate_policy_coordinate_quality(brief: dict[str, Any], plain_text: str = "", html_body: str = "") -> dict[str, Any]:
     coordinate = _coordinate(brief)
     disabled_reason = _text(brief.get("_policy_coordinate_disabled_reason"))
@@ -151,6 +156,19 @@ def evaluate_policy_coordinate_quality(brief: dict[str, Any], plain_text: str = 
             "issues": issues,
         }
 
+    display_type = _display_type(coordinate)
+    if display_type == "none":
+        issues = []
+        if disabled_reason:
+            issues.append(_issue("low", "policy_coordinate_disabled", disabled_reason))
+        return {
+            "ok": True,
+            "status": "ok" if not issues else "review",
+            "score": 100 if not issues else 92,
+            "checks": {"present": False, "display_evidence_type": "none", "disabled_reason": disabled_reason},
+            "issues": issues,
+        }
+
     issues: list[dict[str, str]] = []
     policy_quote = _text(coordinate.get("policy_quote"))
     policy_source = _text(coordinate.get("policy_source"))
@@ -161,14 +179,16 @@ def evaluate_policy_coordinate_quality(brief: dict[str, Any], plain_text: str = 
     authoritative_source = _text(coordinate.get("authoritative_source"))
     matched_policy_id = _text(coordinate.get("matched_policy_id"))
     matched_qiushi_quote_id = _text(coordinate.get("matched_qiushi_quote_id"))
+    show_policy = display_type in {"policy", "both"}
+    show_qiushi = display_type in {"qiushi", "both"}
 
-    if not policy_quote:
-        issues.append(_issue("high", "policy_quote_missing", "policy_coordinate 存在但 policy_quote 为空。"))
-    elif len(policy_quote) > 90:
+    if show_policy and not policy_quote:
+        issues.append(_issue("high", "policy_quote_missing", "展示政策原文时，policy_quote 不能为空。"))
+    elif show_policy and len(policy_quote) > 90:
         issues.append(_issue("high", "policy_quote_too_long", "policy_quote 超过 90 字，不适合邮件展示。"))
-    if not policy_source:
-        issues.append(_issue("high", "policy_source_missing", "policy_source 为空，无法验证政策来源。"))
-    if not policy_translation:
+    if show_policy and not policy_source:
+        issues.append(_issue("high", "policy_source_missing", "展示政策原文时，policy_source 不能为空。"))
+    if show_policy and not policy_translation:
         issues.append(_issue("medium", "policy_translation_missing", "policy_translation 为空，缺少政策转译。"))
     if not article_connection:
         issues.append(_issue("medium", "article_connection_missing", "article_connection 为空，无法连接当天文章。"))
@@ -177,19 +197,21 @@ def evaluate_policy_coordinate_quality(brief: dict[str, Any], plain_text: str = 
     elif _specific_angle_count(exam_transfer, coordinate.get("answer_angles") or []) < 2:
         issues.append(_issue("medium", "exam_transfer_too_generic", "exam_transfer 缺少至少 2 个具体答题角度。"))
 
+    if show_qiushi and not authoritative_quote:
+        issues.append(_issue("high", "authoritative_quote_missing", "展示权威论述时，authoritative_quote 不能为空。"))
     if authoritative_quote:
         if len(authoritative_quote) > 120:
             issues.append(_issue("medium", "authoritative_quote_too_long", "authoritative_quote 超过 120 字。"))
-        if not authoritative_source:
+        if show_qiushi and not authoritative_source:
             issues.append(_issue("high", "authoritative_source_missing", "authoritative_quote 存在但 authoritative_source 为空。"))
 
-    if "求是" in policy_source or "《求是》" in policy_source:
+    if show_policy and ("求是" in policy_source or "《求是》" in policy_source):
         issues.append(_issue("high", "qiushi_used_as_policy_source", "《求是》论述不得作为政策原文来源。"))
-    if "求是" in policy_quote and not policy_source:
+    if show_policy and "求是" in policy_quote and not policy_source:
         issues.append(_issue("high", "qiushi_rendered_as_policy_quote", "疑似把《求是》论述写成政策原文。"))
     for field_name, value in {
-        "policy_quote": policy_quote,
-        "authoritative_quote": authoritative_quote,
+        "policy_quote": policy_quote if show_policy else "",
+        "authoritative_quote": authoritative_quote if show_qiushi else "",
         "policy_translation": policy_translation,
         "article_connection": article_connection,
         "exam_transfer": exam_transfer,
@@ -197,18 +219,21 @@ def evaluate_policy_coordinate_quality(brief: dict[str, Any], plain_text: str = 
         if _looks_incomplete(value):
             issues.append(_issue("high", f"{field_name}_incomplete", f"{field_name} 疑似半截句或标点不完整。"))
 
+    if show_policy and show_qiushi and _similarity(policy_quote, authoritative_quote) >= 0.72:
+        issues.append(_issue("high", "duplicate_evidence_quotes", "政策原文与权威论述高度重复，不应同时展示。"))
+
     combined = _text(coordinate)
     if "某领导人指出" in combined and not authoritative_source:
         issues.append(_issue("high", "vague_leader_source", "出现“某领导人指出”但没有具体来源。"))
 
-    if not matched_policy_id:
+    if show_policy and not matched_policy_id:
         issues.append(_issue("high", "matched_policy_id_missing", "matched_policy_id 为空，无法回查政策库。"))
-    elif matched_policy_id not in _policy_ids():
+    elif show_policy and matched_policy_id not in _policy_ids():
         issues.append(_issue("high", "matched_policy_id_not_found", f"matched_policy_id 不存在于政策库：{matched_policy_id}"))
     if matched_qiushi_quote_id and matched_qiushi_quote_id not in _qiushi_quote_ids():
         issues.append(_issue("high", "matched_qiushi_quote_id_not_found", f"matched_qiushi_quote_id 不存在于《求是》权威表达库：{matched_qiushi_quote_id}"))
 
-    if any(phrase in policy_translation for phrase in GENERIC_PHRASES) and len(policy_translation) < 45:
+    if show_policy and any(phrase in policy_translation for phrase in GENERIC_PHRASES) and len(policy_translation) < 45:
         issues.append(_issue("medium", "policy_translation_too_generic", "policy_translation 使用空泛表达但缺少具体转译。"))
     if any(phrase in article_connection for phrase in GENERIC_PHRASES) and len(article_connection) < 45:
         issues.append(_issue("medium", "article_connection_too_generic", "article_connection 表达空泛，缺少文章具体落点。"))
@@ -238,6 +263,7 @@ def evaluate_policy_coordinate_quality(brief: dict[str, Any], plain_text: str = 
         "score": score,
         "checks": {
             "present": True,
+            "display_evidence_type": display_type,
             "policy_quote_length": len(policy_quote),
             "authoritative_quote_length": len(authoritative_quote),
             "specific_angle_count": _specific_angle_count(exam_transfer, coordinate.get("answer_angles") or []),
@@ -247,6 +273,7 @@ def evaluate_policy_coordinate_quality(brief: dict[str, Any], plain_text: str = 
 
 
 AUTH_ISSUE_CODES = {
+    "authoritative_quote_missing",
     "authoritative_quote_too_long",
     "authoritative_source_missing",
     "matched_qiushi_quote_id_not_found",

@@ -348,18 +348,18 @@ def coordinate_source_text(value: Any) -> str:
 
 def policy_coordinate_lines(brief: dict[str, Any]) -> list[str]:
     coordinate = ensure_dict(brief.get("policy_coordinate"))
+    display_type = str(coordinate.get("display_evidence_type") or "").strip().lower()
     policy_quote = coordinate_quote_text(coordinate.get("policy_quote"))
     policy_source = coordinate_source_text(coordinate.get("policy_source"))
-    if not policy_quote or not policy_source:
-        return []
-
-    lines = [
-        "【今日政策坐标】",
-        f"政策原文：{policy_source}提出，“{policy_quote}”。",
-    ]
     authoritative_quote = coordinate_quote_text(coordinate.get("authoritative_quote"))
     authoritative_source = coordinate_source_text(coordinate.get("authoritative_source"))
-    if authoritative_quote and authoritative_source:
+    if display_type in {"", "none"}:
+        return []
+
+    lines = ["【今日政策坐标】"]
+    if display_type in {"policy", "both"} and policy_quote and policy_source:
+        lines.append(f"政策原文：{policy_source}提出，“{policy_quote}”。")
+    if display_type in {"qiushi", "both"} and authoritative_quote and authoritative_source:
         lines.append(f"权威论述：{authoritative_source}强调，“{authoritative_quote}”。")
 
     article_connection = str(coordinate.get("article_connection") or "").strip()
@@ -378,15 +378,23 @@ def render_policy_coordinate_plain(brief: dict[str, Any]) -> list[str]:
 
 def render_policy_coordinate_html(brief: dict[str, Any]) -> str:
     coordinate = ensure_dict(brief.get("policy_coordinate"))
+    display_type = str(coordinate.get("display_evidence_type") or "").strip().lower()
     policy_quote = coordinate_quote_text(coordinate.get("policy_quote"))
     policy_source = coordinate_source_text(coordinate.get("policy_source"))
-    if not policy_quote or not policy_source:
-        return ""
-
     authoritative_quote = coordinate_quote_text(coordinate.get("authoritative_quote"))
     authoritative_source = coordinate_source_text(coordinate.get("authoritative_source"))
+    if display_type in {"", "none"}:
+        return ""
+
+    policy_block = ""
+    if display_type in {"policy", "both"} and policy_quote and policy_source:
+        policy_block = f"""
+      <div style="font-size:14px;line-height:1.75;color:#334155;">
+        <b>政策原文：</b>{h(policy_source)}提出，“{h(policy_quote)}”。
+      </div>
+        """
     authoritative_block = ""
-    if authoritative_quote and authoritative_source:
+    if display_type in {"qiushi", "both"} and authoritative_quote and authoritative_source:
         authoritative_block = f"""
       <div style="font-size:14px;line-height:1.75;color:#334155;margin-top:8px;">
         <b>权威论述：</b>{h(authoritative_source)}强调，“{h(authoritative_quote)}”。
@@ -408,9 +416,7 @@ def render_policy_coordinate_html(brief: dict[str, Any]) -> str:
     return f"""
     <h2 style="font-size:21px;margin:20px 0 10px;">今日政策坐标</h2>
     <div style="background:#fff;border:1px solid #dbeafe;border-radius:16px;padding:15px;margin-bottom:15px;">
-      <div style="font-size:14px;line-height:1.75;color:#334155;">
-        <b>政策原文：</b>{h(policy_source)}提出，“{h(policy_quote)}”。
-      </div>
+      {policy_block}
       {authoritative_block}
       {article_block}
       {exam_block}
@@ -548,13 +554,12 @@ def render_plain_text(brief: dict[str, Any]) -> str:
         "我的一句话：________________",
         "参考句式：" + clip_text(reference_sentence, 120),
         "",
-        "今日可带走｜1个常识 + 2句必备金句 + 1个框架",
+        "今日可带走｜1个常识 + 2句必备金句",
         "关键词：" + "、".join(str(item) for item in as_list(takeaway.get("keywords"))[:5]),
         "时政常识：" + "；".join(str(item) for item in as_list(takeaway.get("common_knowledge_points"))[:1]),
         "必备金句：" + "；".join(
             (item.get("sentence") if isinstance(item, dict) else str(item)) for item in golden
         ),
-        "可迁移框架：" + clip_text(takeaway.get("framework", ""), 50),
         "",
         "今日速读｜申论素材补充",
         *[
@@ -679,7 +684,7 @@ def render_email_html(brief: dict[str, Any]) -> str:
       </div>
     </div>
 
-    <h2 style="font-size:21px;margin:20px 0 10px;">今日可带走｜1个常识 + 2句必备金句 + 1个框架</h2>
+    <h2 style="font-size:21px;margin:20px 0 10px;">今日可带走｜1个常识 + 2句必备金句</h2>
     <div style="background:#fff;border:1px solid #dbeafe;border-radius:16px;padding:15px;margin-bottom:15px;">
       <div style="font-size:14px;font-weight:900;color:#165dff;margin-bottom:6px;">今日关键词</div>
       <div style="margin-bottom:11px;">{inline_tags(takeaway.get('keywords', []), 3)}</div>
@@ -690,10 +695,6 @@ def render_email_html(brief: dict[str, Any]) -> str:
       <div style="background:#f5f3ff;border-left:4px solid #8b5cf6;border-radius:10px;padding:10px 11px;margin-bottom:10px;">
         <div style="font-size:14px;font-weight:900;color:#6d28d9;margin-bottom:6px;">必备金句</div>
         <ul style="padding-left:19px;line-height:1.68;font-size:14px;margin:0;">{render_golden_sentences(takeaway_gold, 2)}</ul>
-      </div>
-      <div style="background:#eef6ff;border-left:4px solid #165dff;border-radius:10px;padding:10px 11px;margin-bottom:10px;">
-        <div style="font-size:14px;font-weight:900;color:#165dff;margin-bottom:6px;">可迁移框架</div>
-        <div style="font-size:13px;line-height:1.65;color:#475569;">{h(clip_text(takeaway.get("framework"), 50))}</div>
       </div>
       {f'<div style="font-size:14px;font-weight:900;color:#165dff;margin-bottom:6px;">拓展联想</div><div style="font-size:13px;line-height:1.65;color:#475569;background:#f8fafc;border-radius:10px;padding:8px 10px;">{h(takeaway.get("extension"))}</div>' if takeaway.get("extension") else ''}
     </div>

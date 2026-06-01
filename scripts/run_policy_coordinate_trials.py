@@ -400,6 +400,7 @@ def build_trial_brief(base_brief: dict[str, Any], case: dict[str, Any]) -> dict[
 
 def verify_trial(case: dict[str, Any], brief: dict[str, Any], plain_text: str, html_body: str, quality: dict[str, Any]) -> dict[str, Any]:
     coordinate = brief.get("policy_coordinate") if isinstance(brief.get("policy_coordinate"), dict) else {}
+    display_type = str(coordinate.get("display_evidence_type") or "none").strip().lower()
     policy_lookup = {item.get("policy_id"): item for item in load_policy_core() + load_policy_all()}
     quote_lookup = {item.get("quote_id"): item for item in load_qiushi_quotes_core() + load_qiushi_quotes_candidates()}
     matched_policy = policy_lookup.get(coordinate.get("matched_policy_id"))
@@ -409,23 +410,26 @@ def verify_trial(case: dict[str, Any], brief: dict[str, Any], plain_text: str, h
         "daily_json_has_policy_coordinate": bool(coordinate),
         "html_has_policy_coordinate": "今日政策坐标" in html_body,
         "plain_text_has_policy_coordinate": "今日政策坐标" in plain_text,
-        "policy_quote_from_policy_corpus": bool(matched_policy),
-        "authoritative_quote_from_topic_knowledge": (not coordinate.get("authoritative_quote")) or bool(matched_quote),
+        "policy_quote_from_policy_corpus": display_type not in {"policy", "both"} or bool(matched_policy),
+        "authoritative_quote_from_topic_knowledge": display_type not in {"qiushi", "both"} or bool(matched_quote),
         "qiushi_not_rendered_as_policy_quote": (
-            not coordinate.get("authoritative_quote")
+            display_type == "qiushi"
+            or not coordinate.get("authoritative_quote")
             or coordinate.get("policy_quote") != coordinate.get("authoritative_quote")
         ) and ("求是" not in str(coordinate.get("policy_source") or "")),
         "article_connection_specific": len(str(coordinate.get("article_connection") or "")) >= 20,
         "exam_transfer_specific": len(str(coordinate.get("exam_transfer") or "")) >= 20 and len(coordinate.get("answer_angles") or []) >= 3,
-        "no_truncated_sentence": not any(issue.get("code") == "incomplete_sentence" for issue in quality.get("issues") or []),
-        "no_obvious_duplication": not any(issue.get("code") == "duplicate_content" for issue in quality.get("issues") or []),
+        "no_truncated_sentence": not any(str(issue.get("code") or "").endswith("_incomplete") for issue in quality.get("issues") or []),
+        "no_obvious_duplication": not any(str(issue.get("code") or "") in {"duplicate_content", "duplicate_evidence_quotes"} for issue in quality.get("issues") or []),
         "quality_check_passed": bool(quality.get("ok")),
         "render_title_not_duplicated": repeated_line == 1,
+        "takeaway_framework_hidden": "可迁移框架" not in plain_text and "可迁移框架" not in html_body,
     }
     checks["all_passed"] = all(checks.values())
     return {
         "case_slug": case["slug"],
         "checks": checks,
+        "display_evidence_type": display_type,
         "matched_policy_source_title": matched_policy.get("source_title") if matched_policy else "",
         "matched_qiushi_source_title": matched_quote.get("source_title") if matched_quote else "",
     }
@@ -448,16 +452,23 @@ def build_report_markdown(
     sample_blocks: list[str] = []
     for item in trial_results:
         coordinate = item["brief"]["policy_coordinate"]
+        display_type = coordinate.get("display_evidence_type") or "none"
         sample_blocks.append(
             "\n".join(
                 [
                     f"### {item['label']}",
                     f"- 主题：`{coordinate.get('theme')}`",
-                    f"- 政策原文：{coordinate.get('policy_source')}提出，“{coordinate.get('policy_quote')}”。",
+                    f"- 展示类型：`{display_type}`",
+                    f"- 证据选择原因：{coordinate.get('evidence_selection_reason') or '未记录'}",
+                    (
+                        f"- 政策原文：{coordinate.get('policy_source')}提出，“{coordinate.get('policy_quote')}”。"
+                        if display_type in {'policy', 'both'}
+                        else "- 政策原文：本样例前台未展示政策原文。"
+                    ),
                     (
                         f"- 权威论述：{coordinate.get('authoritative_source')}强调，“{coordinate.get('authoritative_quote')}”。"
-                        if coordinate.get("authoritative_quote") and coordinate.get("authoritative_source")
-                        else "- 权威论述：本样例未展示《求是》权威论述。"
+                        if display_type in {'qiushi', 'both'} and coordinate.get("authoritative_quote") and coordinate.get("authoritative_source")
+                        else "- 权威论述：本样例前台未展示《求是》权威论述。"
                     ),
                     f"- 文章落点：{coordinate.get('article_connection')}",
                     f"- 考场迁移：{coordinate.get('exam_transfer')}",
@@ -503,17 +514,17 @@ def build_report_markdown(
         "`policy_coordinate.authoritative_quote` / `authoritative_source`",
         "`policy_coordinate.article_connection` / `exam_transfer` / `answer_angles`",
         "`policy_coordinate.matched_policy_id` / `matched_qiushi_quote_id` / `matched_qiushi_article_id` / `matched_framework_id` / `matched_chunk_ids`",
+        "`policy_coordinate.display_evidence_type` / `display_evidence_label` / `display_evidence_quote` / `display_evidence_source` / `evidence_selection_reason`",
         "`policy_coordinate.source_type`",
         "`quote_status` / `display_priority` / `theme_confidence` / `display_ready` / `usage_tier` / `freshness`（语料清洗字段）",
         "`data/policy_coordinate_usage_history.jsonl` 的 `date` / `theme` / `matched_*` / `policy_quote` / `authoritative_quote`",
     ]
     quality_rules = [
-        "有 `policy_coordinate` 时，`policy_quote`、`policy_source`、`policy_translation`、`article_connection`、`exam_transfer` 不得为空。",
+        "展示 `policy` 时必须同时具备 `policy_quote` 与 `policy_source`；展示 `qiushi` 时必须同时具备 `authoritative_quote` 与 `authoritative_source`；展示 `both` 时两者都要通过检查。",
         "`policy_quote` 不超过 90 字；`authoritative_quote` 如存在不超过 120 字。",
-        "`authoritative_quote` 如存在，必须同时存在 `authoritative_source`。",
         "不得把《求是》论述写成政策原文，也不得出现“某领导人指出”但没有具体来源。",
         "`matched_policy_id` 必须能在政策库中找到；`matched_qiushi_quote_id` 如存在必须能在《求是》表达库中找到。",
-        "不得出现半截句、空泛转译、与今日精读/今日可带走/今日一题大段重复。",
+        "不得出现半截句、空泛转译、与今日精读/今日可带走/今日一题大段重复；双依据同时展示时不得高度重复。",
         "《求是》权威论述不合格时自动删除；政策原文不合格时尝试重匹配，仍失败则隐藏整个模块。",
         "高危政策坐标错误已并入 P0 门禁，命中关键 code 会阻断正式发送。",
     ]
@@ -526,7 +537,10 @@ def build_report_markdown(
     ]
 
     checks_lines: list[str] = []
+    display_summary = {"policy": 0, "qiushi": 0, "both": 0, "none": 0}
     for item in trial_results:
+        display_type = str(item["verification"].get("display_evidence_type") or "none")
+        display_summary[display_type] = display_summary.get(display_type, 0) + 1
         checks_lines.append(f"### {item['label']}")
         for key, value in item["verification"]["checks"].items():
             checks_lines.append(f"- `{key}`: {'pass' if value else 'fail'}")
@@ -557,7 +571,14 @@ def build_report_markdown(
             "## 7. 试跑检查结果",
             *checks_lines,
             "",
-            "## 8. 近 14 天去重逻辑验证",
+            "## 8. 前台展示分布",
+            f"- 展示 `policy` 的样例数：{display_summary.get('policy', 0)}",
+            f"- 展示 `qiushi` 的样例数：{display_summary.get('qiushi', 0)}",
+            f"- 展示 `both` 的样例数：{display_summary.get('both', 0)}",
+            f"- 展示 `none` 的样例数：{display_summary.get('none', 0)}",
+            "- 邮件前台已删除“今日可带走”中的“可迁移框架”展示，但 JSON 中的 `framework` / `exam_use` 等字段仍保留。",
+            "",
+            "## 9. 近 14 天去重逻辑验证",
             f"- 试跑使用隔离历史文件：`{TRIAL_HISTORY_PATH.relative_to(ROOT)}`。",
             f"- 正式三次试跑依次写入临时 usage history，后续样例匹配时 `recent_count` 分别提升为：{' / '.join(str(item['recent_usage_count']) for item in trial_results)}。",
             f"- 额外重复探测主题：`{dedupe_probe.get('theme')}`。",
@@ -565,15 +586,15 @@ def build_report_markdown(
             f"- 去重调试信息：`selected_repeat_notes={json.dumps(dedupe_probe.get('selected_repeat_notes') or {}, ensure_ascii=False)}`。",
             "- nightly candidate 生成不会写正式 usage history；正式晨间发送成功后才会追加 `data/policy_coordinate_usage_history.jsonl`。",
             "",
-            "## 9. 目前还有哪些风险",
+            "## 10. 目前还有哪些风险",
             *[f"- {item}" for item in risks],
             "",
-            "## 10. 后续如果切换 OSS，需要怎么配置",
+            "## 11. 后续如果切换 OSS，需要怎么配置",
             "- 环境变量层面：设置 `KNOWLEDGE_BASE_MODE=oss`、`KNOWLEDGE_OSS_PREFIX=<你的 OSS 目录前缀>`，并继续保留 `OSS_ENDPOINT`、`OSS_BUCKET`、`OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`。",
             "- 代码层面：当前 `knowledge_base_loader.py` 仍只读取本地 `KNOWLEDGE_BASE_DIR`，切换 OSS 前需要在加载器里补齐 OSS 下载/缓存逻辑，再让各个 `load_*()` 走统一读取入口。",
             "- 生产部署层面：如果还希望去重历史也跨实例持久化，建议将 `data/policy_coordinate_usage_history.jsonl` 也一并迁移到 OSS 或其他持久化存储。",
             "",
-            "## 11. 本地试跑产物位置",
+            "## 12. 本地试跑产物位置",
             f"- `output/policy_coordinate_trials/` 下保存了 3 组 `daily.json`、`email.html`、`plain_text.txt`、`quality.json` 和 `run.log`。",
         ]
     ) + "\n"
