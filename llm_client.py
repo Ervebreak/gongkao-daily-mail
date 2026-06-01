@@ -15,6 +15,7 @@ import requests
 from article_filter import Article
 from config import settings
 from quick_reads_quality import evaluate_quick_reads
+from question_quality import evaluate_daily_question
 from takeaway_quality import evaluate_takeaway
 from question_bank import build_question_bank_context, match_question_examples
 from prompt_templates import (
@@ -399,7 +400,24 @@ def _raise_for_generation_contract(payload: dict[str, Any], stage: str = "writin
         for issue in quick_report.get("issues") or []:
             if not isinstance(issue, dict):
                 continue
-            if issue.get("severity") == "high" and issue.get("code") in {"missing_quick_read_one_sentence", "empty_quick_read"}:
+            if issue.get("severity") == "high" and issue.get("code") in {
+                "missing_quick_read_one_sentence",
+                "empty_quick_read",
+                "truncated_quick_read_one_sentence",
+                "truncated_quick_read_exam_value",
+            }:
+                errors.append(str(issue.get("message") or issue.get("code")))
+
+    if isinstance(payload.get("daily_question"), dict):
+        question_report = evaluate_daily_question(payload)
+        for issue in question_report.get("issues") or []:
+            if not isinstance(issue, dict):
+                continue
+            if issue.get("severity") == "high" and issue.get("code") in {
+                "truncated_answer",
+                "missing_candidate_answer",
+                "missing_question",
+            }:
                 errors.append(str(issue.get("message") or issue.get("code")))
 
     if errors:
@@ -738,7 +756,7 @@ def generate_brief_two_stage(articles: list[Article], today: str, test_mode: boo
     featured_article = selected_articles[0] if selected_articles else None
     question_bank_refs, question_bank_meta, question_bank_context = _question_bank_context_for_article(featured_article)
     final_prompt = build_final_generation_prompt(selected_articles, today, selection, question_bank_context=question_bank_context)
-    brief = _call_with_fallback(final_prompt, test_mode, stage="writing", contract=False)
+    brief = _call_with_fallback(final_prompt, test_mode, stage="writing", contract=True)
     # Preserve selection diagnostics for logging/debug; ensure_brief_schema will ignore unknown fields if needed.
     brief.setdefault("_llm_two_stage", {})
     if isinstance(brief.get("_llm_two_stage"), dict):
