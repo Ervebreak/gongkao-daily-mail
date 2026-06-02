@@ -1,5 +1,32 @@
 # Harness Change Log
 
+## 2026-06-02 - Add subject quality review checks
+
+Reason:
+
+- The previous two stages already updated prompt guidance and added deterministic subject fallback normalization.
+- The system still needs a lightweight way to record whether `email_subject` meets the exam-benefit title standard, so later open-rate tuning and manual review have structured evidence.
+
+Files:
+
+- `subject_quality.py`
+- `main.py`
+- `CHANGELOG_HARNESS.md`
+
+Current behavior:
+
+- Added `subject_quality.py` with `evaluate_subject_quality(brief)`.
+- Checks now cover duplicate subject prefix, hype words, generic subjects, missing exam-value markers, and overlong subject lines.
+- `subject_quality` is aggregated into `quality.final.subject_quality` during normal quality evaluation.
+- `build_quality_gate(...)` now includes `subject_quality` in the module map for reporting consistency.
+- No `subject_quality` code is added to `p0_codes`; title issues stay as review-only signals and do not block sending.
+- Title problems are still expected to be fixed first by `subject_line.py`; remaining issues are recorded for review and later optimization.
+
+Follow-up:
+
+- Subject quality is for monitoring and review, not for delivery blocking.
+- The current patch keeps `scripts/validate_daily_brief.py` unchanged to avoid expanding this round into a broader encoding cleanup.
+
 ## 2026-06-02 - Add deterministic email subject fallback
 
 Reason:
