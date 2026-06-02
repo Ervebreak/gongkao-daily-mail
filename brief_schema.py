@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from subject_line import normalize_email_subject
+
 
 ARTICLE_TYPES = [
     "政策解读类",
@@ -454,8 +456,6 @@ def normalize_framework_map(featured: dict[str, Any]) -> dict[str, Any]:
 
 
 def ensure_brief_schema(data: dict[str, Any], today: str) -> tuple[dict[str, Any], list[str]]:
-    from subject_line import normalize_email_subject
-
     warnings: list[str] = []
     brief = dict(data or {})
 
