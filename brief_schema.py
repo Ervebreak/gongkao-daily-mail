@@ -454,6 +454,8 @@ def normalize_framework_map(featured: dict[str, Any]) -> dict[str, Any]:
 
 
 def ensure_brief_schema(data: dict[str, Any], today: str) -> tuple[dict[str, Any], list[str]]:
+    from subject_line import normalize_email_subject
+
     warnings: list[str] = []
     brief = dict(data or {})
 
@@ -623,4 +625,6 @@ def ensure_brief_schema(data: dict[str, Any], today: str) -> tuple[dict[str, Any
     takeaway["extension"] = clip_text(first_text(takeaway.get("extension"), takeaway.get("拓展联想")), 80)
     takeaway["use_scenarios"] = as_list(takeaway.get("use_scenarios"))[:4] or ["申论", "面试", "公基", "事业单位综合应用"]
     brief["today_takeaway"] = takeaway
+    brief, subject_warnings = normalize_email_subject(brief)
+    warnings.extend(subject_warnings)
     return brief, warnings

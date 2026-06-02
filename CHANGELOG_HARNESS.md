@@ -1,5 +1,31 @@
 # Harness Change Log
 
+## 2026-06-02 - Add deterministic email subject fallback
+
+Reason:
+
+- The previous stage updated prompt guidance so the model prefers exam-benefit subject lines.
+- The generation side can still produce generic, overlong, prefixed, or hype-heavy subjects, so the schema normalization stage now adds a lightweight deterministic fallback.
+
+Files:
+
+- `subject_line.py`
+- `brief_schema.py`
+- `CHANGELOG_HARNESS.md`
+
+Current behavior:
+
+- Added `subject_line.py` as a dedicated email-subject normalization helper.
+- The model can still generate `brief.email_subject` freely, but the program now strips prefixes such as `【公考晨读】`, `公考晨读`, and `Re:`.
+- Generic subjects, hype-word subjects, empty subjects, and subjects longer than 26 characters are replaced with a stable exam-benefit fallback built from existing brief fields.
+- Fallback generation prefers `daily_question.question_type`, `upper_exam_points`, `article_framework_map.exam_tags`, `featured_article.theme`, and related existing fields.
+- `brief.email_subject` continues to stay prefix-free; the sending layer still adds the unified `【公考晨读】` prefix.
+
+Follow-up:
+
+- This is a normalization fallback only; it is not a new `subject_quality.py` module and does not change the sending pipeline.
+- Future title tuning should prefer adjusting `subject_line.py` rules and fallback wording instead of moving prefix logic into generation or delivery.
+
 本文件记录公考晨读邮件项目的重要规则、Prompt、质检、渲染和部署改动。以后 AI Coding / Codex / Cursor / OpenClaw 接手项目前，必须先读本文件，再读 `AGENTS.md` 和 `content_harness/00_index.md`。
 
 ## 使用规则
