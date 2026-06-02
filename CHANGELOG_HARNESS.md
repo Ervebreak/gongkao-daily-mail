@@ -1,5 +1,58 @@
 # Harness Change Log
 
+## 2026-06-02 - Add subject quality review checks
+
+Reason:
+
+- The previous two stages already updated prompt guidance and added deterministic subject fallback normalization.
+- The system still needs a lightweight way to record whether `email_subject` meets the exam-benefit title standard, so later open-rate tuning and manual review have structured evidence.
+
+Files:
+
+- `subject_quality.py`
+- `main.py`
+- `CHANGELOG_HARNESS.md`
+
+Current behavior:
+
+- Added `subject_quality.py` with `evaluate_subject_quality(brief)`.
+- Checks now cover duplicate subject prefix, hype words, generic subjects, missing exam-value markers, and overlong subject lines.
+- `subject_quality` is aggregated into `quality.final.subject_quality` during normal quality evaluation.
+- `build_quality_gate(...)` now includes `subject_quality` in the module map for reporting consistency.
+- No `subject_quality` code is added to `p0_codes`; title issues stay as review-only signals and do not block sending.
+- Title problems are still expected to be fixed first by `subject_line.py`; remaining issues are recorded for review and later optimization.
+
+Follow-up:
+
+- Subject quality is for monitoring and review, not for delivery blocking.
+- The current patch keeps `scripts/validate_daily_brief.py` unchanged to avoid expanding this round into a broader encoding cleanup.
+
+## 2026-06-02 - Add deterministic email subject fallback
+
+Reason:
+
+- The previous stage updated prompt guidance so the model prefers exam-benefit subject lines.
+- The generation side can still produce generic, overlong, prefixed, or hype-heavy subjects, so the schema normalization stage now adds a lightweight deterministic fallback.
+
+Files:
+
+- `subject_line.py`
+- `brief_schema.py`
+- `CHANGELOG_HARNESS.md`
+
+Current behavior:
+
+- Added `subject_line.py` as a dedicated email-subject normalization helper.
+- The model can still generate `brief.email_subject` freely, but the program now strips prefixes such as `【公考晨读】`, `公考晨读`, and `Re:`.
+- Generic subjects, hype-word subjects, empty subjects, and subjects longer than 26 characters are replaced with a stable exam-benefit fallback built from existing brief fields.
+- Fallback generation prefers `daily_question.question_type`, `upper_exam_points`, `article_framework_map.exam_tags`, `featured_article.theme`, and related existing fields.
+- `brief.email_subject` continues to stay prefix-free; the sending layer still adds the unified `【公考晨读】` prefix.
+
+Follow-up:
+
+- This is a normalization fallback only; it is not a new `subject_quality.py` module and does not change the sending pipeline.
+- Future title tuning should prefer adjusting `subject_line.py` rules and fallback wording instead of moving prefix logic into generation or delivery.
+
 本文件记录公考晨读邮件项目的重要规则、Prompt、质检、渲染和部署改动。以后 AI Coding / Codex / Cursor / OpenClaw 接手项目前，必须先读本文件，再读 `AGENTS.md` 和 `content_harness/00_index.md`。
 
 ## 使用规则
@@ -34,6 +87,31 @@
 > 审题关键看清题，作答主线打开题，作答框架写成题。
 
 ## 最新改动
+
+### 2026-06-02｜新增考试收益型邮件标题规则
+
+**改动原因**
+
+当前邮件标题偏“文章主题型”，用户在收件箱里看不出今天能学到什么、练什么、带走什么。为提升打开前的价值承诺感，本次把标题规则调整为“考试收益型标题”。
+
+**已改文件**
+
+- `prompt_templates.py`
+- `content_harness/runtime_prompt_rules.md`
+- `CHANGELOG_HARNESS.md`
+
+**最新版行为**
+
+- `brief.email_subject` 改为“不带【公考晨读】前缀的考试收益型标题”，前缀仍由发送层统一添加。
+- 标题必须体现常考感、考试收益和具体收获，不能只写文章主题。
+- 运行规则中新增 `Email Subject` 小节，明确标题应优先体现高频考点、常考场景、申论素材、面试常见题、机关实务题、今日带走、答题角度、政策坐标等打开价值。
+- 标题必须带具体对象或具体考点，禁止使用“必考、押题、上岸、不看后悔、一定会考”等夸张营销词。
+- 本次只改 Prompt 和规则文档，不改发送逻辑。
+
+**后续注意事项**
+
+1. 如果后续需要对标题做自动质检，应另起任务，不要把这次最小 patch 扩展成新的标题模块。
+2. 发送层仍负责统一补 `【公考晨读】` 前缀，brief 生成侧不要重复添加。
 
 ### 2026-05-31｜新增 policy_coordinate 质检与降级
 

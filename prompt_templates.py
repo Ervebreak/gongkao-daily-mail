@@ -135,7 +135,7 @@ ARTICLE_SELECTION_RULES = _load_article_selection_rules()
 
 
 JSON_SCHEMA_HINT = {
-    "email_subject": "【公考晨读】不超过18字的主题",
+    "email_subject": "不带【公考晨读】前缀的考试收益型标题，12-22字；必须体现常考/高频/申论/面试/答题/素材/今日带走等打开价值，不能只写文章主题。",
     "date": "YYYY-MM-DD",
     "today_theme": "聚焦一个主线主题，不要双主线硬拼",
     "today_focus": "一句话说明今天为什么读这篇",
