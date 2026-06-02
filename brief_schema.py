@@ -455,6 +455,59 @@ def normalize_framework_map(featured: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+READING_GUIDE_ALLOWED_MODULES = {"今日精读", "政策坐标", "今日一题", "今日可带走", "今日速读"}
+
+
+def remove_ellipsis(value: Any) -> str:
+    return clean_text(value).replace("...", "").replace("……", "").replace("…", "")
+
+
+def build_reading_guide(brief: dict[str, Any]) -> dict[str, str]:
+    featured = ensure_dict(brief.get("featured_article"))
+    question = ensure_dict(brief.get("daily_question"))
+    framework_map = ensure_dict(featured.get("article_framework_map"))
+    guide = ensure_dict(brief.get("reading_guide"))
+
+    core_value = clip_text(
+        first_text(
+            remove_ellipsis(guide.get("core_value")),
+            remove_ellipsis(brief.get("today_focus")),
+            default=f"抓住{brief.get('today_theme') or '今日主题'}里的具体问题和答题角度。",
+        ),
+        45,
+    )
+
+    question_type = clean_text(question.get("question_type"))
+    exam_tags = [clean_text(item) for item in as_list(framework_map.get("exam_tags")) if clean_text(item)]
+    focus_default = "先看今日精读的文章主线，再看今日一题的作答转化。"
+    if "机关实务" in question_type:
+        focus_default = "先看今日一题的场景任务，再对照今日精读里的治理脉络。"
+    elif "面试" in question_type:
+        focus_default = "先看今日一题怎么设问，再抓今日精读里的核心判断和表达。"
+    elif exam_tags:
+        focus_default = f"先看今日精读里和{exam_tags[0]}相关的主线，再看今日一题怎么转成作答。"
+    focus_path = clip_text(first_text(remove_ellipsis(guide.get("focus_path")), default=focus_default), 55)
+
+    learning_outcome = clip_text(
+        first_text(
+            remove_ellipsis(guide.get("learning_outcome")),
+            default="带走一个高频考点、一套答题角度和一句可复用表达。",
+        ),
+        55,
+    )
+
+    anchor_module = first_text(remove_ellipsis(guide.get("anchor_module")), default="今日一题")
+    if anchor_module not in READING_GUIDE_ALLOWED_MODULES:
+        anchor_module = "今日一题"
+
+    return {
+        "core_value": core_value,
+        "focus_path": focus_path,
+        "learning_outcome": learning_outcome,
+        "anchor_module": anchor_module,
+    }
+
+
 def ensure_brief_schema(data: dict[str, Any], today: str) -> tuple[dict[str, Any], list[str]]:
     warnings: list[str] = []
     brief = dict(data or {})
@@ -474,6 +527,7 @@ def ensure_brief_schema(data: dict[str, Any], today: str) -> tuple[dict[str, Any
     three.setdefault("theme", brief["today_theme"])
     three.setdefault("must_remember_sentence", brief["today_focus"])
     brief["today_three_things"] = three
+    brief["reading_guide"] = build_reading_guide(brief)
 
     featured = ensure_dict(brief.get("featured_article"))
     for key, value in {
@@ -625,6 +679,7 @@ def ensure_brief_schema(data: dict[str, Any], today: str) -> tuple[dict[str, Any
     takeaway["extension"] = clip_text(first_text(takeaway.get("extension"), takeaway.get("拓展联想")), 80)
     takeaway["use_scenarios"] = as_list(takeaway.get("use_scenarios"))[:4] or ["申论", "面试", "公基", "事业单位综合应用"]
     brief["today_takeaway"] = takeaway
+    brief["reading_guide"] = build_reading_guide(brief)
     brief, subject_warnings = normalize_email_subject(brief)
     warnings.extend(subject_warnings)
     return brief, warnings

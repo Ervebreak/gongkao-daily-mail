@@ -278,6 +278,38 @@ def today_question_text(brief: dict[str, Any]) -> str:
     return f"请结合【{theme}】写一句开头表态。"
 
 
+def normalize_reading_guide(brief: dict[str, Any]) -> dict[str, str]:
+    guide = ensure_dict(brief.get("reading_guide"))
+    return {
+        "core_value": clip_text(guide.get("core_value") or "", 45),
+        "focus_path": clip_text(guide.get("focus_path") or "", 55),
+        "learning_outcome": clip_text(guide.get("learning_outcome") or "", 55),
+    }
+
+
+def render_reading_guide_plain(brief: dict[str, Any]) -> list[str]:
+    guide = normalize_reading_guide(brief)
+    return [
+        "📌 今天这封怎么用",
+        "抓住一个点：" + str(guide.get("core_value") or ""),
+        "重点看这里：" + str(guide.get("focus_path") or ""),
+        "看完带走：" + str(guide.get("learning_outcome") or ""),
+        "",
+    ]
+
+
+def render_reading_guide_html(brief: dict[str, Any]) -> str:
+    guide = normalize_reading_guide(brief)
+    return f"""
+    <div style="background:#fff;border:1px solid #e6eaf0;border-radius:15px;padding:13px 14px;margin-bottom:15px;">
+      <div style="font-size:13px;color:#165dff;font-weight:900;margin-bottom:8px;">📌 今天这封怎么用</div>
+      <div style="background:#eef6ff;border-left:4px solid #165dff;border-radius:10px;padding:8px 10px;line-height:1.6;font-size:14px;margin-bottom:7px;"><b>抓住一个点：</b>{h(guide.get('core_value') or '')}</div>
+      <div style="background:#eef6ff;border-left:4px solid #165dff;border-radius:10px;padding:8px 10px;line-height:1.6;font-size:14px;margin-bottom:7px;"><b>重点看这里：</b>{h(guide.get('focus_path') or '')}</div>
+      <div style="background:#fff8e8;border-left:4px solid #f59e0b;border-radius:10px;padding:8px 10px;line-height:1.6;font-size:14px;"><b>看完带走：</b>{h(guide.get('learning_outcome') or '')}</div>
+    </div>
+    """
+
+
 def render_framework_map(framework_map: dict[str, Any] | list[Any], limit: int = 5) -> str:
     if isinstance(framework_map, dict):
         article_type = framework_map.get("type") or framework_map.get("article_type") or "文章类型待识别"
@@ -585,6 +617,7 @@ def render_plain_text(brief: dict[str, Any]) -> str:
         f"日期：{brief['date']}",
         f"今日主题：{brief['today_theme']}",
         "",
+        *render_reading_guide_plain(brief),
         "今日精读｜面试表达与申论素材储备",
         f"{featured.get('title')}（{source_line(featured)}）",
         f"链接：{featured.get('url') or '原文链接暂不可用'}",
@@ -679,6 +712,8 @@ def render_email_html(brief: dict[str, Any]) -> str:
       <div style="font-size:24px;font-weight:900;line-height:1.32;margin-top:7px;">{h(brief['email_subject'])}</div>
       <div style="font-size:14px;line-height:1.65;margin-top:9px;opacity:.94;">{h(brief['today_focus'])}</div>
     </div>
+
+    {render_reading_guide_html(brief)}
 
     <div style="background:#fff;border:1px solid #e6eaf0;border-radius:15px;padding:13px 14px;margin-bottom:15px;">
       <div style="font-size:13px;color:#165dff;font-weight:900;margin-bottom:8px;">今日 3 件事</div>

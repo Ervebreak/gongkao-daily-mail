@@ -144,6 +144,12 @@ JSON_SCHEMA_HINT = {
         "must_remember_sentence": "今天最该记住的一句话",
         "daily_question": "今日一题的简短题干或训练方向",
     },
+    "reading_guide": {
+        "core_value": "今天最值得抓住的学习点，1句，不超过45字",
+        "focus_path": "建议重点看哪个模块，以及怎么看，1句，不超过55字",
+        "learning_outcome": "看完能带走什么考场能力，1句，不超过55字",
+        "anchor_module": "今日精读/政策坐标/今日一题/今日可带走/今日速读",
+    },
     "featured_article": {
         "title": "主线文章标题",
         "source": "来源",

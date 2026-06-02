@@ -1,5 +1,34 @@
 # Harness Change Log
 
+## 2026-06-02 - Add dynamic reading guide module
+
+Reason:
+
+- The email subject has already been upgraded to an exam-benefit headline to improve open rate.
+- After open, the first screen still needs a lightweight, content-specific guide that tells the reader what is most worth learning today, where to focus, and what they can carry into exam answers.
+
+Files:
+
+- `prompt_templates.py`
+- `content_harness/runtime_prompt_rules.md`
+- `brief_schema.py`
+- `email_renderer.py`
+- `CHANGELOG_HARNESS.md`
+
+Current behavior:
+
+- Added `reading_guide` to the generation schema with `core_value`, `focus_path`, `learning_outcome`, and `anchor_module`.
+- Added runtime prompt rules that define `reading_guide` as a dynamic value guide instead of a static module introduction.
+- `ensure_brief_schema(...)` now fills `reading_guide` deterministically when the model omits it or leaves fields empty.
+- The renderer now shows `📌 今天这封怎么用` below the top theme card and above `今日 3 件事` in both HTML and plain text.
+- The module shows only the three reader-facing lines and does not expose `anchor_module`.
+- This round adds generation, fallback, and rendering only; it does not add P0 blocking or change send logic.
+
+Follow-up:
+
+- `reading_guide` is a front-of-email guidance layer, not a new quality gate.
+- If later rounds want to score or review this module, that should be added separately without changing the current send path.
+
 ## 2026-06-02 - Add subject quality review checks
 
 Reason:
