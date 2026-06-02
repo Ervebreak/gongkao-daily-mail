@@ -346,7 +346,71 @@ def coordinate_source_text(value: Any) -> str:
     return str(value or "").strip().rstrip("。；;！!？?")
 
 
+ANSWER_ANGLE_TRUNCATED_TAILS = (
+    "责任主",
+    "等方",
+    "等机",
+    "等措",
+    "平台责",
+    "转移中",
+    "标准衔",
+    "围绕企",
+    "事项清",
+    "闭环落",
+)
+
+ANSWER_ANGLE_DANGLING_ENDINGS = (
+    "通过",
+    "由于",
+    "为了",
+    "围绕",
+    "依托",
+    "推动",
+    "促进",
+    "强化",
+    "完善",
+    "构建",
+    "形成",
+    "建立",
+)
+
+
+def has_truncated_answer_angle(value: Any) -> bool:
+    text = str(value or "").strip().rstrip("。；;！!？?")
+    if not text:
+        return False
+    if any(text.endswith(tail) for tail in ANSWER_ANGLE_TRUNCATED_TAILS):
+        return True
+    if len(text) <= 8:
+        return False
+    if ("：" in text or ":" in text or "，" in text) and any(text.endswith(tail) for tail in ANSWER_ANGLE_DANGLING_ENDINGS):
+        return True
+    return False
+
+
+def should_render_policy_coordinate(brief: dict[str, Any]) -> bool:
+    coordinate = ensure_dict(brief.get("policy_coordinate"))
+    display_type = str(coordinate.get("display_evidence_type") or "").strip().lower()
+    if display_type in {"", "none"}:
+        return False
+    try:
+        policy_match_score = float(coordinate.get("policy_match_score") or 0)
+    except (TypeError, ValueError):
+        policy_match_score = 0.0
+    source_type = str(coordinate.get("source_type") or "").strip().lower()
+    if policy_match_score < 60:
+        return False
+    if source_type == "policy_only" and policy_match_score < 65:
+        return False
+    answer_angles = as_list(coordinate.get("answer_angles"))
+    if any(has_truncated_answer_angle(item) for item in answer_angles):
+        return False
+    return True
+
+
 def policy_coordinate_lines(brief: dict[str, Any]) -> list[str]:
+    if not should_render_policy_coordinate(brief):
+        return []
     coordinate = ensure_dict(brief.get("policy_coordinate"))
     display_type = str(coordinate.get("display_evidence_type") or "").strip().lower()
     policy_quote = coordinate_quote_text(coordinate.get("policy_quote"))
@@ -377,6 +441,8 @@ def render_policy_coordinate_plain(brief: dict[str, Any]) -> list[str]:
 
 
 def render_policy_coordinate_html(brief: dict[str, Any]) -> str:
+    if not should_render_policy_coordinate(brief):
+        return ""
     coordinate = ensure_dict(brief.get("policy_coordinate"))
     display_type = str(coordinate.get("display_evidence_type") or "").strip().lower()
     policy_quote = coordinate_quote_text(coordinate.get("policy_quote"))
