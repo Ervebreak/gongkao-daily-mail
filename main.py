@@ -243,6 +243,7 @@ def build_quality_gate(
     cleanliness_quality: dict[str, Any] | None = None,
     policy_coordinate_quality: dict[str, Any] | None = None,
     subject_quality: dict[str, Any] | None = None,
+    reading_guide_quality: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     p0_codes = {
         "missing_question",
@@ -333,6 +334,7 @@ def build_quality_gate(
         ("pre_send_cleanliness", cleanliness_quality or {}),
         ("policy_coordinate", policy_coordinate_quality or {}),
         ("subject_quality", subject_quality or {}),
+        ("reading_guide", reading_guide_quality or {}),
     )
     for module, quality in modules:
         for issue in quality.get("issues") or []:
@@ -1357,6 +1359,7 @@ def evaluate_all_quality(
     from policy_coordinate_quality import evaluate_policy_coordinate_quality
     from question_quality import evaluate_daily_question
     from quick_reads_quality import evaluate_quick_reads
+    from reading_guide_quality import evaluate_reading_guide_quality
     from subject_quality import evaluate_subject_quality
     from takeaway_quality import evaluate_takeaway
 
@@ -1379,6 +1382,7 @@ def evaluate_all_quality(
         "cleanliness": cleanliness_quality,
         "policy_coordinate": evaluate_policy_coordinate_quality(brief, plain_text, html_body),
         "subject_quality": evaluate_subject_quality(brief),
+        "reading_guide": evaluate_reading_guide_quality(brief),
     }
 
 
@@ -1398,6 +1402,7 @@ def build_gate_from_quality_map(quality: dict[str, Any]) -> dict[str, Any]:
         quality.get("cleanliness", {}),
         quality.get("policy_coordinate", {}),
         quality.get("subject_quality", {}),
+        quality.get("reading_guide", {}),
     )
 
 
@@ -1415,6 +1420,7 @@ def _log_quality_map(logger: RunLogger, quality: dict[str, Any], suffix: str) ->
         "content_quality": "content quality",
         "policy_coordinate": "policy coordinate quality",
         "subject_quality": "subject quality",
+        "reading_guide": "reading guide quality",
     }
     for key, label in labels.items():
         item = quality.get(key)
