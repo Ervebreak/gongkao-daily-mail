@@ -1,5 +1,32 @@
 # Harness Change Log
 
+## 2026-06-02 - Add reading guide review checks
+
+Reason:
+
+- The first-stage reading guide module is already generated and rendered in the email body.
+- The system now needs a lightweight review layer that can flag empty, generic, catalog-style, or hype-heavy guides for later prompt tuning without changing delivery behavior.
+
+Files:
+
+- `reading_guide_quality.py`
+- `main.py`
+- `tests/test_reading_guide_quality.py`
+- `CHANGELOG_HARNESS.md`
+
+Current behavior:
+
+- Added `reading_guide_quality.py` with `evaluate_reading_guide_quality(brief)`.
+- Checks now cover missing guide payloads, empty fields, invalid anchor modules, generic wording, module-catalog intros, hype language, overlong fields, and excessive repetition with the email subject.
+- `reading_guide` quality is now aggregated into the final quality map for review and logging consistency.
+- `build_quality_gate(...)` includes `reading_guide` in the module map, but no reading-guide issue code is promoted into `p0_codes`.
+- This round adds monitoring only; it does not block sending or change send logic.
+
+Follow-up:
+
+- `reading_guide` quality is review-only and should be improved through prompt and fallback refinement when recurring issues appear.
+- If a later round needs stronger enforcement, it should be introduced deliberately instead of silently escalating these review signals.
+
 ## 2026-06-02 - Add dynamic reading guide module
 
 Reason:
