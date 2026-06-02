@@ -12,7 +12,7 @@ LEADING_RESIDUE = "：:·•・"
 SENTENCE_ENDING = "。！？；.!?」』）】》"
 TRUNCATED_TAILS = (
     "可落地", "可以用于", "适合转化为", "有助于", "体现出", "关键在于", "主要包括",
-    "从而", "进而", "同时", "并且", "最", "畅通维", "清退四", "好人条", "探索收", "制度保", "信息透明",
+    "从而", "进而", "同时", "并且", "最", "畅通维", "清退四", "好人条", "探索收", "制度保", "信息透明", "责任主",
 )
 DANGLING_ENDINGS = (
     "通过", "由于", "为了", "围绕", "依靠", "立足", "推动", "促进", "实现", "提升",
@@ -213,6 +213,8 @@ def _repair_known_truncated_body(path: str, value: str) -> str:
     if not text:
         return original
     if normalized_path == "brief.featured_article.original_reading_focus":
+        if text.endswith("责任主"):
+            return text + "体和平台责任边界。"
         if text.endswith("最"):
             return text + "值得借鉴的部分。"
         if text.endswith("好人条"):
