@@ -41,6 +41,7 @@ REWRITE_TARGET_FIELDS = {
     "brief.daily_question.output_prompt",
     "brief.daily_question.output_sentence_template",
     "brief.featured_article.exam_use",
+    "brief.featured_article.original_reading_focus",
     "brief.featured_article.usable_for_exam",
     "brief.featured_article.rewritable_expression",
     "brief.featured_article.article_framework_map.main_thread",
@@ -48,6 +49,8 @@ REWRITE_TARGET_FIELDS = {
     "brief.today_takeaway.common_knowledge_points",
     "brief.today_takeaway.golden_sentences",
     "brief.today_takeaway.framework",
+    "brief.quick_reads[0].one_sentence",
+    "brief.quick_reads[1].one_sentence",
 }
 
 
@@ -232,9 +235,38 @@ def _issue_to_rewrite_target(issue: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+def _semantic_truncation_targets(raw: dict[str, Any], issues: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    corpus_parts = [json.dumps(raw or {}, ensure_ascii=False)]
+    for issue in issues:
+        corpus_parts.append(str(issue.get("message") or ""))
+        corpus_parts.append(str(issue.get("code") or ""))
+    corpus = "\n".join(part for part in corpus_parts if part)
+    mappings = (
+        (("original_reading_focus", "避免答"), "brief.featured_article.original_reading_focus"),
+        (("quick_reads[0]", "供需矛"), "brief.quick_reads[0].one_sentence"),
+        (("quick_reads[1]", "过错责任"), "brief.quick_reads[1].one_sentence"),
+        (("today_takeaway.framework", "和群"), "brief.today_takeaway.framework"),
+    )
+    targets: list[dict[str, Any]] = []
+    for markers, field in mappings:
+        if not all(marker in corpus for marker in markers):
+            continue
+        targets.append({
+            "field": field,
+            "module": field.split(".")[1],
+            "issue_code": "truncation_error",
+            "reason": "Content quality review found a high-risk truncation fragment in this field.",
+            "action": "Rewrite this field into a semantically complete sentence while preserving the original meaning.",
+            "severity": "high",
+            "auto_fixable": True,
+        })
+    return targets
+
+
 def _normalize_rewrite_targets(raw: dict[str, Any], issues: list[dict[str, Any]]) -> list[dict[str, Any]]:
     targets: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
+    seen_fields: set[str] = set()
     for item in raw.get("rewrite_targets") or []:
         target = _normalize_rewrite_target(item)
         if not target:
@@ -243,6 +275,7 @@ def _normalize_rewrite_targets(raw: dict[str, Any], issues: list[dict[str, Any]]
         if key in seen:
             continue
         seen.add(key)
+        seen_fields.add(target["field"])
         targets.append(target)
     for issue in issues:
         target = _normalize_rewrite_target(_issue_to_rewrite_target(issue))
@@ -252,6 +285,16 @@ def _normalize_rewrite_targets(raw: dict[str, Any], issues: list[dict[str, Any]]
         if key in seen:
             continue
         seen.add(key)
+        seen_fields.add(target["field"])
+        targets.append(target)
+    for target in _semantic_truncation_targets(raw, issues):
+        if target["field"] in seen_fields:
+            continue
+        key = (target["field"], target["issue_code"])
+        if key in seen:
+            continue
+        seen.add(key)
+        seen_fields.add(target["field"])
         targets.append(target)
     return targets[:8]
 
