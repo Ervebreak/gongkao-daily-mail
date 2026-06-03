@@ -55,6 +55,13 @@ RECENT_QIUSHI_QUOTE_REPEAT_PENALTY = -90
 CONSECUTIVE_FRAMEWORK_REPEAT_PENALTY = -55
 THEME_STREAK_PENALTY = -26
 
+TOPIC_ROUTE_RULES = [
+    {
+        "trigger_keywords": ["外卖", "网络餐饮", "食品安全", "平台", "证照", "后厨", "明厨亮灶", "市场监管"],
+        "route_keywords": ["食品安全", "网络餐饮服务", "平台主体责任", "经营许可", "明厨亮灶", "市场监管", "新业态监管"],
+    }
+]
+
 
 def _as_text(value: Any) -> str:
     if value is None:
@@ -115,6 +122,24 @@ def _extract_keywords(*values: Any, limit: int = 30) -> list[str]:
     return keywords
 
 
+def policy_topic_route_keywords(*values: Any) -> list[str]:
+    combined = _as_text(values)
+    compact_combined = _compact(combined)
+    routed: list[str] = []
+    seen: set[str] = set()
+    for rule in TOPIC_ROUTE_RULES:
+        triggers = rule.get("trigger_keywords") or []
+        if not any(_compact(keyword) in compact_combined for keyword in triggers if keyword):
+            continue
+        for keyword in rule.get("route_keywords") or []:
+            normalized = str(keyword).strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            routed.append(normalized)
+    return routed
+
+
 def normalize_article_input(
     article_title: str = "",
     article_summary: str = "",
@@ -135,6 +160,7 @@ def normalize_article_input(
     scenarios = _as_list(exam_scenarios if exam_scenarios is not None else article.get("exam_scenarios"))
     if not keys:
         keys = _extract_keywords(title, summary, text)
+    route_keywords = policy_topic_route_keywords(title, summary, text, theme, subs, keys)
     return {
         "article_title": title,
         "article_summary": summary,
@@ -142,6 +168,7 @@ def normalize_article_input(
         "main_theme": theme,
         "sub_themes": subs,
         "keywords": keys,
+        "topic_route_keywords": route_keywords,
         "exam_scenarios": scenarios,
         "combined_text": " ".join([title, summary, text]),
     }
@@ -168,6 +195,7 @@ def _score_common(item: Candidate, query: dict[str, Any], *, text_fields: list[s
     main_theme = _as_text(query.get("main_theme"))
     sub_themes = _as_list(query.get("sub_themes"))
     keywords = _as_list(query.get("keywords"))
+    topic_route_keywords = _as_list(query.get("topic_route_keywords"))
     exam_scenarios = _as_list(query.get("exam_scenarios"))
 
     searchable_text = " ".join(_as_text(item.get(field)) for field in text_fields)
@@ -193,6 +221,12 @@ def _score_common(item: Candidate, query: dict[str, Any], *, text_fields: list[s
         score += min(keyword_hits, 8) * 5
         semantic_hits += keyword_hits
         reasons["keyword_hits"] = keyword_hits
+
+    route_hits = _contains_any(keyword_text, topic_route_keywords)
+    if route_hits:
+        score += min(route_hits, 6) * 9
+        semantic_hits += route_hits
+        reasons["topic_route_hits"] = route_hits
 
     exam_text = " ".join(
         [

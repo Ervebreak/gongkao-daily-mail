@@ -970,6 +970,16 @@ def _refresh_policy_coordinate_display_fields(coordinate: dict[str, Any]) -> dic
     return coordinate
 
 
+def _policy_coordinate_backend_status(coordinate: dict[str, Any]) -> tuple[str, str]:
+    policy_score = _policy_float(coordinate.get("policy_match_score"))
+    source_type = _policy_text(coordinate.get("source_type")).lower()
+    if policy_score < 60:
+        return ("skipped", f"weak_match: policy_match_score={policy_score:.1f} below backend threshold 60.")
+    if source_type == "policy_only" and policy_score < 65:
+        return ("skipped", f"weak_match: policy_only policy_match_score={policy_score:.1f} below backend threshold 65.")
+    return ("ok", "")
+
+
 def _policy_transfer_has_specific_angles(text: str) -> bool:
     keywords = ["平台", "机制", "诉求", "协同", "闭环", "服务", "监管", "数字", "人才", "就业", "民生", "治理", "落实", "反馈", "转化", "场景", "要素", "创新"]
     combined = _policy_text(text)
@@ -1020,6 +1030,7 @@ def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = No
         featured = brief.get("featured_article") if isinstance(brief.get("featured_article"), dict) else {}
         question = brief.get("daily_question") if isinstance(brief.get("daily_question"), dict) else {}
         takeaway = brief.get("today_takeaway") if isinstance(brief.get("today_takeaway"), dict) else {}
+        brief.pop("_policy_coordinate_disabled_reason", None)
         usage_history, usage_meta = load_policy_coordinate_usage_history()
         recent_usage = recent_policy_coordinate_usage(usage_history, days=14)
         if logger and usage_meta.get("usage_history_warning"):
@@ -1120,7 +1131,13 @@ def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = No
             result["matched_qiushi_article_id"] = ""
             result["qiushi_match_score"] = 0.0
         result = _refresh_policy_coordinate_display_fields(result)
+        backend_status, backend_status_reason = _policy_coordinate_backend_status(result)
+        result["backend_status"] = backend_status
         if result.get("display_evidence_type") == "none":
+            result["backend_status"] = "skipped"
+            brief["_policy_coordinate_disabled_reason"] = (
+                f"weak_match: {result.get('evidence_selection_reason') or 'no_fit_evidence'}"
+            )
             if logger:
                 logger.info(
                     "policy coordinate skipped",
@@ -1129,6 +1146,8 @@ def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = No
                     qiushi_score=qiushi_score,
                 )
             return empty
+        if backend_status_reason:
+            brief["_policy_coordinate_disabled_reason"] = backend_status_reason
         if logger:
             logger.info(
                 "policy coordinate matched",
@@ -1141,6 +1160,7 @@ def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = No
                 matched_framework_id=result["matched_framework_id"],
                 matched_chunk_ids=result["matched_chunk_ids"],
                 source_type=result["source_type"],
+                backend_status=result["backend_status"],
             )
             if usage_debug.get("selected_repeat_notes"):
                 logger.info(
