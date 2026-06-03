@@ -19,12 +19,22 @@ DANGLING_ENDINGS = (
     "强化", "完善", "构建", "形成", "建立", "转向", "转为", "赋能", "配套", "提出从",
     "让", "把", "与", "和", "及", "并", "但", "而", "在", "为", "的", "监",
 )
+SEMANTIC_TRUNCATION_REPAIRS = {
+    "避免答": "帮助作答避免空泛。",
+    "供需矛": "供需矛盾。",
+    "过错责任": "过错责任认定。",
+    "和群": "和群众监督结合起来。",
+    "责任主": "责任主体。",
+    "平台责": "平台责任。",
+    "群众监": "群众监督。",
+}
 BODY_TEXT_PATHS = {
     "brief.today_focus",
     "brief.today_three_things.must_remember_sentence",
     "brief.featured_article.one_sentence",
     "brief.featured_article.original_reading_focus",
     "brief.featured_article.article_framework_map.main_thread",
+    "brief.featured_article.article_framework_map.steps[*].content",
     "brief.featured_article.three_useful_points",
     "brief.featured_article.three_useful_points[*]",
     "brief.featured_article.exam_use",
@@ -42,6 +52,7 @@ BODY_TEXT_PATHS = {
     "brief.today_takeaway.golden_sentences[*].sentence",
     "brief.quick_reads[*].one_sentence",
     "brief.quick_reads[*].exam_value",
+    "brief.policy_coordinate.exam_transfer",
 }
 DISPLAY_PREFIX_RULES = {
     "brief.featured_article.rewritable_expression": ("可用表达",),
@@ -176,6 +187,9 @@ def _looks_incomplete(text: str) -> bool:
 
 def _suspected_truncated_tail(text: str) -> str:
     stripped = _without_sentence_punctuation(text)
+    for tail in SEMANTIC_TRUNCATION_REPAIRS:
+        if stripped.endswith(tail):
+            return tail
     for tail in TRUNCATED_TAILS:
         if stripped.endswith(tail):
             return tail
@@ -183,6 +197,11 @@ def _suspected_truncated_tail(text: str) -> str:
         if stripped.endswith(tail):
             return tail
     return "未完成结构" if _looks_incomplete(text) else ""
+
+
+def _has_semantic_truncation_tail(text: str) -> bool:
+    stripped = _without_sentence_punctuation(text)
+    return any(stripped.endswith(tail) for tail in SEMANTIC_TRUNCATION_REPAIRS)
 
 
 def _module_from_path(path: str) -> str:
@@ -212,6 +231,10 @@ def _repair_known_truncated_body(path: str, value: str) -> str:
     text = _without_sentence_punctuation(original)
     if not text:
         return original
+    for tail, replacement in SEMANTIC_TRUNCATION_REPAIRS.items():
+        if text.endswith(tail):
+            repaired = text[: -len(tail)] + replacement
+            return repaired if not _has_semantic_truncation_tail(repaired) else original
     if normalized_path == "brief.featured_article.original_reading_focus":
         if text.endswith("责任主"):
             return text + "体和平台责任边界。"
