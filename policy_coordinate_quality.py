@@ -141,17 +141,42 @@ def _display_type(coordinate: dict[str, Any]) -> str:
     return value or "none"
 
 
+def _policy_coordinate_weak_match_issue(coordinate: dict[str, Any], disabled_reason: str) -> dict[str, str] | None:
+    if "weak_match" in disabled_reason or "policy_score=" in disabled_reason:
+        return _issue("medium", "policy_coordinate_weak_match", disabled_reason)
+    try:
+        policy_score = float(_text(coordinate.get("policy_match_score")) or 0)
+    except (TypeError, ValueError):
+        policy_score = 0.0
+    source_type = _text(coordinate.get("source_type")).lower()
+    if source_type == "policy_only" and policy_score < 65:
+        return _issue(
+            "medium",
+            "policy_coordinate_weak_match",
+            f"policy_only score too low for backend keep: policy_match_score={policy_score:.1f} < 65.",
+        )
+    if policy_score < 60:
+        return _issue(
+            "medium",
+            "policy_coordinate_weak_match",
+            f"policy_match_score too low for backend keep: {policy_score:.1f} < 60.",
+        )
+    return None
+
+
 def evaluate_policy_coordinate_quality(brief: dict[str, Any], plain_text: str = "", html_body: str = "") -> dict[str, Any]:
     coordinate = _coordinate(brief)
     disabled_reason = _text(brief.get("_policy_coordinate_disabled_reason"))
     if not coordinate or not any(_text(value) for value in coordinate.values()):
         issues = []
         if disabled_reason:
-            issues.append(_issue("low", "policy_coordinate_disabled", disabled_reason))
+            weak_match_issue = _policy_coordinate_weak_match_issue({}, disabled_reason)
+            issues.append(weak_match_issue or _issue("low", "policy_coordinate_disabled", disabled_reason))
+        weak_match = any(item["code"] == "policy_coordinate_weak_match" for item in issues)
         return {
-            "ok": True,
-            "status": "ok" if not issues else "review",
-            "score": 100 if not issues else 92,
+            "ok": not weak_match,
+            "status": "ok" if not issues else ("skipped" if weak_match else "review"),
+            "score": 84 if weak_match else (100 if not issues else 92),
             "checks": {"present": False, "disabled_reason": disabled_reason},
             "issues": issues,
         }
@@ -160,11 +185,13 @@ def evaluate_policy_coordinate_quality(brief: dict[str, Any], plain_text: str = 
     if display_type == "none":
         issues = []
         if disabled_reason:
-            issues.append(_issue("low", "policy_coordinate_disabled", disabled_reason))
+            weak_match_issue = _policy_coordinate_weak_match_issue(coordinate, disabled_reason)
+            issues.append(weak_match_issue or _issue("low", "policy_coordinate_disabled", disabled_reason))
+        weak_match = any(item["code"] == "policy_coordinate_weak_match" for item in issues)
         return {
-            "ok": True,
-            "status": "ok" if not issues else "review",
-            "score": 100 if not issues else 92,
+            "ok": not weak_match,
+            "status": "ok" if not issues else ("skipped" if weak_match else "review"),
+            "score": 84 if weak_match else (100 if not issues else 92),
             "checks": {"present": False, "display_evidence_type": "none", "disabled_reason": disabled_reason},
             "issues": issues,
         }
@@ -181,6 +208,9 @@ def evaluate_policy_coordinate_quality(brief: dict[str, Any], plain_text: str = 
     matched_qiushi_quote_id = _text(coordinate.get("matched_qiushi_quote_id"))
     show_policy = display_type in {"policy", "both"}
     show_qiushi = display_type in {"qiushi", "both"}
+    weak_match_issue = _policy_coordinate_weak_match_issue(coordinate, disabled_reason)
+    if weak_match_issue:
+        issues.append(weak_match_issue)
 
     if show_policy and not policy_quote:
         issues.append(_issue("high", "policy_quote_missing", "展示政策原文时，policy_quote 不能为空。"))
@@ -259,7 +289,7 @@ def evaluate_policy_coordinate_quality(brief: dict[str, Any], plain_text: str = 
     ok = high_count == 0 and medium_count == 0
     return {
         "ok": ok,
-        "status": "ok" if ok else ("fail" if high_count else "review"),
+        "status": "ok" if ok else ("fail" if high_count else ("skipped" if weak_match_issue else "review")),
         "score": score,
         "checks": {
             "present": True,
