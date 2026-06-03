@@ -245,6 +245,12 @@ def build_quality_gate(
     subject_quality: dict[str, Any] | None = None,
     reading_guide_quality: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    content_quality_p0_codes = {
+        "truncation_error",
+        "missing_required_module",
+        "wrong_article_understanding",
+        "fabricated_policy",
+    }
     p0_codes = {
         "missing_question",
         "missing_task",
@@ -348,6 +354,23 @@ def build_quality_gate(
                     "code": code,
                     "message": str(issue.get("message") or code),
                 })
+    content_quality_payload = content_quality or {}
+    content_quality_failed = str(content_quality_payload.get("status") or "").lower() == "fail" or content_quality_payload.get("can_send") is False
+    if content_quality_failed:
+        for issue in content_quality_payload.get("issues") or []:
+            if not isinstance(issue, dict):
+                continue
+            code = str(issue.get("code") or "")
+            severity = str(issue.get("severity") or "").lower()
+            if severity != "high" or code not in content_quality_p0_codes:
+                continue
+            candidate_issue = {
+                "module": str(issue.get("module_override") or "content_quality"),
+                "code": code,
+                "message": str(issue.get("message") or code),
+            }
+            if candidate_issue not in p0_issues:
+                p0_issues.append(candidate_issue)
     return {
         "overall": "fail" if p0_issues else "ok",
         "p0_count": len(p0_issues),
