@@ -1022,6 +1022,7 @@ def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = No
     try:
         from knowledge_base_loader import load_qiushi_article_index
         from policy_coordinate_matcher import match_policy_coordinate_candidates
+        from policy_coordinate_topic_anchors import build_policy_topic_anchors
         from policy_coordinate_usage_history import (
             load_policy_coordinate_usage_history,
             recent_policy_coordinate_usage,
@@ -1052,9 +1053,11 @@ def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = No
                 "article_framework",
             ]
         )
+        topic_anchors = build_policy_topic_anchors(brief)
+        topic_query_text = _policy_text(topic_anchors.get("query_text"))
         keywords = (
-            _policy_list(takeaway.get("keywords"))
-            + _policy_list(featured.get("theme"))
+            _policy_list(topic_anchors.get("fine_grained_tags"))
+            + _policy_list(takeaway.get("keywords"))
             + _policy_list(featured.get("title"))
             + _policy_list(featured.get("article_framework_map"))
         )
@@ -1067,10 +1070,10 @@ def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = No
         )
         matches = match_policy_coordinate_candidates(
             article_title=_policy_text(featured.get("title")),
-            article_summary=_policy_text(featured.get("one_sentence") or featured.get("core_viewpoint")),
-            article_text=article_text,
-            main_theme=_policy_text(featured.get("theme") or brief.get("today_theme")),
-            sub_themes=_policy_list(takeaway.get("keywords")) + _policy_list(featured.get("theme")),
+            article_summary=topic_query_text or _policy_text(featured.get("one_sentence") or featured.get("core_viewpoint")),
+            article_text=" ".join([topic_query_text, article_text]).strip(),
+            main_theme=_policy_text(topic_anchors.get("primary_theme")) or _policy_text(brief.get("today_theme") or featured.get("theme")),
+            sub_themes=_policy_list(topic_anchors.get("fine_grained_tags")) + _policy_list(takeaway.get("keywords")),
             keywords=keywords,
             exam_scenarios=exam_scenarios,
             recent_usage=recent_usage,
