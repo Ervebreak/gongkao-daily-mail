@@ -1022,6 +1022,7 @@ def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = No
     try:
         from knowledge_base_loader import load_qiushi_article_index
         from policy_coordinate_matcher import match_policy_coordinate_candidates
+        from policy_coordinate_semantic_fit import policy_match_semantic_fit
         from policy_coordinate_topic_anchors import build_policy_topic_anchors
         from policy_coordinate_usage_history import (
             load_policy_coordinate_usage_history,
@@ -1151,6 +1152,21 @@ def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = No
             return empty
         if backend_status_reason:
             brief["_policy_coordinate_disabled_reason"] = backend_status_reason
+        semantic_fit = policy_match_semantic_fit(topic_anchors, result)
+        result["semantic_fit_status"] = semantic_fit.get("status", "ok")
+        if not semantic_fit.get("display", True):
+            result["backend_status"] = "skipped"
+            result["skip_reason"] = semantic_fit.get("reason") or "weak_match"
+            brief["_policy_coordinate_disabled_reason"] = result["skip_reason"]
+            if logger:
+                logger.info(
+                    "policy coordinate skipped",
+                    reason=result["skip_reason"],
+                    policy_score=policy_score,
+                    qiushi_score=qiushi_score,
+                    source_type=result["source_type"],
+                )
+            return empty
         if logger:
             logger.info(
                 "policy coordinate matched",
@@ -1164,6 +1180,7 @@ def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = No
                 matched_chunk_ids=result["matched_chunk_ids"],
                 source_type=result["source_type"],
                 backend_status=result["backend_status"],
+                semantic_fit_status=result["semantic_fit_status"],
             )
             if usage_debug.get("selected_repeat_notes"):
                 logger.info(
