@@ -1,0 +1,38 @@
+name: Build FC Package
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Pre-check Python files
+        shell: pwsh
+        run: |
+          python -m py_compile main.py config.py scripts\validate_daily_brief.py
+          python -m py_compile weekly_report.py weekly_typst_export.py
+
+      - name: Build function.zip
+        shell: pwsh
+        run: |
+          powershell -ExecutionPolicy Bypass -File .\scripts\build_fc_package.ps1 -OutputZip .\function.zip
+
+      - name: Upload function.zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: function-zip
+          path: function.zip
+          retention-days: 14
