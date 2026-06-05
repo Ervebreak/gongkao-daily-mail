@@ -156,7 +156,7 @@ def daily_summary(payload: dict[str, Any]) -> dict[str, Any]:
 
 def build_weekly_markdown(payloads: list[dict[str, Any]], start_date: str, end_date: str, misses: list[dict[str, str]]) -> str:
     lines: list[str] = []
-    lines.append(f"# 公考晨读本周晨读完整汇编｜{start_date} 至 {end_date}")
+    lines.append(f"# 公考晨读本周复盘资料包｜{start_date} 至 {end_date}")
     lines.append("")
     lines.append("> 用途：周末集中复盘、热点素材归档、申论/面试练习。")
     lines.append("")
@@ -419,7 +419,7 @@ def build_weekly_pdf_booklet(payloads: list[dict[str, Any]], misses: list[dict[s
     story.append(Spacer(1, 28 * mm))
     cover_table = Table([
         [Paragraph("公考晨读", cover_sub)],
-        [Paragraph("本周晨读完整汇编", cover_title)],
+        [Paragraph("本周复盘资料包", cover_title)],
         [Paragraph(f"{esc(start_date)} 至 {esc(end_date)}", cover_sub)],
         [Paragraph("每日精读 - 文章框架 - 每日一题 - 素材摘抄", cover_sub)],
     ], colWidths=[160 * mm])
@@ -535,7 +535,7 @@ def build_weekly_pdf_booklet(payloads: list[dict[str, Any]], misses: list[dict[s
         canvas.saveState()
         canvas.setFont("STSong-Light", 8)
         canvas.setFillColor(gray)
-        canvas.drawCentredString(A4[0] / 2, 10 * mm, f"公考晨读本周晨读完整汇编 - {doc.page}")
+        canvas.drawCentredString(A4[0] / 2, 10 * mm, f"公考晨读本周复盘资料包 - {doc.page}")
         canvas.restoreState()
 
     doc = SimpleDocTemplate(
@@ -545,7 +545,7 @@ def build_weekly_pdf_booklet(payloads: list[dict[str, Any]], misses: list[dict[s
         leftMargin=18 * mm,
         topMargin=16 * mm,
         bottomMargin=18 * mm,
-        title=f"公考晨读本周晨读完整汇编｜{start_date}至{end_date}",
+        title=f"公考晨读本周复盘资料包｜{start_date}至{end_date}",
     )
     doc.build(story, onFirstPage=add_page_number, onLaterPages=add_page_number)
 
@@ -918,7 +918,7 @@ def build_weekly_pdf_compilation(payloads: list[dict[str, Any]], misses: list[di
     story.append(Spacer(1, 28 * mm))
     cover = Table([
         [Paragraph("公考晨读", cover_sub)],
-        [Paragraph("本周晨读完整汇编", h_cover)],
+        [Paragraph("本周复盘资料包", h_cover)],
         [Paragraph(f"{esc(start_date)} 至 {esc(end_date)}", cover_sub)],
         [Paragraph("按天收录每日晨读主要内容，便于周末集中复盘和打印归档", cover_sub)],
     ], colWidths=[160 * mm])
@@ -932,7 +932,7 @@ def build_weekly_pdf_compilation(payloads: list[dict[str, Any]], misses: list[di
     ]))
     story.append(cover)
     story.append(Spacer(1, 9 * mm))
-    note = "说明：当前版本优先做完整汇编，不强行按题目、素材、框架重新分类；等每日模块稳定后，再升级为专题/月刊式整理。"
+    note = "说明：当前版本优先做周末复盘整理，不新增每日精读内容；后续可继续升级为专题/月刊式资料包。"
     story.append(boxed([[para(note, quote)]], widths=[160*mm], bg=pale))
     story.append(PageBreak())
 
@@ -1023,13 +1023,13 @@ def build_weekly_pdf_compilation(payloads: list[dict[str, Any]], misses: list[di
         canvas.saveState()
         canvas.setFont("STSong-Light", 8)
         canvas.setFillColor(gray)
-        canvas.drawCentredString(A4[0] / 2, 10 * mm, f"公考晨读本周晨读完整汇编 - {doc.page}")
+        canvas.drawCentredString(A4[0] / 2, 10 * mm, f"公考晨读本周复盘资料包 - {doc.page}")
         canvas.restoreState()
 
     doc = SimpleDocTemplate(
         str(pdf_path), pagesize=A4,
         rightMargin=18 * mm, leftMargin=18 * mm, topMargin=16 * mm, bottomMargin=18 * mm,
-        title=f"公考晨读本周晨读完整汇编｜{start_date}至{end_date}",
+        title=f"公考晨读本周复盘资料包｜{start_date}至{end_date}",
     )
     doc.build(story, onFirstPage=add_page_number, onLaterPages=add_page_number)
 
@@ -1051,7 +1051,7 @@ def build_weekly_assets(event: Any | None = None) -> dict[str, Any]:
     if not archives:
         raise RuntimeError(f"没有读取到任何日归档，无法生成周 PDF。检查 OSS daily 目录：{settings.daily_archive_prefix}")
 
-    title = f"公考晨读本周晨读完整汇编｜{start_date} 至 {end_date_text}"
+    title = f"公考晨读本周复盘资料包｜{start_date} 至 {end_date_text}"
     md = build_weekly_markdown(archives, start_date, end_date_text, misses)
     html_body = build_weekly_html(archives, start_date, end_date_text, misses)
 
@@ -1078,7 +1078,7 @@ def build_weekly_assets(event: Any | None = None) -> dict[str, Any]:
         upload_meta["html"] = put_oss_object(f"{prefix}/{html_path.name}", html_path.read_bytes(), "text/html; charset=utf-8")
 
     attachment = {
-        "filename": f"公考晨读本周晨读完整汇编_{start_date}_至_{end_date_text}.pdf",
+        "filename": f"公考晨读本周复盘资料包_{start_date}_至_{end_date_text}.pdf",
         "content": pdf_path.read_bytes(),
         "content_type": "application/pdf",
     }
@@ -1109,7 +1109,7 @@ def run_weekly_pdf(event: Any | None = None, test_mode: bool = False) -> dict[st
     if settings.send_email and settings.weekly_pdf_send_email:
         attachments = [assets["attachment"]] if settings.weekly_pdf_attach else []
         send_result = send_email(
-            f"{settings.subject_prefix}本周晨读完整汇编｜{start_date}至{end_date_text}",
+            f"{settings.subject_prefix}本周复盘资料包｜{start_date}至{end_date_text}",
             assets["markdown"],
             assets["html"],
             test_mode=test_mode,
