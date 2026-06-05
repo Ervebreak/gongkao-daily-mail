@@ -580,10 +580,10 @@ def render_typst(data: dict[str, Any]) -> str:
 #v(8pt)
 #grid(columns: (1.2fr, 0.9fr), gutter: 9pt)[
   #panel[使用说明][
-    + 先看“本周主题总览”，快速回顾本周文章和题型。
-    + 再看“每日复盘卡”，抓住每篇文章的核心观点、框架和考场迁移。
-    + 最后集中背诵“金句表达库”，并用“素材运用题”做周末复盘训练。
-    + 延伸阅读只做摘要和原文入口，不收录原文全文。
+    + 先看本周 3 分钟速览。
+    + 再看考场素材库和金句表达库。
+    + 再做本周 3 道考场迁移训练。
+    + 周内没怎么看邮件的同学，再看每日内容压缩回看。
   ]
 ][
   #panel[本周训练主线][从“技术治理、执法规范、专业纠纷、生态边界”四类问题切入，训练申论对策题与面试综合分析题的材料转化能力。#v(5pt){t_badges(data["hot_keywords"], 8)}]
@@ -593,13 +593,13 @@ def render_typst(data: dict[str, Any]) -> str:
 #set page(numbering: "1", header: align(left)[#text(size: 8.5pt, fill: muted-color)[公考晨读 · 周复盘资料包 V1]], footer: text(size: 8pt, fill: rgb("#94a3b8"))[周日复盘版 · 摘要/框架/表达/素材/题目/索引])
 
 = 00｜使用说明
-#info-strip[复盘顺序][先看本周主题总览和高频考点地图，再看每日复盘卡，最后集中使用金句表达库、考场素材库和素材运用题。]
+#info-strip[复盘顺序][先看本周 3 分钟速览，再看考场素材库和金句表达库，再做本周 3 道考场迁移训练；周内没怎么看邮件的同学，再看每日内容压缩回看。]
 #grid(columns: (1fr), gutter: 8pt)[
   #panel[资料包定位][这份 PDF 面向周末复盘，不新增精读文章，只把本周已发送内容重新整理为考点、表达、素材和训练题。]
 ]
 
 = 01｜本周主题总览
-#info-strip[复盘方式][这份 PDF 不是把每日邮件简单拼接，而是按“周末复盘”的方式重新组织：先看总览，再逐日复盘，最后集中沉淀表达与阅读索引。]
+#info-strip[复盘方式][这份 PDF 不是把每日邮件简单拼接，而是按“周末复盘”的方式重新组织：先快速看总览，再集中沉淀素材、表达和训练题。]
 
 #table(columns: (0.8fr, 2fr, 2.2fr, 1.7fr), inset: 5pt, stroke: 0.45pt + line, fill: (x, y) => if y == 0 {{ table-head }} else if calc.odd(y) {{ rgb("#f8fafc") }} else {{ white }},
   [#text(fill: brand, weight: "bold")[日期]], [#text(fill: brand, weight: "bold")[主题]], [#text(fill: brand, weight: "bold")[精读文章]], [#text(fill: brand, weight: "bold")[训练方向]],
