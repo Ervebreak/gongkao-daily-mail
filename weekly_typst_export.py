@@ -300,37 +300,19 @@ def render_typst(data: dict[str, Any]) -> str:
         answer_framework = t_list(question["answer_framework"], 6)
         golden_blocks = "\n".join(
             f'#quote-card[{typst_text(item["sentence"])}][{typst_text(item["scenario"])}]'
-            for item in takeaway["golden_sentences"][:3]
+            for item in takeaway["golden_sentences"][:2]
         )
         daily_sections.append(
             f"""
-#pagebreak()
 #day-title("DAY {day["day_no"]:02d}", "{typst_text(day["short_date"])}｜{typst_text(day["weekday"])}｜{typst_text(day["theme"])}", "{typst_text(day["focus"])}")
 
-#grid(columns: (1fr, 1fr), gutter: 8pt)[
-  #mini-panel[核心判断][{typst_text(featured["one_sentence"])}]
-][
-  #mini-panel[今日题眼][{typst_text(question["exam_focus"])}]
-]
-
-#block-title[A. 精读文章复盘]
+#block-title[A. 内容压缩回看]
 #article-card[
   #muted[{typst_text(featured["source"])}｜{typst_text(featured["published_at"])}｜{typst_text(featured["theme"])}]
   #v(3pt)
   #text(size: 14pt, weight: "bold")[{typst_text(featured["title"])}]
   #v(5pt)
   #info-strip[一句话看懂][{typst_text(featured["one_sentence"])}]
-  #info-strip[原文重点][{typst_text(featured["original_reading_focus"])}]
-]
-
-#grid(columns: (1fr, 1fr), gutter: 8pt)[
-  #panel[记住 3 个点][{t_list(featured["three_useful_points"], 3)}]
-][
-  #panel[换成考场话][{t_list(featured["exam_use"], 4)}
-  #if "{typst_text(featured["rewritable_expression"])}" != "" [
-    #v(4pt)
-    #info-strip[可用表达][{typst_text(featured["rewritable_expression"])}]
-  ]]
 ]
 
 #framework-box[
@@ -343,26 +325,21 @@ def render_typst(data: dict[str, Any]) -> str:
   {t_badges(day["tags"], 8)}
 ]
 
-#block-title[B. 今日一题｜考场转化训练]
+#block-title[B. 题干与作答框架]
 #question-card[
   #badge[{typst_text(question["question_type"])}]
   #v(4pt)
   #text(size: 11.5pt, weight: "bold")[{typst_text(question["question"])}]
-  #info-strip[审题关键][{typst_text(question["exam_focus"])}]
-  #info-strip[破题提示][{typst_text(question["breaking_hint"])}]
   #text(weight: "bold", fill: brand)[作答框架]
   {answer_framework}
-  #candidate-answer[{typst_text(question["candidate_answer"])}]
-  #answer-box[30 秒表达][{typst_text(question["thirty_second_answer"])}]
-  #answer-box[参考开头][{typst_text(question["output_sentence_template"])}]
 ]
 
-#block-title[C. 今日可带走]
+#block-title[C. 1-2 句可背表达]
 #takeaway-card[
-  {t_badges(takeaway["keywords"], 6)}
-  #info-strip[时政常识][{typst_text(first_text(takeaway["common_knowledge_points"]))}]
   {golden_blocks if golden_blocks else '#muted[暂无金句]'}
-  #info-strip[可迁移框架][{typst_text(takeaway["framework"])}]
+  #if "{typst_text(featured["rewritable_expression"])}" != "" [
+    #info-strip[可改写表达][{typst_text(featured["rewritable_expression"])}]
+  ]
 ]
 """
         )
@@ -477,13 +454,33 @@ def render_typst(data: dict[str, Any]) -> str:
         )
     practice_questions = "\n#v(7pt)\n".join(practice_parts)
 
+    overview_exam_points = "\n".join(
+        f'- {typst_text(card.get("title"))}：{typst_text(card.get("summary") or card.get("body") or card.get("description"))}'
+        for card in (data.get("exam_map_cards") or [])[:5]
+        if isinstance(card, dict) and clean(card.get("title"))
+    )
+    overview_expressions = "\n".join(
+        f'- {typst_text(row.get("sentence") or row.get("expression") or row.get("text"))}'
+        for row in expression_source[:3]
+        if isinstance(row, dict) and clean(row.get("sentence") or row.get("expression") or row.get("text"))
+    )
+    first_practice = next((row for row in data.get("practice_questions") or [] if isinstance(row, dict)), {})
+    overview_practice = (
+        f'#badge[{typst_text(row_value(first_practice, "question_type"))}]'
+        f'#v(4pt)#text(weight: "bold")[{typst_text(row_value(first_practice, "title") or "本周第一题")}]'
+        f'#linebreak(){typst_text(row_value(first_practice, "question"))}'
+        if first_practice
+        else '#muted[暂无可展示训练题]'
+    )
+    overview_keywords = t_badges(data.get("hot_keywords") or [], 8)
+
     return f"""
-#set document(title: [公考晨读周复盘资料包 V1.2])
+#set document(title: [公考晨读周复盘资料包 V1.3])
 #set page(
   paper: "a4",
   margin: (x: 13mm, y: 17mm),
   numbering: "1",
-  header: align(left)[#text(size: 8.5pt, fill: rgb("#64748b"))[公考晨读 · 周复盘资料包 V1]],
+  header: align(left)[#text(size: 8.5pt, fill: rgb("#64748b"))[公考晨读 · 周复盘资料包 V1.3]],
   footer: text(size: 8pt, fill: rgb("#94a3b8"))[周日复盘版 · 摘要/框架/表达/素材/题目/索引],
 )
 #set text(font: ("Microsoft YaHei", "SimSun"), size: 10.2pt, lang: "zh")
@@ -562,7 +559,7 @@ def render_typst(data: dict[str, Any]) -> str:
   #v(18pt)
   #text(fill: brand, size: 32pt, weight: "bold")[公考晨读]
   #linebreak()
-  #text(fill: blue, size: 26pt, weight: "bold")[周复盘资料包 V1.2]
+  #text(fill: blue, size: 26pt, weight: "bold")[重点优先型周复盘资料包 V1.3]
   #v(10pt)
   #text(fill: brand, size: 12pt)[{typst_text(data["period"])}｜周日复盘版｜不新增精读文章]
   #v(24pt)
@@ -590,16 +587,23 @@ def render_typst(data: dict[str, Any]) -> str:
 ]
 
 #pagebreak()
-#set page(numbering: "1", header: align(left)[#text(size: 8.5pt, fill: muted-color)[公考晨读 · 周复盘资料包 V1]], footer: text(size: 8pt, fill: rgb("#94a3b8"))[周日复盘版 · 摘要/框架/表达/素材/题目/索引])
+#set page(numbering: "1", header: align(left)[#text(size: 8.5pt, fill: muted-color)[公考晨读 · 周复盘资料包 V1.3]], footer: text(size: 8pt, fill: rgb("#94a3b8"))[周日复盘版 · 速览/考点/素材/表达/训练/回看/索引])
 
-= 00｜使用说明
-#info-strip[复盘顺序][先看本周 3 分钟速览，再看考场素材库和金句表达库，再做本周 3 道考场迁移训练；周内没怎么看邮件的同学，再看每日内容压缩回看。]
-#grid(columns: (1fr), gutter: 8pt)[
-  #panel[资料包定位][这份 PDF 面向周末复盘，不新增精读文章，只把本周已发送内容重新整理为考点、表达、素材和训练题。]
+= 01｜本周 3 分钟速览
+#info-strip[复盘顺序][先看本页速览，再看考场素材库和金句表达库，再做本周 3 道考场迁移训练；周内没怎么看邮件的同学，再看每日内容压缩回看。]
+#grid(columns: (1fr, 1fr), gutter: 8pt)[
+  #panel[高频考点][{overview_exam_points if overview_exam_points else '#muted[暂无高频考点]'}]
+][
+  #panel[关键词][{overview_keywords if overview_keywords else '#muted[暂无关键词]'}]
+]
+#grid(columns: (1fr, 1fr), gutter: 8pt)[
+  #panel[最值得背][{overview_expressions if overview_expressions else '#muted[暂无精选表达]'}]
+][
+  #panel[最值得练][{overview_practice}]
 ]
 
-= 01｜本周主题总览
-#info-strip[复盘方式][这份 PDF 不是把每日邮件简单拼接，而是按“周末复盘”的方式重新组织：先快速看总览，再集中沉淀素材、表达和训练题。]
+#block-title[本周主题总览]
+#info-strip[复盘方式][这份 PDF 按“重点优先”重新组织：先抓考点、素材、表达和训练题，再回看每日内容。]
 
 #table(columns: (0.8fr, 2fr, 2.2fr, 1.7fr), inset: 5pt, stroke: 0.45pt + line, fill: (x, y) => if y == 0 {{ table-head }} else if calc.odd(y) {{ rgb("#f8fafc") }} else {{ white }},
   [#text(fill: brand, weight: "bold")[日期]], [#text(fill: brand, weight: "bold")[主题]], [#text(fill: brand, weight: "bold")[精读文章]], [#text(fill: brand, weight: "bold")[训练方向]],
@@ -612,10 +616,13 @@ def render_typst(data: dict[str, Any]) -> str:
 {map_cards}
 ]
 
-{''.join(daily_sections)}
+#pagebreak()
+= 03｜本周考场素材库
+#info-strip[使用建议][素材卡优先保留有事实锚点或机制做法的内容；没有稳定事实支撑时不强行提炼。]
+{material_cards if material_cards else '#muted[本周暂无稳定可提炼的考场素材卡]'}
 
 #pagebreak()
-= 03｜本周金句表达库
+= 04｜本周金句表达库
 #info-strip[使用建议][这一部分用于周末集中背诵。优先记能直接放进申论段落或面试表达里的句子。]
 #block-title[可背金句]
 #quote-bank[
@@ -625,17 +632,17 @@ def render_typst(data: dict[str, Any]) -> str:
 {framework_rows if framework_rows else '#muted[暂无可迁移框架]'}
 
 #pagebreak()
-= 04｜本周考场素材库
-#info-strip[使用建议][素材卡优先保留有事实锚点或机制做法的内容；没有稳定事实支撑时不强行提炼。]
-{material_cards if material_cards else '#muted[本周暂无稳定可提炼的考场素材卡]'}
-
-#pagebreak()
-= 05｜本周素材运用题
+= 05｜本周 3 道考场迁移训练
 #info-strip[使用建议][三道题分别用于面试综合分析、对策建议和申论作文分论点展开训练。对策建议题不建议硬塞外部案例。]
 {practice_questions if practice_questions else '#muted[本周暂无稳定可生成的素材运用题]'}
 
 #pagebreak()
-= 06｜延伸阅读索引
+= 06｜每日内容压缩回看
+#info-strip[说明][这里只保留主题、精读文章、一句话看懂、文章框架、题干、作答框架和 1-2 句表达；完整参考答案、30 秒表达和参考开头不在本章展开。]
+{('#v(10pt)').join(daily_sections)}
+
+#pagebreak()
+= 07｜延伸阅读索引
 #info-strip[说明][本页只做“摘要 + 原文入口”。如需阅读全文，请复制链接打开原文；PDF 不收录延伸阅读全文。]
 #block-title[精读原文入口]
 #table(columns: (0.7fr, 2.3fr, 1.2fr, 2.6fr), inset: 5pt, stroke: 0.45pt + line, fill: (x, y) => if y == 0 {{ table-head }} else if calc.odd(y) {{ rgb("#f8fafc") }} else {{ white }},
