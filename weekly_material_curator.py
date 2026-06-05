@@ -454,6 +454,10 @@ def _build_prompt(days: list[dict[str, Any]], candidate_evidence: list[dict[str,
 9. material_cards 的 source_articles 和 source_urls 必须能对应到 candidate_evidence 中的 title 和 url。
 10. material_cards 不能只写成某一篇文章专属案例，必须从具体事实中抽象出可迁移的公考母题、治理逻辑和通用考场写法。
 11. practice_questions 的三道题都必须可直接训练，不得出现空的作答提示或空的考生版参考答案。
+12. practice_questions 是唯一的训练题输出容器，不要额外生成“金句小练习”“表达练习”等字段或结构，避免形成 3 个金句练习 + 3 道训练题。
+13. 每道 practice_questions 都必须绑定至少 1 句本次 selected_expression_rows 中的金句或表达，suggested_golden_sentences 必须逐字引用 selected_expression_rows[*].sentence。
+14. 每道题的 answer_hint 或 mini_reference_answer 必须自然示范这句金句如何嵌入作答，不能只把金句列在 suggested_golden_sentences 里。
+15. 对策建议题不强行塞案例，但必须给出可迁移治理动作或政策表达，例如清单管理、分级分类、协同联动、闭环反馈、依法监管、精准服务等。
 
 输出字段：
 {{
@@ -482,8 +486,10 @@ def _build_prompt(days: list[dict[str, Any]], candidate_evidence: list[dict[str,
 - can_use_for 至少 5 个适用场景；exam_paragraph_general 必须能迁移到同类题目，不能依赖原文专属细节。
 - practice_questions：严格3道，题型分别为面试综合分析题、对策建议题、申论作文分论点展开题。
 - practice_questions 每题必须有 answer_hint 和 mini_reference_answer。
+- practice_questions 每题必须绑定至少 1 条 selected_expression_rows 中的原句，且 answer_hint 或 mini_reference_answer 要示范“这句金句如何放进答案里”。
 - 对策建议题 suggested_case_materials 可以为空，但 suggested_policy_expressions 不能为空，use_boundary 必须提醒“本题重点是措施表达，不建议硬塞外部案例。”
 - 面试综合分析题和申论作文分论点展开题必须至少关联 1 条素材卡和 1 条金句。
+- 不要把金句单独拆成小练习；只能生成上述 3 道 practice_questions。
 
 输入 JSON：
 {json.dumps({"days": _compact_days(days), "candidate_evidence": candidate_evidence}, ensure_ascii=False)}
@@ -527,6 +533,37 @@ def _material_sources_have_evidence(source_articles: list[str], source_urls: lis
     for key in source_articles + source_urls:
         row = evidence_index.get(_clean(key))
         if row and _clean(row.get("evidence_text")):
+            return True
+    return False
+
+
+def _golden_sentence_matches(suggested: list[str], selected_rows: list[dict[str, str]]) -> list[str]:
+    selected = [_clean(row.get("sentence")) for row in selected_rows if _clean(row.get("sentence"))]
+    if not selected:
+        return suggested
+    matched: list[str] = []
+    for sentence in suggested:
+        sentence = _clean(sentence)
+        if not sentence:
+            continue
+        if any(sentence == item or sentence in item or item in sentence for item in selected):
+            matched.append(sentence)
+    return matched
+
+
+def _question_demonstrates_golden(suggested: list[str], answer_hint: str, mini_reference_answer: str) -> bool:
+    body = f"{_clean(answer_hint)} {_clean(mini_reference_answer)}"
+    if not suggested:
+        return False
+    for sentence in suggested:
+        sentence = _clean(sentence)
+        if not sentence:
+            continue
+        if sentence in body:
+            return True
+        compact = re.sub(r"\s+", "", sentence)
+        body_compact = re.sub(r"\s+", "", body)
+        if len(compact) >= 8 and compact[:8] in body_compact:
             return True
     return False
 
@@ -648,6 +685,13 @@ def _validate_enrichment(payload: dict[str, Any], candidate_evidence: list[dict[
         suggested_case_materials = [_clean(x) for x in _as_list(item.get("suggested_case_materials")) if _clean(x)]
         suggested_policy_expressions = [_clean(x) for x in _as_list(item.get("suggested_policy_expressions")) if _clean(x)]
         use_boundary = _clean(item.get("use_boundary"))
+        suggested_golden_sentences = _golden_sentence_matches(suggested_golden_sentences, selected_expression_rows)
+        if not suggested_golden_sentences:
+            warnings.append(f"drop practice question without selected golden sentence: {question_type}")
+            continue
+        if not _question_demonstrates_golden(suggested_golden_sentences, answer_hint, mini_reference_answer):
+            warnings.append(f"drop practice question without golden sentence demonstration: {question_type}")
+            continue
         if question_type == "对策建议题":
             if not suggested_policy_expressions:
                 continue
