@@ -2132,9 +2132,10 @@ def build_weekly_pdf_candidate_message(weekly_pdf: dict[str, Any]) -> tuple[str,
             "今天不推送新的精读文章和速读文章，只做本周复盘。",
             "",
             "这周怎么复习：",
-            "1. 先看本周主题总览，快速回忆这周学过哪些公共治理场景；",
-            "2. 再看每日复盘卡，重点看文章框架、考场迁移和今日一题；",
-            "3. 最后看本周表达素材库，挑 2-3 句真正能写进申论或面试里的表达。",
+            "1. 先看“本周 3 分钟速览”，快速知道本周重点；",
+            "2. 再看“考场素材库”和“金句表达库”，挑能直接复用的内容；",
+            "3. 再做“本周 3 道考场迁移训练”，练怎么把素材和金句写进答案；",
+            "4. 周内没怎么看邮件的同学，再看后面的“每日内容压缩回看”。",
             "",
             "想麻烦你回复一点反馈：",
             "这版 PDF 是按「周复盘资料包」的形式整理，不是简单把 6 封邮件拼在一起。你可以直接回复本邮件，不用写很多，随便说一两句都可以。",
@@ -2171,11 +2172,12 @@ def build_weekly_pdf_candidate_message(weekly_pdf: dict[str, Any]) -> tuple[str,
 
     <div style="background:#fff;border:1px solid #dfe7f2;border-radius:16px;padding:22px 24px;margin-bottom:16px;">
       <div style="font-size:18px;font-weight:900;color:#165dff;margin-bottom:12px;">这周怎么复习</div>
-      <div style="font-size:16px;line-height:1.9;">本周一到周六的晨读内容已经整理成 PDF 附件。建议今天不用追新内容，花 20-30 分钟把本周材料过一遍。</div>
+      <div style="font-size:16px;line-height:1.9;">本周内容已经整理成 PDF 附件。建议今天不用追新内容，花 20-30 分钟把本周材料过一遍。</div>
       <ol style="font-size:16px;line-height:1.9;margin:16px 0 0;padding-left:24px;">
-        <li>先看<b>本周主题总览</b>，快速回忆这周学过哪些公共治理场景；</li>
-        <li>再看<b>每日复盘卡</b>，重点看文章框架、考场迁移和今日一题；</li>
-        <li>最后看<b>本周表达素材库</b>，挑 2-3 句真正能写进申论或面试里的表达。</li>
+        <li>先看<b>本周 3 分钟速览</b>，快速知道本周重点；</li>
+        <li>再看<b>考场素材库</b>和<b>金句表达库</b>，挑能直接复用的内容；</li>
+        <li>再做<b>本周 3 道考场迁移训练</b>，练怎么把素材和金句写进答案；</li>
+        <li>周内没怎么看邮件的同学，再看后面的<b>每日内容压缩回看</b>。</li>
       </ol>
     </div>
 
@@ -2216,7 +2218,7 @@ def generate_weekly_pdf_candidate(event: Any | None = None) -> dict[str, Any]:
         weekly_event.pop(key, None)
     weekly_event.setdefault("end_date", dt.datetime.now(TZ).date().isoformat())
     assets = build_weekly_assets(weekly_event)
-    subject = f"{settings.subject_prefix}本周晨读完整汇编｜{assets['start_date']}至{assets['end_date']}"
+    subject = f"{settings.subject_prefix}本周复盘资料包｜{assets['start_date']}至{assets['end_date']}"
     quality_gate = {"overall": "ok", "p0_count": 0, "p0_issues": []}
     quality = {
         "final": {
