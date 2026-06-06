@@ -101,6 +101,47 @@ MACRO_THEORY_KEYWORDS = {
     "高质量发展",
 }
 
+MATERIAL_PROBLEM_KEYWORDS = {
+    "问题",
+    "矛盾",
+    "痛点",
+    "堵点",
+    "风险",
+    "乱象",
+    "投诉",
+    "纠纷",
+    "隐患",
+    "短板",
+    "难题",
+    "困境",
+    "失灵",
+}
+
+MATERIAL_TRANSFER_KEYWORDS = {
+    "可迁移",
+    "迁移",
+    "申论",
+    "面试",
+    "答题",
+    "考场",
+    "母题",
+    "框架",
+    "治理逻辑",
+    "公共问题",
+    "公共治理",
+    "场景",
+}
+
+BROAD_USE_CASE_TERMS = {
+    "基层治理",
+    "公共服务",
+    "民生保障",
+    "社会治理",
+    "公共治理",
+    "治理能力",
+    "治理现代化",
+}
+
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
@@ -263,16 +304,22 @@ def _article_candidate_text(article: dict[str, Any]) -> str:
 def _material_candidate_score(article: dict[str, Any]) -> int:
     text = _article_candidate_text(article)
     score = 0
-    score += 10 if article.get("role") == "featured" else 4
-    score += min(sum(1 for word in MATERIAL_TOPIC_KEYWORDS if word in text) * 5, 25)
-    score += min(sum(1 for word in MATERIAL_SCENE_KEYWORDS if word in text) * 4, 24)
-    score += min(sum(1 for word in MATERIAL_MECHANISM_KEYWORDS if word in text) * 4, 24)
+    score += 6 if article.get("role") == "featured" else 2
+    score += min(sum(1 for word in MATERIAL_TOPIC_KEYWORDS if word in text) * 4, 20)
+    score += min(sum(1 for word in MATERIAL_SCENE_KEYWORDS if word in text) * 6, 30)
+    score += min(sum(1 for word in MATERIAL_PROBLEM_KEYWORDS if word in text) * 6, 30)
+    score += min(sum(1 for word in MATERIAL_MECHANISM_KEYWORDS if word in text) * 7, 35)
+    score += min(sum(1 for word in MATERIAL_TRANSFER_KEYWORDS if word in text) * 6, 30)
     if re.search(r"困境|难题|问题|冲突|争议|痛点|堵点|风险|乱象|治理|整改|帮扶|维权", text):
         score += 12
     if re.search(r"某地|当地|部门|街道|社区|企业|平台|学校|医院|工地|市场|执法|检查", text):
         score += 10
+    if article.get("role") == "quick_read" and score >= 45:
+        score += 6
     if any(word in text for word in MACRO_THEORY_KEYWORDS):
-        score -= 12
+        score -= 18
+    if not any(word in text for word in MATERIAL_SCENE_KEYWORDS | MATERIAL_PROBLEM_KEYWORDS | MATERIAL_MECHANISM_KEYWORDS):
+        score -= 18
     if not article.get("url"):
         score -= 8
     if len(text) < 30:
@@ -419,10 +466,12 @@ def build_candidate_evidence(days: list[dict[str, Any]], max_candidates: int = 6
             if item
         )
         row = {
+            "role": _clean(article.get("role")),
             "date": _clean(article.get("date")),
             "title": _clean(article.get("title")),
             "source": _clean(article.get("source")),
             "url": _clean(article.get("url")),
+            "material_score": article.get("material_score"),
             "selection_reason": _clean(article.get("selection_reason")),
             "existing_summary": _clip_text(existing_summary, 500),
             "evidence_text": evidence_text,
@@ -468,7 +517,7 @@ def _build_prompt(days: list[dict[str, Any]], candidate_evidence: list[dict[str,
     {{"date": "日期", "theme": "主题", "sentence": "精选金句或可用表达", "scenario": "适用场景"}}
   ],
   "material_cards": [
-    {{"title": "素材卡标题", "material_type": "案例型 / 机制型 / 案例型+机制型", "source_dates": ["日期"], "source_articles": ["来源文章标题"], "source_urls": ["来源文章URL"], "target_topics": ["适用考点"], "core_topic": "抽象母题，如公共服务从有到优", "generalizable_logic": "可迁移治理逻辑", "factual_anchor": "事实锚点或机制做法", "exam_paragraph": "默认考场表达，可与具体写法一致", "exam_paragraph_specific": "保留具体事实的考场写法", "exam_paragraph_general": "脱离具体案例也能迁移使用的通用写法", "can_use_for": ["至少5个适用场景"], "suggested_question_types": ["适用题型"], "not_suitable_for": ["不适合使用的场景"], "memory_sentence": "一句话记忆", "use_tip": "用法提示", "use_boundary": "使用边界"}}
+    {{"title": "素材卡标题", "material_type": "案例型 / 机制型 / 案例型+机制型", "source_dates": ["日期"], "source_articles": ["来源文章标题"], "source_urls": ["来源文章URL"], "target_topics": ["适用考点"], "core_topic": "抽象母题，如公共服务从有到优", "generalizable_logic": "可迁移治理逻辑", "factual_anchor": "事实锚点或机制做法", "exam_paragraph": "默认考场表达，可与具体写法一致", "exam_paragraph_specific": "保留具体事实的考场写法", "exam_paragraph_general": "脱离具体案例也能迁移使用的通用写法", "can_use_for": ["3到5个具体适用场景"], "suggested_question_types": ["适用题型"], "not_suitable_for": ["不适合使用的场景"], "memory_sentence": "一句话记忆", "use_tip": "用法提示", "use_boundary": "使用边界"}}
   ],
   "practice_questions": [
     {{"title": "题目标题", "question_type": "面试综合分析题", "question": "题目", "target_topics": ["训练主题"], "suggested_golden_sentences": ["建议金句"], "suggested_case_materials": ["至少1条素材卡标题"], "suggested_policy_expressions": ["政策表达"], "answer_hint": "作答提示", "mini_reference_answer": "考生版参考答案", "use_boundary": "使用边界"}},
@@ -483,13 +532,21 @@ def _build_prompt(days: list[dict[str, Any]], candidate_evidence: list[dict[str,
 - selected_expression_rows：8到15条。
 - material_cards：3到6条，必须有事实锚点或机制做法。
 - material_cards 每条必须尽量补全 core_topic、generalizable_logic、exam_paragraph_specific、exam_paragraph_general、can_use_for、suggested_question_types、not_suitable_for。
-- can_use_for 至少 5 个适用场景；exam_paragraph_general 必须能迁移到同类题目，不能依赖原文专属细节。
+- can_use_for 填 3 到 5 个具体适用场景，不能只写“基层治理、公共服务、民生保障”这类大而空标签；exam_paragraph_general 必须能迁移到同类题目，不能依赖原文专属细节。
 - practice_questions：严格3道，题型分别为面试综合分析题、对策建议题、申论作文分论点展开题。
 - practice_questions 每题必须有 answer_hint 和 mini_reference_answer。
 - practice_questions 每题必须绑定至少 1 条 selected_expression_rows 中的原句，且 answer_hint 或 mini_reference_answer 要示范“这句金句如何放进答案里”。
 - 对策建议题 suggested_case_materials 可以为空，但 suggested_policy_expressions 不能为空，use_boundary 必须提醒“本题重点是措施表达，不建议硬塞外部案例。”
 - 面试综合分析题和申论作文分论点展开题必须至少关联 1 条素材卡和 1 条金句。
 - 不要把金句单独拆成小练习；只能生成上述 3 道 practice_questions。
+
+Material card selection rules:
+- Featured articles are preferred only as a small prior. Quick reads must compete on usefulness and may win if they have clearer governance scenes, public conflicts, mechanisms, reusable frameworks, or exam-ready expression.
+- Do not let role=featured override weak material value. Drop narrow featured-only facts when a quick_read offers a more generalizable exam material.
+- Each material_card must include concrete factual writing and general exam writing: core_topic, generalizable_logic, factual_anchor, exam_paragraph_specific, exam_paragraph_general, can_use_for, suggested_question_types, and use_boundary.
+- can_use_for must contain 3 to 5 specific scenarios. Avoid broad empty labels such as 基层治理, 公共服务, 民生保障 unless they are attached to a concrete situation.
+- If a card only repeats the source article and cannot become a reusable public-governance motif, lower its priority or omit it.
+- practice_questions must remain exactly 3. Do not add golden-sentence mini-practice or any extra practice container.
 
 输入 JSON：
 {json.dumps({"days": _compact_days(days), "candidate_evidence": candidate_evidence}, ensure_ascii=False)}
@@ -533,6 +590,38 @@ def _material_sources_have_evidence(source_articles: list[str], source_urls: lis
     for key in source_articles + source_urls:
         row = evidence_index.get(_clean(key))
         if row and _clean(row.get("evidence_text")):
+            return True
+    return False
+
+
+def _is_broad_use_case(text: str) -> bool:
+    text = _clean(text)
+    compact = re.sub(r"\s+", "", text)
+    if not compact:
+        return True
+    if compact in BROAD_USE_CASE_TERMS:
+        return True
+    return len(compact) <= 6 and any(term in compact for term in BROAD_USE_CASE_TERMS)
+
+
+def _specific_use_cases(values: list[str]) -> list[str]:
+    result: list[str] = []
+    for value in values:
+        value = _clean(value)
+        if not value or _is_broad_use_case(value):
+            continue
+        if value not in result:
+            result.append(value)
+    return result[:5]
+
+
+def _too_close_to_source_only(general_text: str, *source_texts: str) -> bool:
+    general = re.sub(r"\s+", "", _clean(general_text))
+    if len(general) < 20:
+        return True
+    for source in source_texts:
+        source = re.sub(r"\s+", "", _clean(source))
+        if source and (general == source or general in source or source in general):
             return True
     return False
 
@@ -613,10 +702,19 @@ def _validate_enrichment(payload: dict[str, Any], candidate_evidence: list[dict[
         target_topics = [_clean(x) for x in _as_list(item.get("target_topics") or item.get("theme")) if _clean(x)]
         core_topic = _clean(item.get("core_topic"))
         generalizable_logic = _clean(item.get("generalizable_logic"))
-        can_use_for = [_clean(x) for x in _as_list(item.get("can_use_for")) if _clean(x)]
+        can_use_for = _specific_use_cases([_clean(x) for x in _as_list(item.get("can_use_for")) if _clean(x)])
         suggested_question_types = [_clean(x) for x in _as_list(item.get("suggested_question_types")) if _clean(x)]
         not_suitable_for = [_clean(x) for x in _as_list(item.get("not_suitable_for")) if _clean(x)]
         if material_type not in valid_material_types or not factual_anchor or not exam_paragraph or not source_articles:
+            continue
+        if not all([core_topic, generalizable_logic, exam_paragraph_general, suggested_question_types, _clean(item.get("use_boundary"))]):
+            warnings.append(f"drop material card missing reusable exam fields: {source_articles[0]}")
+            continue
+        if len(can_use_for) < 3:
+            warnings.append(f"drop material card with vague can_use_for: {source_articles[0]}")
+            continue
+        if _too_close_to_source_only(exam_paragraph_general, factual_anchor, exam_paragraph_specific):
+            warnings.append(f"drop material card without general exam expression: {source_articles[0]}")
             continue
         if "案例型" in material_type and not _material_sources_have_evidence(source_articles, source_urls, evidence_index):
             warnings.append(f"drop material card without source evidence_text: {source_articles[0]}")
@@ -649,7 +747,7 @@ def _validate_enrichment(payload: dict[str, Any], candidate_evidence: list[dict[
                 "exam_paragraph": exam_paragraph,
                 "exam_paragraph_specific": exam_paragraph_specific,
                 "exam_paragraph_general": exam_paragraph_general,
-                "can_use_for": can_use_for[:8],
+                "can_use_for": can_use_for[:5],
                 "suggested_question_types": suggested_question_types[:5],
                 "not_suitable_for": not_suitable_for[:5],
                 "memory_sentence": _clean(item.get("memory_sentence")),
