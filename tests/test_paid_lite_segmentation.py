@@ -8,7 +8,7 @@ sys.modules.setdefault("requests", types.SimpleNamespace())
 
 from email_sender import parse_subscribers_csv_all_records, split_recipient_records, update_send_audit_results, save_send_audit
 from config import settings
-from main import render_lite_email
+from lite_email_renderer import render_lite_email
 
 
 def test_paid_lite_recipient_segmentation() -> None:
