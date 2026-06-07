@@ -2203,6 +2203,11 @@ def build_weekly_pdf_candidate_message(weekly_pdf: dict[str, Any]) -> tuple[str,
     return plain_text, html_body
 
 
+def _weekly_pdf_oss_path(assets: dict[str, Any]) -> str | None:
+    pdf_upload = ((assets.get("oss_upload") or {}).get("pdf") or {})
+    return pdf_upload.get("oss_path") or pdf_upload.get("path")
+
+
 def generate_weekly_pdf_candidate(event: Any | None = None) -> dict[str, Any]:
     from candidate_store import save_candidate
     from weekly_report import build_weekly_assets
@@ -2241,7 +2246,7 @@ def generate_weekly_pdf_candidate(event: Any | None = None) -> dict[str, Any]:
         "local_pdf": assets.get("local_pdf"),
         "local_md": assets.get("local_md"),
         "local_html": assets.get("local_html"),
-        "oss_pdf_path": ((assets.get("oss_upload") or {}).get("pdf") or {}).get("oss_path"),
+        "oss_pdf_path": _weekly_pdf_oss_path(assets),
         "attachment_filename": (assets.get("attachment") or {}).get("filename") or "gongkao-weekly.pdf",
         "pdf_engine": assets.get("pdf_engine"),
         "typst_meta": assets.get("typst_meta"),
