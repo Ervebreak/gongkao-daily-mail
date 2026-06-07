@@ -266,6 +266,13 @@ def recipient_delivery_tier(record: dict[str, str], today: str | dt.date | None 
     status = str(record.get("status") or "active").strip().lower() or "active"
     if status != "active":
         return "skipped"
+    send_mode = str(record.get("send_mode") or "").strip().lower()
+    if send_mode == "none":
+        return "skipped"
+    if send_mode == "full":
+        return "full"
+    if send_mode == "lite":
+        return "lite"
     plan = str(record.get("plan") or "free").strip().lower() or "free"
     today_date = today if isinstance(today, dt.date) else _parse_date(str(today or ""))
     today_date = today_date or dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).date()
@@ -416,12 +423,41 @@ def build_send_audit(delivery_date: str, segments: dict[str, list[dict[str, str]
     }
 
 
+def _send_audit_path(delivery_date: str) -> Path:
+    return settings.output_dir / f"send_audit_{delivery_date}.json"
+
+
 def save_send_audit(delivery_date: str, segments: dict[str, list[dict[str, str]]], recipient_source: str) -> dict[str, Any]:
     audit = build_send_audit(delivery_date, segments, recipient_source)
     settings.output_dir.mkdir(parents=True, exist_ok=True)
-    path = settings.output_dir / f"send_audit_{delivery_date}.json"
+    path = _send_audit_path(delivery_date)
     path.write_text(json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8")
     return {**audit, "audit_path": str(path)}
+
+
+def update_send_audit_results(
+    delivery_date: str,
+    audit: dict[str, Any],
+    full_result: dict[str, object],
+    lite_result: dict[str, object],
+) -> dict[str, Any]:
+    updated = dict(audit)
+    updated["full_result"] = {
+        "success_count": int(full_result.get("success_count", 0)),
+        "fail_count": int(full_result.get("fail_count", 0)),
+        "recipient_status": full_result.get("recipient_status") or [],
+        "failures": full_result.get("failures") or [],
+    }
+    updated["lite_result"] = {
+        "success_count": int(lite_result.get("success_count", 0)),
+        "fail_count": int(lite_result.get("fail_count", 0)),
+        "recipient_status": lite_result.get("recipient_status") or [],
+        "failures": lite_result.get("failures") or [],
+    }
+    path = Path(str(updated.get("audit_path") or _send_audit_path(delivery_date)))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({key: value for key, value in updated.items() if key != "audit_path"}, ensure_ascii=False, indent=2), encoding="utf-8")
+    return updated
 
 
 def send_segmented_email(
@@ -457,6 +493,7 @@ def send_segmented_email(
         recipient_source=f"{recipient_source}:lite",
         attachments=None,
     )
+    audit = update_send_audit_results(delivery_date, audit, full_result, lite_result)
     return {
         "send_mode": settings.send_mode if settings.send_mode in {"bcc", "individual"} else "bcc",
         "recipient_source": recipient_source,
