@@ -595,6 +595,98 @@ def render_feedback_buttons(brief: dict[str, Any]) -> str:
     """
 
 
+def _brief_from_latest_json(latest_json: dict[str, Any]) -> dict[str, Any]:
+    brief = latest_json.get("brief") if isinstance(latest_json, dict) else None
+    if isinstance(brief, dict):
+        return brief
+    return latest_json if isinstance(latest_json, dict) else {}
+
+
+def _lite_paid_entry_url() -> str:
+    return settings.paid_trial_entry_url.strip() or FEEDBACK_FORM_URL
+
+
+def _lite_expression(brief: dict[str, Any]) -> str:
+    featured = ensure_dict(brief.get("featured_article"))
+    takeaway = ensure_dict(brief.get("today_takeaway"))
+    golden = as_list(takeaway.get("golden_sentences"))
+    first_gold = golden[0] if golden else {}
+    sentence = first_gold.get("sentence") if isinstance(first_gold, dict) else first_gold
+    value = sentence or featured.get("rewritable_expression") or brief.get("today_focus") or ""
+    return clip_text(strip_display_prefix(value, "可用表达", "必备金句", "一句表达"), 90)
+
+
+def _lite_learning_tip(brief: dict[str, Any]) -> str:
+    guide = normalize_reading_guide(brief)
+    question = ensure_dict(brief.get("daily_question"))
+    return clip_text(
+        guide.get("learning_outcome")
+        or guide.get("focus_path")
+        or question.get("output_prompt")
+        or brief.get("today_focus")
+        or "先读主题，再练今日一题，最后把一句表达改成自己的开头表态。",
+        90,
+    )
+
+
+def render_lite_plain_text(latest_json: dict[str, Any]) -> str:
+    brief = _brief_from_latest_json(latest_json)
+    question_text = today_question_text(brief)
+    lines = [
+        str(brief.get("email_subject") or "公考晨读简版"),
+        f"今日主题：{brief.get('today_theme') or ''}",
+        f"一句表达：{_lite_expression(brief)}",
+        f"今日一题：{question_text}",
+        f"学习提示：{_lite_learning_tip(brief)}",
+        f"付费内测入口：{_lite_paid_entry_url()}",
+    ]
+    return "\n".join(lines)
+
+
+def render_lite_email(latest_json: dict[str, Any]) -> str:
+    brief = _brief_from_latest_json(latest_json)
+    question_text = today_question_text(brief)
+    paid_url = _lite_paid_entry_url()
+    return f"""<!doctype html>
+<html>
+<body style="margin:0;padding:0;background:#f6f8fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif;color:#0f172a;">
+  <div style="max-width:620px;margin:0 auto;padding:16px 12px;">
+    <div style="background:linear-gradient(135deg,#174a7e,#1f78bd);color:#fff;border-radius:16px;padding:18px 18px;margin-bottom:12px;">
+      <div style="font-size:12px;letter-spacing:1.4px;opacity:.86;">DAILY BRIEFING 简版</div>
+      <div style="font-size:24px;font-weight:900;line-height:1.32;margin-top:7px;">{h(brief.get('email_subject') or '公考晨读简版')}</div>
+      <div style="font-size:14px;line-height:1.65;margin-top:9px;opacity:.94;">{h(brief.get('today_focus') or brief.get('today_theme') or '')}</div>
+    </div>
+
+    <div style="background:#fff;border:1px solid #e6eaf0;border-radius:15px;padding:13px 14px;margin-bottom:15px;">
+      <div style="font-size:13px;color:#165dff;font-weight:900;margin-bottom:8px;">今日主题</div>
+      <div style="background:#eef6ff;border-left:4px solid #165dff;border-radius:10px;padding:8px 10px;line-height:1.6;font-size:14px;">{h(brief.get('today_theme') or '')}</div>
+    </div>
+
+    <div style="background:#fff;border:1px solid #e6eaf0;border-radius:15px;padding:13px 14px;margin-bottom:15px;">
+      <div style="font-size:13px;color:#165dff;font-weight:900;margin-bottom:8px;">一句表达</div>
+      <div style="font-size:15px;line-height:1.75;color:#334155;">{h(_lite_expression(brief))}</div>
+    </div>
+
+    <div style="background:#fff;border:1px solid #e6eaf0;border-radius:15px;padding:13px 14px;margin-bottom:15px;">
+      <div style="font-size:13px;color:#b45309;font-weight:900;margin-bottom:8px;">今日一题</div>
+      <div style="font-size:15px;line-height:1.75;color:#334155;">{h(question_text)}</div>
+    </div>
+
+    <div style="background:#fff8e8;border:1px solid #fde7b7;border-radius:15px;padding:13px 14px;margin-bottom:15px;">
+      <div style="font-size:13px;color:#b45309;font-weight:900;margin-bottom:8px;">学习提示</div>
+      <div style="font-size:14px;line-height:1.75;color:#334155;">{h(_lite_learning_tip(brief))}</div>
+    </div>
+
+    <div style="background:#fff;border:1px solid #dbeafe;border-radius:16px;padding:16px;margin-bottom:15px;text-align:center;">
+      <div style="font-size:16px;font-weight:900;color:#0f172a;margin-bottom:8px;">完整版与付费内测</div>
+      <div style="font-size:14px;line-height:1.7;color:#475569;margin-bottom:12px;">想看完整答案、完整拆解和后续完整版内容，可通过下方入口申请付费内测。</div>
+      <a href="{h(paid_url)}" target="_blank" style="display:inline-block;background:#165dff;color:#fff;text-decoration:none;padding:10px 18px;border-radius:999px;font-size:14px;font-weight:900;">申请付费内测</a>
+    </div>
+  </div>
+</body>
+</html>"""
+
+
 def render_plain_text(brief: dict[str, Any]) -> str:
     featured = brief["featured_article"]
     question = brief["daily_question"]
