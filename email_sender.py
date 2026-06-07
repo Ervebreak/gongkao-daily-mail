@@ -1,29 +1,37 @@
 from __future__ import annotations
 
 import csv
+import datetime as dt
 import hashlib
 import io
 import re
 import smtplib
 import ssl
-from pathlib import Path
-from typing import Any
+from email import encoders
 from email.header import Header
+from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email.mime.base import MIMEBase
-from email import encoders
 from email.utils import formataddr, parseaddr
+from pathlib import Path
+from typing import Any
 
-import requests
+try:
+    import requests
+except ModuleNotFoundError:  # pragma: no cover - local unit tests may not install network deps
+    requests = None
 
 from config import settings
-from history import oss_config, oss_headers, oss_ready, oss_url
-from weekly_pdf_tracking import replace_weekly_pdf_tracking_placeholders
+try:
+    from weekly_pdf_tracking import replace_weekly_pdf_tracking_placeholders
+except ModuleNotFoundError:  # pragma: no cover - unit tests do not need tracking
+    def replace_weekly_pdf_tracking_placeholders(text: str, recipient_email: str) -> str:
+        return text
 
 EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
 FEEDBACK_UID_PLACEHOLDER = "__FEEDBACK_UID__"
 FEEDBACK_EMAIL_HASH_PLACEHOLDER = "__FEEDBACK_EMAIL_HASH__"
+FULL_ACCESS_PLANS = {"paid_trial", "paid_monthly"}
 
 
 def build_from_header() -> str:
@@ -60,23 +68,66 @@ def _fallback_uid(email: str, prefix: str = "u") -> str:
     return f"{prefix}_{_email_hash(email)[:10]}"
 
 
+def _clean_text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _normalize_status(value: Any) -> str:
+    return _clean_text(value).lower() or "active"
+
+
+def _normalize_plan(value: Any) -> str:
+    return _clean_text(value).lower() or "free"
+
+
+def _normalize_send_mode(value: Any) -> str:
+    return _clean_text(value).lower() or "lite"
+
+
+def _parse_date(value: Any) -> dt.date | None:
+    raw = _clean_text(value)
+    if not raw:
+        return None
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d"):
+        try:
+            return dt.datetime.strptime(raw, fmt).date()
+        except ValueError:
+            continue
+    try:
+        return dt.date.fromisoformat(raw[:10])
+    except ValueError:
+        return None
+
+
+def _resolve_delivery_date(delivery_date: str | dt.date | None) -> dt.date:
+    if isinstance(delivery_date, dt.date):
+        return delivery_date
+    parsed = _parse_date(delivery_date)
+    return parsed or dt.datetime.now(dt.timezone.utc).date()
+
+
 def normalize_recipient_records(raw_items: list[dict[str, Any]]) -> list[dict[str, str]]:
     recipients: list[dict[str, str]] = []
     seen: set[str] = set()
     for item in raw_items:
-        email = str(item.get("email") or "").strip()
+        email = _clean_text(item.get("email"))
         if not email or not EMAIL_RE.match(email):
             continue
         key = email.lower()
         if key in seen:
             continue
         seen.add(key)
-        uid = str(item.get("uid") or item.get("id") or "").strip() or _fallback_uid(email)
+        uid = _clean_text(item.get("uid") or item.get("id")) or _fallback_uid(email)
         recipients.append(
             {
                 "email": email,
                 "uid": uid,
-                "email_hash": str(item.get("email_hash") or "").strip() or _email_hash(email),
+                "email_hash": _clean_text(item.get("email_hash")) or _email_hash(email),
+                "status": _normalize_status(item.get("status")),
+                "plan": _normalize_plan(item.get("plan")),
+                "paid_until": _clean_text(item.get("paid_until")),
+                "send_mode": _normalize_send_mode(item.get("send_mode")),
+                "note": _clean_text(item.get("note")),
             }
         )
     return recipients
@@ -90,14 +141,18 @@ def parse_subscribers_csv_records(csv_text: str) -> list[dict[str, str]]:
     recipients: list[dict[str, Any]] = []
     reader = csv.DictReader(io.StringIO(csv_text))
     for row in reader:
-        if (row.get("status") or "").strip().lower() == "active":
-            recipients.append(
-                {
-                    "email": row.get("email", ""),
-                    "uid": row.get("uid", ""),
-                    "email_hash": row.get("email_hash", ""),
-                }
-            )
+        recipients.append(
+            {
+                "email": row.get("email", ""),
+                "uid": row.get("uid", ""),
+                "email_hash": row.get("email_hash", ""),
+                "status": row.get("status", ""),
+                "plan": row.get("plan", ""),
+                "paid_until": row.get("paid_until", ""),
+                "send_mode": row.get("send_mode", ""),
+                "note": row.get("note", ""),
+            }
+        )
     return normalize_recipient_records(recipients)
 
 
@@ -126,6 +181,10 @@ def load_subscribers_csv_oss() -> list[str] | None:
 
 
 def load_subscribers_csv_oss_records() -> list[dict[str, str]] | None:
+    if requests is None:
+        return None
+    from history import oss_config, oss_headers, oss_ready, oss_url
+
     if settings.subscribers_storage != "oss":
         return None
     if not oss_ready():
@@ -144,8 +203,8 @@ def load_subscribers_csv_oss_records() -> list[dict[str, str]] | None:
 
 
 def load_subscribers_csv() -> tuple[list[str] | None, str]:
-    records, source = load_subscribers_csv_records()
-    if records is None:
+    records, source = get_effective_recipient_records()
+    if not records:
         return None, source
     return [item["email"] for item in records], source
 
@@ -160,33 +219,89 @@ def load_subscribers_csv_records() -> tuple[list[dict[str, str]] | None, str]:
     return None, "none"
 
 
-def get_effective_recipients(test_mode: bool = False) -> tuple[list[str], str]:
+def _records_from_email_list(emails: list[str], uid_prefix: str = "u") -> list[dict[str, str]]:
+    return normalize_recipient_records(
+        [{"email": email, "uid": _fallback_uid(email, prefix=uid_prefix), "status": "active", "plan": "free"} for email in emails]
+    )
+
+
+def classify_recipient_delivery(recipient: dict[str, Any], delivery_date: str | dt.date | None = None) -> str:
+    status = _normalize_status(recipient.get("status"))
+    if status != "active":
+        return "skipped"
+    plan = _normalize_plan(recipient.get("plan"))
+    paid_until = _parse_date(recipient.get("paid_until"))
+    today = _resolve_delivery_date(delivery_date)
+    if plan in FULL_ACCESS_PLANS and paid_until and paid_until >= today:
+        return "full"
+    return "lite"
+
+
+def build_recipient_delivery_plan(
+    records: list[dict[str, Any]] | None,
+    *,
+    recipient_source: str,
+    delivery_date: str | dt.date | None = None,
+) -> dict[str, Any]:
+    normalized = normalize_recipient_records(records or [])
+    full_records: list[dict[str, str]] = []
+    lite_records: list[dict[str, str]] = []
+    skipped_records: list[dict[str, str]] = []
+    for record in normalized:
+        tier = classify_recipient_delivery(record, delivery_date=delivery_date)
+        enriched = dict(record)
+        enriched["delivery_tier"] = tier
+        if tier == "full":
+            full_records.append(enriched)
+        elif tier == "lite":
+            lite_records.append(enriched)
+        else:
+            skipped_records.append(enriched)
+    return {
+        "recipient_source": recipient_source,
+        "full_records": full_records,
+        "lite_records": lite_records,
+        "skipped_records": skipped_records,
+        "full_count": len(full_records),
+        "lite_count": len(lite_records),
+        "skipped_count": len(skipped_records),
+        "full_emails": [item["email"] for item in full_records],
+        "lite_emails": [item["email"] for item in lite_records],
+        "skipped_emails": [item["email"] for item in skipped_records],
+    }
+
+
+def get_recipient_delivery_plan(test_mode: bool = False, delivery_date: str | dt.date | None = None) -> dict[str, Any]:
     if test_mode:
         test_recipients = normalize_recipients(settings.test_recipients)
         if test_recipients:
-            return test_recipients, "TEST_RECIPIENTS"
-        # 安全兜底：测试模式没有配置 TEST_RECIPIENTS 时，不读取正式用户表，避免误发。
-        return [], "TEST_RECIPIENTS_EMPTY"
-
-    csv_recipients, csv_source = load_subscribers_csv()
-    if csv_recipients:
-        return csv_recipients, csv_source
-    raw = settings.recipients_raw.replace(";", ",").split(",")
-    return normalize_recipients(raw), "RECIPIENTS"
-
-
-def get_effective_recipient_records(test_mode: bool = False) -> tuple[list[dict[str, str]], str]:
-    if test_mode:
-        test_recipients = normalize_recipients(settings.test_recipients)
-        if test_recipients:
-            return normalize_recipient_records([{"email": email} for email in test_recipients]), "TEST_RECIPIENTS"
-        return [], "TEST_RECIPIENTS_EMPTY"
+            return build_recipient_delivery_plan(
+                _records_from_email_list(test_recipients, uid_prefix="test"),
+                recipient_source="TEST_RECIPIENTS",
+                delivery_date=delivery_date,
+            )
+        return build_recipient_delivery_plan([], recipient_source="TEST_RECIPIENTS_EMPTY", delivery_date=delivery_date)
 
     csv_recipients, csv_source = load_subscribers_csv_records()
     if csv_recipients:
-        return csv_recipients, csv_source
+        return build_recipient_delivery_plan(csv_recipients, recipient_source=csv_source, delivery_date=delivery_date)
     raw = settings.recipients_raw.replace(";", ",").split(",")
-    return normalize_recipient_records([{"email": email} for email in raw]), "RECIPIENTS"
+    return build_recipient_delivery_plan(
+        _records_from_email_list(normalize_recipients(raw)),
+        recipient_source="RECIPIENTS",
+        delivery_date=delivery_date,
+    )
+
+
+def get_effective_recipients(test_mode: bool = False) -> tuple[list[str], str]:
+    records, source = get_effective_recipient_records(test_mode=test_mode)
+    return [item["email"] for item in records], source
+
+
+def get_effective_recipient_records(test_mode: bool = False) -> tuple[list[dict[str, str]], str]:
+    plan = get_recipient_delivery_plan(test_mode=test_mode)
+    records = plan["full_records"] + plan["lite_records"]
+    return records, str(plan.get("recipient_source") or "none")
 
 
 def personalize_html_for_recipient(html_body: str, recipient: dict[str, str]) -> str:
@@ -236,17 +351,50 @@ def build_message(subject: str, plain_text: str, html_body: str, to_header: str,
 
 
 def send_email(subject: str, plain_text: str, html_body: str, test_mode: bool = False, attachments: list[dict] | None = None) -> dict[str, object]:
+    recipients, recipient_source = get_effective_recipient_records(test_mode=test_mode)
+    if not recipients and test_mode:
+        raise RuntimeError("TEST_RECIPIENTS is required in test mode to avoid sending to production subscribers.")
+    if not recipients and not test_mode:
+        raise RuntimeError("No valid recipients found in subscribers.csv, RECIPIENTS or MAIL_TO.")
+    return send_email_to_recipient_records(
+        subject,
+        plain_text,
+        html_body,
+        recipients,
+        recipient_source=recipient_source,
+        test_mode=test_mode,
+        attachments=attachments,
+    )
+
+
+def send_email_to_recipient_records(
+    subject: str,
+    plain_text: str,
+    html_body: str,
+    recipients: list[dict[str, Any]],
+    *,
+    recipient_source: str = "explicit",
+    test_mode: bool = False,
+    attachments: list[dict] | None = None,
+) -> dict[str, object]:
     if not settings.smtp_user:
         raise RuntimeError("SMTP_USER is required.")
     if not settings.smtp_password:
         raise RuntimeError("SMTP_PASSWORD or SMTP_PASS is required.")
-    recipients, recipient_source = get_effective_recipient_records(test_mode=test_mode)
-    if not recipients:
-        if test_mode:
-            raise RuntimeError("TEST_RECIPIENTS is required in test mode to avoid sending to production subscribers.")
-        raise RuntimeError("No valid recipients found in subscribers.csv, RECIPIENTS or MAIL_TO.")
-
+    recipients = normalize_recipient_records(recipients)
     send_mode = settings.send_mode if settings.send_mode in {"bcc", "individual"} else "bcc"
+    if not recipients:
+        return {
+            "send_mode": send_mode,
+            "recipient_source": recipient_source,
+            "valid_recipient_count": 0,
+            "is_test_mode": test_mode,
+            "success_count": 0,
+            "fail_count": 0,
+            "recipient_status": [],
+            "failures": [],
+        }
+
     result: dict[str, object] = {
         "send_mode": send_mode,
         "recipient_source": recipient_source,

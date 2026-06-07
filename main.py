@@ -2300,8 +2300,8 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
     from content_issue_rewriter import rewrite_content_issues
     from content_quality_reviewer import evaluate_content_quality, get_content_quality_model_plan
     from daily_archive import archive_daily_content, is_official_morning_run
-    from email_renderer import render_email_html, render_plain_text
-    from email_sender import get_effective_recipients, send_email
+    from email_renderer import render_email_html, render_lite_email, render_lite_plain_text, render_plain_text
+    from email_sender import get_effective_recipients, get_recipient_delivery_plan, send_email, send_email_to_recipient_records
     from fetch_articles import get_candidate_articles_with_stats
     from duplication_quality import evaluate_duplication
     from expression_quality import evaluate_expression_quality
@@ -2808,10 +2808,18 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
     quality_blocked = (not test_invocation) and quality_gate.get("overall") == "fail"
     llm_trace_summary = summarize_llm_trace(llm_trace_events)
     logger.info("llm trace summary", summary=llm_trace_summary)
-    recipients, recipient_source = get_effective_recipients(test_mode=test_invocation)
+    latest_payload = {"delivery_date": today, "subject": subject, "brief": brief}
+    lite_plain_text = render_lite_plain_text(latest_payload)
+    lite_html_body = render_lite_email(latest_payload)
+    recipient_plan = get_recipient_delivery_plan(test_mode=test_invocation, delivery_date=today)
+    recipients = recipient_plan["full_records"] + recipient_plan["lite_records"]
+    recipient_source = str(recipient_plan.get("recipient_source") or "none")
     logger.info(
-        "recipient stats",
+        "recipient tier stats",
         valid_recipient_count=len(recipients),
+        full_count=recipient_plan["full_count"],
+        lite_count=recipient_plan["lite_count"],
+        skipped_count=recipient_plan["skipped_count"],
         recipient_source=recipient_source,
         send_mode=settings.send_mode,
     )
@@ -3024,6 +3032,18 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
         history_result = append_records(settings.history_path, build_history_records(brief, today))
     logger.info("sent history updated", **history_result)
 
+    send_audit = {
+        "delivery_date": today,
+        "recipient_source": recipient_source,
+        "full_count": recipient_plan["full_count"],
+        "lite_count": recipient_plan["lite_count"],
+        "skipped_count": recipient_plan["skipped_count"],
+        "full_emails": recipient_plan["full_emails"],
+        "lite_emails": recipient_plan["lite_emails"],
+        "skipped_emails": recipient_plan["skipped_emails"],
+    }
+    save_json(settings.output_dir / f"send_audit_{today}.json", send_audit)
+
     send_result: dict[str, Any] | None = None
     if candidate_invocation:
         logger.info(
@@ -3036,7 +3056,38 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
             quality_gate_p0_count=quality_gate.get("p0_count", 0),
         )
     elif settings.send_email and not quality_blocked:
-        send_result = send_email(subject, plain_text, html_body, test_mode=test_invocation, attachments=weekly_attachments)
+        full_send_result = send_email_to_recipient_records(
+            subject,
+            plain_text,
+            html_body,
+            recipient_plan["full_records"],
+            recipient_source=f"{recipient_source}:full",
+            test_mode=test_invocation,
+            attachments=weekly_attachments,
+        )
+        lite_send_result = send_email_to_recipient_records(
+            subject,
+            lite_plain_text,
+            lite_html_body,
+            recipient_plan["lite_records"],
+            recipient_source=f"{recipient_source}:lite",
+            test_mode=test_invocation,
+            attachments=None,
+        )
+        send_result = {
+            "send_mode": settings.send_mode,
+            "recipient_source": recipient_source,
+            "valid_recipient_count": len(recipients),
+            "success_count": int(full_send_result.get("success_count", 0)) + int(lite_send_result.get("success_count", 0)),
+            "fail_count": int(full_send_result.get("fail_count", 0)) + int(lite_send_result.get("fail_count", 0)),
+            "full_count": recipient_plan["full_count"],
+            "lite_count": recipient_plan["lite_count"],
+            "skipped_count": recipient_plan["skipped_count"],
+            "full_send_result": full_send_result,
+            "lite_send_result": lite_send_result,
+            "recipient_status": list(full_send_result.get("recipient_status", [])) + list(lite_send_result.get("recipient_status", [])),
+            "failures": list(full_send_result.get("failures", [])) + list(lite_send_result.get("failures", [])),
+        }
         logger.info("email send result", subject=subject, **send_result)
     else:
         skip_reason = "quality_gate_fail" if quality_blocked else "SEND_EMAIL=false"
