@@ -4,6 +4,7 @@ import html
 from typing import Any
 
 from config import settings
+from unsubscribe_renderer import render_plain_unsubscribe_text, render_unsubscribe_button
 
 
 def _text(value: Any) -> str:
@@ -61,8 +62,10 @@ def render_lite_email(latest_json: dict[str, Any]) -> dict[str, str]:
             f"今日一题：{question_text}",
             f"学习提示：{tip}",
             f"付费内测入口：{entry_url}",
+            "",
+            render_plain_unsubscribe_text(brief),
         ]
-    )
+    ).strip()
     html_body = f"""<!doctype html>
 <html>
 <body style="margin:0;padding:0;background:#f6f8fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif;color:#0f172a;">
@@ -88,6 +91,7 @@ def render_lite_email(latest_json: dict[str, Any]) -> dict[str, str]:
       <div style="font-size:14px;line-height:1.75;color:#78350f;margin-bottom:10px;">付费内测版包含更多作答参考、表达拆解、素材迁移和周末复盘资料包。</div>
       <a href="{_html(entry_url)}" style="display:inline-block;background:#f59e0b;color:#fff;text-decoration:none;border-radius:999px;padding:9px 15px;font-size:14px;font-weight:900;">了解付费内测</a>
     </div>
+    {render_unsubscribe_button(brief)}
   </div>
 </body>
 </html>"""

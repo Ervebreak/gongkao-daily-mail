@@ -123,6 +123,8 @@ class Settings:
     admin_report_enabled: bool = get_bool("ADMIN_REPORT_ENABLED", True)
     admin_report_send_email: bool = get_bool("ADMIN_REPORT_SEND_EMAIL", send_email)
     admin_report_emails_raw: str = get_env("ADMIN_REPORT_EMAILS") or get_env("ADMIN_EMAILS")
+    unsubscribe_email_raw: str = get_env("UNSUBSCRIBE_EMAIL")
+    unsubscribe_mode: str = get_env("UNSUBSCRIBE_MODE", "mailto").lower()
     subscribers_storage: str = get_env("SUBSCRIBERS_STORAGE", "local").lower()
     subscribers_oss_key: str = get_env("SUBSCRIBERS_OSS_KEY", "gongkao-morning-mailer/subscribers.csv").strip().lstrip("/")
     send_mode: str = get_env("SEND_MODE", "bcc").lower()
@@ -178,6 +180,15 @@ class Settings:
             for item in self.admin_report_emails_raw.replace(";", ",").split(",")
             if item.strip()
         ]
+
+    @property
+    def unsubscribe_email(self) -> str:
+        if self.unsubscribe_email_raw:
+            return self.unsubscribe_email_raw
+        admin_emails = self.admin_report_emails
+        if admin_emails:
+            return admin_emails[0]
+        return self.smtp_user
 
     @property
     def blocked_titles(self) -> list[str]:

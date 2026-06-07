@@ -3,9 +3,8 @@ from __future__ import annotations
 import html
 import re
 from typing import Any
-from urllib.parse import urlencode
 
-from config import settings
+from unsubscribe_renderer import render_plain_unsubscribe_text, render_unsubscribe_button
 
 
 def h(value: Any) -> str:
@@ -523,50 +522,6 @@ def render_policy_coordinate_html(brief: dict[str, Any]) -> str:
 
 
 FEEDBACK_FORM_URL = "https://wj.qq.com/s2/26569188/8ddc/"
-FEEDBACK_UID_PLACEHOLDER = "__FEEDBACK_UID__"
-FEEDBACK_EMAIL_HASH_PLACEHOLDER = "__FEEDBACK_EMAIL_HASH__"
-
-
-def _append_query(url: str, params: dict[str, str]) -> str:
-    separator = "&" if "?" in url else "?"
-    return f"{url}{separator}{urlencode(params)}"
-
-
-def render_unsubscribe_url(brief: dict[str, Any]) -> str:
-    base_url = settings.feedback_base_url.strip()
-    if not base_url:
-        return ""
-    mail_id = str(brief.get("mail_id") or brief.get("date") or "").strip()
-    params = {
-        "task": "unsubscribe",
-        "date": str(brief.get("date") or "").strip(),
-        "mail_id": mail_id,
-        "uid": FEEDBACK_UID_PLACEHOLDER,
-        "email_hash": FEEDBACK_EMAIL_HASH_PLACEHOLDER,
-    }
-    return _append_query(base_url, params)
-
-
-def render_unsubscribe_button(brief: dict[str, Any]) -> str:
-    url = render_unsubscribe_url(brief)
-    if not url:
-        return ""
-    return f"""
-    <div style="text-align:center;padding:8px 12px 18px;">
-      <a href="{h(url)}" target="_blank"
-         style="display:inline-block;color:#64748b;text-decoration:none;border:1px solid #cbd5e1;
-                border-radius:999px;padding:7px 14px;font-size:12px;font-weight:700;">
-        不想继续接收，点击退订
-      </a>
-    </div>
-    """
-
-
-def render_plain_unsubscribe_text(brief: dict[str, Any]) -> str:
-    url = render_unsubscribe_url(brief)
-    if not url:
-        return ""
-    return f"退订：{url}"
 
 
 def render_feedback_buttons(brief: dict[str, Any]) -> str:
