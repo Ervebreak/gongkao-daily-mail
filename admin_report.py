@@ -6,6 +6,7 @@ from typing import Any
 
 from config import settings
 from email_sender import normalize_recipients, send_email_to_recipients
+from lite_email_renderer import render_lite_email
 from quality_issue_schema import issue_counts
 
 
@@ -564,44 +565,58 @@ def send_admin_quality_report(candidate: dict[str, Any], candidate_save_result: 
     candidate_html = str(candidate.get("html_body") or "")
     candidate_plain = str(candidate.get("plain_text") or "")
     delivery_date = str(candidate.get("delivery_date") or "candidate")
+    lite_rendered = render_lite_email(candidate)
+    candidate_lite_html = str(candidate.get("lite_html_body") or lite_rendered.get("html_body") or "")
+    candidate_lite_plain = str(candidate.get("lite_plain_text") or lite_rendered.get("plain_text") or "")
+    attachments = [
+        {
+            "filename": "latest_quality.json",
+            "content": json.dumps(candidate.get("quality") or {}, ensure_ascii=False, indent=2),
+            "content_type": "application/json",
+        },
+        {
+            "filename": "latest_content_quality.json",
+            "content": json.dumps((candidate.get("quality") or {}).get("final", {}).get("content_quality") or {}, ensure_ascii=False, indent=2),
+            "content_type": "application/json",
+        },
+        {
+            "filename": "rewrite_comparison.json",
+            "content": json.dumps(candidate.get("rewrite_comparison") or [], ensure_ascii=False, indent=2),
+            "content_type": "application/json",
+        },
+        {
+            "filename": "latest_quality_card.md",
+            "content": candidate.get("quality_card_markdown") or build_quality_card_markdown(candidate),
+            "content_type": "text/markdown; charset=utf-8",
+        },
+        {
+            "filename": f"candidate_email_{delivery_date}.html",
+            "content": candidate_html,
+            "content_type": "text/html; charset=utf-8",
+        },
+        {
+            "filename": f"candidate_email_{delivery_date}.txt",
+            "content": candidate_plain,
+            "content_type": "text/plain; charset=utf-8",
+        },
+        {
+            "filename": f"candidate_lite_email_{delivery_date}.html",
+            "content": candidate_lite_html,
+            "content_type": "text/html; charset=utf-8",
+        },
+        {
+            "filename": f"candidate_lite_email_{delivery_date}.txt",
+            "content": candidate_lite_plain,
+            "content_type": "text/plain; charset=utf-8",
+        },
+    ]
     result = send_email_to_recipients(
         subject,
         plain_text,
         html_body,
         recipients,
         recipient_source="ADMIN_REPORT_EMAILS",
-        attachments=[
-            {
-                "filename": "latest_quality.json",
-                "content": json.dumps(candidate.get("quality") or {}, ensure_ascii=False, indent=2),
-                "content_type": "application/json",
-            },
-            {
-                "filename": "latest_content_quality.json",
-                "content": json.dumps((candidate.get("quality") or {}).get("final", {}).get("content_quality") or {}, ensure_ascii=False, indent=2),
-                "content_type": "application/json",
-            },
-            {
-                "filename": "rewrite_comparison.json",
-                "content": json.dumps(candidate.get("rewrite_comparison") or [], ensure_ascii=False, indent=2),
-                "content_type": "application/json",
-            },
-            {
-                "filename": "latest_quality_card.md",
-                "content": candidate.get("quality_card_markdown") or build_quality_card_markdown(candidate),
-                "content_type": "text/markdown; charset=utf-8",
-            },
-            {
-                "filename": f"candidate_email_{delivery_date}.html",
-                "content": candidate_html,
-                "content_type": "text/html; charset=utf-8",
-            },
-            {
-                "filename": f"candidate_email_{delivery_date}.txt",
-                "content": candidate_plain,
-                "content_type": "text/plain; charset=utf-8",
-            },
-        ],
+        attachments=attachments,
     )
     return {
         "admin_report_sent": int(result.get("success_count", 0)) > 0,

@@ -15,6 +15,7 @@ except Exception:
 
 from config import settings
 from feedback import handle_feedback, is_feedback_invocation
+from lite_email_renderer import render_lite_email
 from logger import RunLogger
 
 
@@ -1694,19 +1695,22 @@ def send_weekly_pdf_candidate(
     load_meta: dict[str, Any],
     logger: RunLogger,
 ) -> dict[str, Any]:
-    from email_sender import get_effective_recipients, send_email
+    from email_sender import save_send_audit, send_segmented_email, split_effective_recipient_records
     from harness_metrics import append_morning_metrics
 
-    recipients, recipient_source = get_effective_recipients(test_mode=test_invocation)
+    segments, recipient_source = split_effective_recipient_records(test_mode=test_invocation, today=delivery_date)
     attachment, attachment_meta = weekly_pdf_attachment_from_candidate(candidate)
     logger.info(
         "weekly pdf candidate attachment status",
         **attachment_meta,
         attach_enabled=settings.weekly_pdf_attach,
-        valid_recipient_count=len(recipients),
+        valid_recipient_count=len(segments.get("full") or []) + len(segments.get("lite") or []),
+        full_count=len(segments.get("full") or []),
+        lite_count=len(segments.get("lite") or []),
+        skipped_count=len(segments.get("skipped") or []),
         recipient_source=recipient_source,
     )
-    if settings.weekly_pdf_attach and not attachment:
+    if settings.weekly_pdf_attach and not attachment and segments.get("full"):
         try:
             metrics_result = append_morning_metrics(
                 delivery_date=delivery_date,
@@ -1733,12 +1737,67 @@ def send_weekly_pdf_candidate(
     plain_text = str(candidate.get("plain_text") or "")
     html_body = str(candidate.get("html_body") or "")
     attachments = [attachment] if (settings.weekly_pdf_attach and attachment) else []
+    weekly = candidate.get("weekly_pdf") if isinstance(candidate.get("weekly_pdf"), dict) else {}
+    lite_plain_text = "\n".join(
+        [
+            "本周复盘资料包已生成。",
+            f"汇总范围：{weekly.get('start_date') or ''} 至 {weekly.get('end_date') or ''}",
+            "免费简版不包含 PDF 附件；付费内测用户可收到完整周 PDF 资料包。",
+            f"付费内测入口：{settings.paid_trial_entry_url or settings.feedback_base_url or '#'}",
+        ]
+    )
+    lite_html_body = f"""<!doctype html>
+<html>
+<body style="margin:0;padding:0;background:#f6f8fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif;color:#0f172a;">
+  <div style="max-width:620px;margin:0 auto;padding:18px 12px;">
+    <div style="background:#174a7e;color:#fff;border-radius:16px;padding:18px 18px;margin-bottom:12px;">
+      <div style="font-size:12px;letter-spacing:1.2px;opacity:.86;">WEEKLY REVIEW 免费简版</div>
+      <div style="font-size:22px;font-weight:900;line-height:1.35;margin-top:8px;">本周复盘资料包已生成</div>
+      <div style="font-size:14px;line-height:1.7;margin-top:8px;">汇总范围：{_html(weekly.get('start_date'))} 至 {_html(weekly.get('end_date'))}</div>
+    </div>
+    <div style="background:#fff;border:1px solid #e6eaf0;border-radius:14px;padding:14px 15px;margin-bottom:12px;">
+      <div style="font-size:15px;line-height:1.8;color:#334155;">免费简版不包含 PDF 附件。付费内测用户可收到完整周 PDF 资料包，用于周末集中复盘。</div>
+    </div>
+    <div style="background:#fff8e8;border:1px solid #fed7aa;border-radius:14px;padding:14px 15px;">
+      <div style="font-size:15px;font-weight:900;color:#92400e;margin-bottom:7px;">付费内测</div>
+      <a href="{_html(settings.paid_trial_entry_url or settings.feedback_base_url or '#')}" style="display:inline-block;background:#f59e0b;color:#fff;text-decoration:none;border-radius:999px;padding:9px 15px;font-size:14px;font-weight:900;">了解付费内测</a>
+    </div>
+  </div>
+</body>
+</html>"""
     send_result: dict[str, Any] | None = None
     if settings.send_email:
-        send_result = send_email(subject, plain_text, html_body, test_mode=test_invocation, attachments=attachments)
+        send_result = send_segmented_email(
+            subject,
+            plain_text,
+            html_body,
+            lite_plain_text,
+            lite_html_body,
+            delivery_date=delivery_date,
+            test_mode=test_invocation,
+            attachments=attachments,
+            segments=segments,
+            recipient_source=recipient_source,
+        )
         logger.info("weekly pdf candidate email send result", subject=subject, attachment_count=len(attachments), **send_result)
     else:
-        logger.info("weekly pdf candidate email skipped", reason="SEND_EMAIL=false", attachment_count=len(attachments))
+        audit_result = save_send_audit(delivery_date, segments, recipient_source)
+        send_result = {
+            "success_count": 0,
+            "fail_count": 0,
+            "full_count": audit_result["full_count"],
+            "lite_count": audit_result["lite_count"],
+            "skipped_count": audit_result["skipped_count"],
+            "send_audit": audit_result,
+        }
+        logger.info(
+            "weekly pdf candidate email skipped",
+            reason="SEND_EMAIL=false",
+            attachment_count=len(attachments),
+            full_count=audit_result["full_count"],
+            lite_count=audit_result["lite_count"],
+            skipped_count=audit_result["skipped_count"],
+        )
 
     history_result = {
         "history_write_ok": False,
@@ -1765,7 +1824,6 @@ def send_weekly_pdf_candidate(
         logger.info("harness metrics", **metrics_result)
     except Exception as exc:
         logger.info("harness metrics failed", error=str(exc))
-    weekly = candidate.get("weekly_pdf") if isinstance(candidate.get("weekly_pdf"), dict) else {}
     print(
         "\n".join(
             [
@@ -1773,6 +1831,9 @@ def send_weekly_pdf_candidate(
                 f"delivery_date: {delivery_date}",
                 f"pdf_range: {weekly.get('start_date')} to {weekly.get('end_date')}",
                 f"attachment_count: {len(attachments)}",
+                f"full_count: {(send_result or {}).get('full_count', 0)}",
+                f"lite_count: {(send_result or {}).get('lite_count', 0)}",
+                f"skipped_count: {(send_result or {}).get('skipped_count', 0)}",
                 f"success_count: {(send_result or {}).get('success_count', 0)}",
             ]
         )
@@ -1855,7 +1916,7 @@ def evaluate_candidate_with_current_quality(
 def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
     from candidate_store import load_candidate
     from daily_archive import archive_daily_content
-    from email_sender import get_effective_recipients, send_email
+    from email_sender import save_send_audit, send_segmented_email, split_effective_recipient_records
     from email_renderer import render_email_html, render_plain_text
     from harness_metrics import append_morning_metrics
     from history import append_records
@@ -2019,15 +2080,50 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
     brief = candidate.get("brief") if isinstance(candidate.get("brief"), dict) else {}
     final_selection = candidate.get("final_selection") if isinstance(candidate.get("final_selection"), dict) else summarize_final_selection(brief)
     article_stats = candidate.get("article_stats") if isinstance(candidate.get("article_stats"), dict) else {}
-    recipients, recipient_source = get_effective_recipients(test_mode=test_invocation)
-    logger.info("candidate recipient stats", valid_recipient_count=len(recipients), recipient_source=recipient_source, send_mode=settings.send_mode)
+    segments, recipient_source = split_effective_recipient_records(test_mode=test_invocation, today=delivery_date)
+    logger.info(
+        "candidate recipient tier stats",
+        full_count=len(segments.get("full") or []),
+        lite_count=len(segments.get("lite") or []),
+        skipped_count=len(segments.get("skipped") or []),
+        recipient_source=recipient_source,
+        send_mode=settings.send_mode,
+    )
 
     send_result: dict[str, Any] | None = None
+    lite_email = render_lite_email(candidate)
     if settings.send_email:
-        send_result = send_email(subject, plain_text, html_body, test_mode=test_invocation)
+        send_result = send_segmented_email(
+            subject,
+            plain_text,
+            html_body,
+            lite_email["plain_text"],
+            lite_email["html_body"],
+            delivery_date=delivery_date,
+            test_mode=test_invocation,
+            segments=segments,
+            recipient_source=recipient_source,
+        )
         logger.info("candidate email send result", subject=subject, **send_result)
     else:
-        logger.info("candidate email skipped", reason="SEND_EMAIL=false", valid_recipient_count=len(recipients), recipient_source=recipient_source)
+        audit_result = save_send_audit(delivery_date, segments, recipient_source)
+        send_result = {
+            "success_count": 0,
+            "fail_count": 0,
+            "full_count": audit_result["full_count"],
+            "lite_count": audit_result["lite_count"],
+            "skipped_count": audit_result["skipped_count"],
+            "send_audit": audit_result,
+        }
+        logger.info(
+            "candidate email skipped",
+            reason="SEND_EMAIL=false",
+            valid_recipient_count=audit_result["full_count"] + audit_result["lite_count"],
+            recipient_source=recipient_source,
+            full_count=audit_result["full_count"],
+            lite_count=audit_result["lite_count"],
+            skipped_count=audit_result["skipped_count"],
+        )
 
     if test_invocation:
         history_result = {
@@ -2303,7 +2399,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
     from content_quality_reviewer import evaluate_content_quality, get_content_quality_model_plan
     from daily_archive import archive_daily_content, is_official_morning_run
     from email_renderer import render_email_html, render_plain_text
-    from email_sender import get_effective_recipients, send_email
+    from email_sender import save_send_audit, send_segmented_email, split_effective_recipient_records
     from fetch_articles import get_candidate_articles_with_stats
     from duplication_quality import evaluate_duplication
     from expression_quality import evaluate_expression_quality
@@ -2810,10 +2906,13 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
     quality_blocked = (not test_invocation) and quality_gate.get("overall") == "fail"
     llm_trace_summary = summarize_llm_trace(llm_trace_events)
     logger.info("llm trace summary", summary=llm_trace_summary)
-    recipients, recipient_source = get_effective_recipients(test_mode=test_invocation)
+    segments, recipient_source = split_effective_recipient_records(test_mode=test_invocation, today=today)
     logger.info(
-        "recipient stats",
-        valid_recipient_count=len(recipients),
+        "recipient tier stats",
+        valid_recipient_count=len(segments.get("full") or []) + len(segments.get("lite") or []),
+        full_count=len(segments.get("full") or []),
+        lite_count=len(segments.get("lite") or []),
+        skipped_count=len(segments.get("skipped") or []),
         recipient_source=recipient_source,
         send_mode=settings.send_mode,
     )
@@ -2858,6 +2957,8 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
     save_json(settings.output_dir / "latest_content_quality.json", content_quality)
     save_json(settings.output_dir / "latest_content_risk.json", content_risk_quality)
     (settings.output_dir / "latest_email.html").write_text(html_body, encoding="utf-8")
+    lite_email = render_lite_email({"brief": brief, "subject": subject})
+    (settings.output_dir / "latest_lite_email.html").write_text(lite_email["html_body"], encoding="utf-8")
     quality_card_markdown = build_quality_card_markdown({
         "delivery_date": today,
         "subject": subject,
@@ -3031,21 +3132,47 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
         logger.info(
             "email skipped",
             reason="nightly_candidate_saved",
-            valid_recipient_count=len(recipients),
+            valid_recipient_count=len(segments.get("full") or []) + len(segments.get("lite") or []),
+            full_count=len(segments.get("full") or []),
+            lite_count=len(segments.get("lite") or []),
+            skipped_count=len(segments.get("skipped") or []),
             recipient_source=recipient_source,
             send_mode=settings.send_mode,
             candidate_saved=bool(candidate_save_result and candidate_save_result.get("candidate_saved")),
             quality_gate_p0_count=quality_gate.get("p0_count", 0),
         )
     elif settings.send_email and not quality_blocked:
-        send_result = send_email(subject, plain_text, html_body, test_mode=test_invocation, attachments=weekly_attachments)
+        send_result = send_segmented_email(
+            subject,
+            plain_text,
+            html_body,
+            lite_email["plain_text"],
+            lite_email["html_body"],
+            delivery_date=today,
+            test_mode=test_invocation,
+            attachments=weekly_attachments,
+            segments=segments,
+            recipient_source=recipient_source,
+        )
         logger.info("email send result", subject=subject, **send_result)
     else:
         skip_reason = "quality_gate_fail" if quality_blocked else "SEND_EMAIL=false"
+        audit_result = save_send_audit(today, segments, recipient_source)
+        send_result = {
+            "success_count": 0,
+            "fail_count": 0,
+            "full_count": audit_result["full_count"],
+            "lite_count": audit_result["lite_count"],
+            "skipped_count": audit_result["skipped_count"],
+            "send_audit": audit_result,
+        }
         logger.info(
             "email skipped",
             reason=skip_reason,
-            valid_recipient_count=len(recipients),
+            valid_recipient_count=audit_result["full_count"] + audit_result["lite_count"],
+            full_count=audit_result["full_count"],
+            lite_count=audit_result["lite_count"],
+            skipped_count=audit_result["skipped_count"],
             recipient_source=recipient_source,
             send_mode=settings.send_mode,
             quality_gate_p0_count=quality_gate.get("p0_count", 0),
