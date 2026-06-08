@@ -606,81 +606,272 @@ def _lite_paid_entry_url() -> str:
     return settings.paid_trial_entry_url.strip() or FEEDBACK_FORM_URL
 
 
+def _lite_theme(brief: dict[str, Any], latest_json: dict[str, Any]) -> str:
+    return str(brief.get("today_theme") or brief.get("email_subject") or latest_json.get("subject") or "").strip()
+
+
+def _lite_featured_title(brief: dict[str, Any]) -> str:
+    featured = ensure_dict(brief.get("featured_article"))
+    question = ensure_dict(brief.get("daily_question"))
+    return str(featured.get("title") or question.get("question_source_title") or "").strip()
+
+
+def _lite_featured_one_sentence(brief: dict[str, Any]) -> str:
+    featured = ensure_dict(brief.get("featured_article"))
+    overview = as_list(featured.get("original_overview"))
+    return clip_text(
+        featured.get("one_sentence")
+        or featured.get("core_viewpoint")
+        or featured.get("main_thread")
+        or (overview[0] if overview else "")
+        or brief.get("today_focus")
+        or "",
+        110,
+    )
+
+
+def _lite_three_step_line(brief: dict[str, Any]) -> str:
+    lite_email = ensure_dict(brief.get("lite_email"))
+    manual = str(lite_email.get("three_step_line") or "").strip()
+    if manual:
+        return clip_text(manual, 30)
+
+    featured = ensure_dict(brief.get("featured_article"))
+    framework_map = ensure_dict(featured.get("article_framework_map"))
+    framework_style = str(framework_map.get("framework_style") or "").strip()
+    if framework_style:
+        labels: list[str] = []
+        for chunk in re.split(r"\s*(?:→|->)\s*", framework_style):
+            piece = strip_display_prefix(chunk)
+            piece = re.split(r"[：:]", piece, maxsplit=1)[0].strip()
+            piece = re.sub(r"\s+", "", piece)[:8].strip("，、：:； ")
+            if piece:
+                labels.append(piece)
+            if len(labels) >= 3:
+                break
+        line = " → ".join(labels)
+        return line[:30].rstrip("，、：:； ") if line else ""
+
+    steps = normalize_framework_steps(as_list(framework_map.get("steps")), 3)
+    labels = [re.sub(r"\s+", "", str(step.get("label") or "").strip())[:8].strip("，、：:； ") for step in steps]
+    labels = [item for item in labels if item][:3]
+    line = " → ".join(labels)
+    return line[:30].rstrip("，、：:； ") if line else ""
+
+
 def _lite_expression(brief: dict[str, Any]) -> str:
     featured = ensure_dict(brief.get("featured_article"))
-    takeaway = ensure_dict(brief.get("today_takeaway"))
-    golden = as_list(takeaway.get("golden_sentences"))
-    first_gold = golden[0] if golden else {}
-    sentence = first_gold.get("sentence") if isinstance(first_gold, dict) else first_gold
-    value = sentence or featured.get("rewritable_expression") or brief.get("today_focus") or ""
-    return clip_text(strip_display_prefix(value, "可用表达", "必备金句", "一句表达"), 90)
+    return clip_text(strip_display_prefix(featured.get("rewritable_expression"), "可用表达", "一句表达"), 100)
 
 
-def _lite_learning_tip(brief: dict[str, Any]) -> str:
-    guide = normalize_reading_guide(brief)
+def _lite_answer_angles(brief: dict[str, Any]) -> list[str]:
     question = ensure_dict(brief.get("daily_question"))
-    return clip_text(
-        guide.get("learning_outcome")
-        or guide.get("focus_path")
-        or question.get("output_prompt")
-        or brief.get("today_focus")
-        or "先读主题，再练今日一题，最后把一句表达改成自己的开头表态。",
-        90,
-    )
+    raw_items = as_list(question.get("answer_framework")) or as_list(question.get("answer_frame"))
+    angles: list[str] = []
+    for item in raw_items:
+        if isinstance(item, dict):
+            text = str(item.get("label") or item.get("title") or item.get("content") or item.get("text") or "").strip()
+        else:
+            text = str(item or "").strip()
+        if not text:
+            continue
+        if "：" in text:
+            label, content = text.split("：", 1)
+        elif ":" in text:
+            label, content = text.split(":", 1)
+        else:
+            label, content = text, ""
+        label = re.sub(r"\s+", "", label.strip())[:8].strip("，、：:； ")
+        content = clip_text(content.strip(), 20)
+        angle = f"{label}：{content}" if content else label
+        if angle:
+            angles.append(angle)
+        if len(angles) >= 3:
+            break
+    return angles
+
+
+def _lite_quick_reads(brief: dict[str, Any]) -> list[dict[str, str]]:
+    cards: list[dict[str, str]] = []
+    for item in as_list(brief.get("quick_reads"))[:2]:
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title") or "").strip()
+        if not title:
+            continue
+        cards.append(
+            {
+                "title": title,
+                "source": str(item.get("source") or "").strip(),
+                "theme": str(item.get("theme") or "").strip(),
+                "one_sentence": clip_text(item.get("one_sentence") or "", 45),
+            }
+        )
+    return cards
+
+
+def _lite_required_missing(brief: dict[str, Any], latest_json: dict[str, Any]) -> list[str]:
+    question = ensure_dict(brief.get("daily_question"))
+    missing: list[str] = []
+    if not _lite_featured_title(brief):
+        missing.append("featured_title")
+    if not _lite_featured_one_sentence(brief):
+        missing.append("featured_one_sentence")
+    if not today_question_text(brief) and not question.get("question"):
+        missing.append("daily_question")
+    if len(_lite_answer_angles(brief)) < 3:
+        missing.append("answer_framework_3")
+    if len(_lite_quick_reads(brief)) < 2:
+        missing.append("quick_reads_2")
+    if not _lite_theme(brief, latest_json):
+        missing.append("theme")
+    return missing
 
 
 def render_lite_plain_text(latest_json: dict[str, Any]) -> str:
     brief = _brief_from_latest_json(latest_json)
+    missing = _lite_required_missing(brief, latest_json)
+    if missing:
+        raise ValueError(f"lite email missing required modules: {', '.join(missing)}")
+
+    featured = ensure_dict(brief.get("featured_article"))
     question_text = today_question_text(brief)
+    three_step_line = _lite_three_step_line(brief)
+    quick_reads = _lite_quick_reads(brief)
+    meta = " / ".join(
+        part
+        for part in (
+            str(featured.get("source") or "").strip(),
+            str(featured.get("published_at") or "").strip(),
+            str(featured.get("theme") or "").strip(),
+        )
+        if part
+    )
     lines = [
-        str(brief.get("email_subject") or "公考晨读简版"),
-        f"今日主题：{brief.get('today_theme') or ''}",
-        f"一句表达：{_lite_expression(brief)}",
-        f"今日一题：{question_text}",
-        f"学习提示：{_lite_learning_tip(brief)}",
-        f"付费内测入口：{_lite_paid_entry_url()}",
+        "公考晨读 免费简版",
+        f"今日主题：{_lite_theme(brief, latest_json)}",
+        "",
+        "今日精读文章",
+        f"标题：{_lite_featured_title(brief)}",
+        f"信息：{meta}" if meta else "",
+        f"原文链接：{featured.get('url') or ''}",
+        f"一句话：{_lite_featured_one_sentence(brief)}",
     ]
-    return "\n".join(lines)
+    if three_step_line:
+        lines.extend(["", f"3步看懂：{three_step_line}"])
+    lines.extend(
+        [
+            "",
+            f"一句可用表达：{_lite_expression(brief)}",
+            "",
+            "今日一题",
+            question_text,
+            "",
+            "先想 3 个角度",
+        ]
+    )
+    lines.extend(f"{idx}. {item}" for idx, item in enumerate(_lite_answer_angles(brief), start=1))
+    lines.extend(["", "今日速读"])
+    for idx, item in enumerate(quick_reads, start=1):
+        quick_meta = " / ".join(part for part in (item["source"], item["theme"]) if part)
+        lines.append(f"{idx}. {item['title']}")
+        if quick_meta:
+            lines.append(f"   {quick_meta}")
+        if item["one_sentence"]:
+            lines.append(f"   {item['one_sentence']}")
+    lines.extend(
+        [
+            "",
+            "付费内测",
+            "完整版包含：完整文章框架、参考答案、金句拆解、素材迁移、周末复盘资料包。",
+            f"入口：{_lite_paid_entry_url()}",
+        ]
+    )
+    return "\n".join(line for line in lines if line is not None)
 
 
 def render_lite_email(latest_json: dict[str, Any]) -> str:
     brief = _brief_from_latest_json(latest_json)
+    missing = _lite_required_missing(brief, latest_json)
+    if missing:
+        raise ValueError(f"lite email missing required modules: {', '.join(missing)}")
+
+    featured = ensure_dict(brief.get("featured_article"))
     question_text = today_question_text(brief)
     paid_url = _lite_paid_entry_url()
+    three_step_line = _lite_three_step_line(brief)
+    angle_items = "".join(
+        f'<li style="margin:0 0 8px;color:#334155;line-height:1.72;"><span style="font-weight:900;color:#0f172a;">{idx}.</span> {h(item)}</li>'
+        for idx, item in enumerate(_lite_answer_angles(brief), start=1)
+    )
+    quick_read_cards = "".join(
+        f"""
+    <div style="background:#fff;border:1px solid #e6eaf0;border-radius:14px;padding:14px 15px;margin-bottom:10px;">
+      <div style="font-size:16px;line-height:1.6;font-weight:900;color:#0f172a;">{h(item['title'])}</div>
+      <div style="font-size:12px;color:#64748b;margin-top:5px;">{h(' / '.join(part for part in (item['source'], item['theme']) if part))}</div>
+      <div style="font-size:14px;line-height:1.72;color:#334155;margin-top:8px;">{h(item['one_sentence'])}</div>
+    </div>"""
+        for item in _lite_quick_reads(brief)
+    )
+    featured_meta = " / ".join(
+        part
+        for part in (
+            str(featured.get("source") or "").strip(),
+            str(featured.get("published_at") or "").strip(),
+            str(featured.get("theme") or "").strip(),
+        )
+        if part
+    )
+    three_step_block = ""
+    if three_step_line:
+        three_step_block = f"""
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:14px;padding:14px 15px;margin-bottom:12px;">
+      <div style="font-size:13px;color:#1d4ed8;font-weight:900;margin-bottom:6px;">3步看懂</div>
+      <div style="font-size:15px;line-height:1.72;color:#1e3a8a;font-weight:800;">{h(three_step_line)}</div>
+    </div>"""
     return f"""<!doctype html>
 <html>
 <body style="margin:0;padding:0;background:#f6f8fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif;color:#0f172a;">
-  <div style="max-width:620px;margin:0 auto;padding:16px 12px;">
-    <div style="background:linear-gradient(135deg,#174a7e,#1f78bd);color:#fff;border-radius:16px;padding:18px 18px;margin-bottom:12px;">
-      <div style="font-size:12px;letter-spacing:1.4px;opacity:.86;">DAILY BRIEFING 简版</div>
-      <div style="font-size:24px;font-weight:900;line-height:1.32;margin-top:7px;">{h(brief.get('email_subject') or '公考晨读简版')}</div>
-      <div style="font-size:14px;line-height:1.65;margin-top:9px;opacity:.94;">{h(brief.get('today_focus') or brief.get('today_theme') or '')}</div>
+  <div style="max-width:680px;margin:0 auto;padding:20px 12px;">
+    <div style="background:linear-gradient(135deg,#123c73,#1d4ed8);color:#fff;border-radius:18px;padding:20px 18px;margin-bottom:14px;">
+      <div style="font-size:12px;letter-spacing:1.3px;opacity:.84;">DAILY BRIEFING · 免费简版</div>
+      <div style="font-size:24px;font-weight:900;line-height:1.35;margin-top:8px;">{h(_lite_theme(brief, latest_json))}</div>
     </div>
 
-    <div style="background:#fff;border:1px solid #e6eaf0;border-radius:15px;padding:13px 14px;margin-bottom:15px;">
-      <div style="font-size:13px;color:#165dff;font-weight:900;margin-bottom:8px;">今日主题</div>
-      <div style="background:#eef6ff;border-left:4px solid #165dff;border-radius:10px;padding:8px 10px;line-height:1.6;font-size:14px;">{h(brief.get('today_theme') or '')}</div>
+    <div style="background:#fff;border:1px solid #e6eaf0;border-radius:16px;padding:16px 16px;margin-bottom:12px;">
+      <div style="font-size:13px;color:#1d4ed8;font-weight:900;margin-bottom:6px;">今日精读文章</div>
+      <div style="font-size:19px;line-height:1.5;font-weight:900;color:#0f172a;">{h(_lite_featured_title(brief))}</div>
+      <div style="font-size:12px;color:#64748b;margin-top:6px;">{h(featured_meta)}</div>
+      <div style="margin-top:8px;"><a href="{h(featured.get('url') or '')}" target="_blank" style="color:#1d4ed8;text-decoration:none;font-size:13px;font-weight:800;">查看原文</a></div>
+      <div style="font-size:15px;line-height:1.75;color:#334155;margin-top:10px;">{h(_lite_featured_one_sentence(brief))}</div>
     </div>
 
-    <div style="background:#fff;border:1px solid #e6eaf0;border-radius:15px;padding:13px 14px;margin-bottom:15px;">
-      <div style="font-size:13px;color:#165dff;font-weight:900;margin-bottom:8px;">一句表达</div>
+    {three_step_block}
+
+    <div style="background:#fff;border:1px solid #e6eaf0;border-radius:14px;padding:14px 15px;margin-bottom:12px;">
+      <div style="font-size:13px;color:#165dff;font-weight:900;margin-bottom:6px;">一句可用表达</div>
       <div style="font-size:15px;line-height:1.75;color:#334155;">{h(_lite_expression(brief))}</div>
     </div>
 
-    <div style="background:#fff;border:1px solid #e6eaf0;border-radius:15px;padding:13px 14px;margin-bottom:15px;">
-      <div style="font-size:13px;color:#b45309;font-weight:900;margin-bottom:8px;">今日一题</div>
-      <div style="font-size:15px;line-height:1.75;color:#334155;">{h(question_text)}</div>
+    <div style="background:#fff;border:1px solid #e6eaf0;border-radius:14px;padding:14px 15px;margin-bottom:12px;">
+      <div style="font-size:13px;color:#b45309;font-weight:900;margin-bottom:6px;">今日一题</div>
+      <div style="font-size:15px;line-height:1.78;color:#334155;font-weight:800;">{h(question_text)}</div>
     </div>
 
-    <div style="background:#fff8e8;border:1px solid #fde7b7;border-radius:15px;padding:13px 14px;margin-bottom:15px;">
-      <div style="font-size:13px;color:#b45309;font-weight:900;margin-bottom:8px;">学习提示</div>
-      <div style="font-size:14px;line-height:1.75;color:#334155;">{h(_lite_learning_tip(brief))}</div>
+    <div style="background:#f8fafc;border:1px solid #dbe4ee;border-radius:14px;padding:14px 15px;margin-bottom:12px;">
+      <div style="font-size:13px;color:#0f172a;font-weight:900;margin-bottom:8px;">先想 3 个角度</div>
+      <ol style="margin:0;padding-left:18px;">{angle_items}</ol>
     </div>
 
-    <div style="background:#fff;border:1px solid #dbeafe;border-radius:16px;padding:16px;margin-bottom:15px;text-align:center;">
-      <div style="font-size:16px;font-weight:900;color:#0f172a;margin-bottom:8px;">完整版与付费内测</div>
-      <div style="font-size:14px;line-height:1.7;color:#475569;margin-bottom:12px;">想看完整答案、完整拆解和后续完整版内容，可通过下方入口申请付费内测。</div>
-      <a href="{h(paid_url)}" target="_blank" style="display:inline-block;background:#165dff;color:#fff;text-decoration:none;padding:10px 18px;border-radius:999px;font-size:14px;font-weight:900;">申请付费内测</a>
+    <div style="margin-bottom:12px;">
+      <div style="font-size:13px;color:#0f172a;font-weight:900;margin:0 0 8px 2px;">今日速读</div>
+      {quick_read_cards}
+    </div>
+
+    <div style="background:#fff8e8;border:1px solid #fed7aa;border-radius:16px;padding:15px 16px;">
+      <div style="font-size:15px;font-weight:900;color:#92400e;margin-bottom:7px;">付费内测</div>
+      <div style="font-size:14px;line-height:1.8;color:#78350f;margin-bottom:10px;">完整版包含：完整文章框架、参考答案、金句拆解、素材迁移、周末复盘资料包。</div>
+      <a href="{h(paid_url)}" target="_blank" style="display:inline-block;background:#f59e0b;color:#fff;text-decoration:none;border-radius:999px;padding:10px 16px;font-size:14px;font-weight:900;">了解付费内测</a>
     </div>
   </div>
 </body>
