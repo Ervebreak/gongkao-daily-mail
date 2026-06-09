@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import json
 import sys
 import types
-import json
 
 sys.modules.setdefault("requests", types.SimpleNamespace())
 
-from email_sender import parse_subscribers_csv_all_records, split_recipient_records, update_send_audit_results, save_send_audit
 from config import settings
+from email_sender import (
+    parse_subscribers_csv_all_records,
+    save_send_audit,
+    split_recipient_records,
+    update_send_audit_results,
+)
 from lite_email_renderer import render_lite_email
 
 
@@ -92,27 +97,140 @@ lite@example.com,active,free,
         object.__setattr__(settings, "output_dir", original_output_dir)
 
 
-def test_render_lite_email_keeps_only_simple_preview_fields() -> None:
-    lite = render_lite_email(
-        {
-            "brief": {
-                "today_theme": "基层治理中的协同处置",
-                "today_takeaway": {
-                    "golden_sentences": [{"sentence": "把问题解决在基层一线。"}],
+def test_render_lite_email_returns_dict_and_keeps_structured_preview() -> None:
+    original_feedback_base_url = settings.feedback_base_url
+    original_paid_trial_entry_url = settings.paid_trial_entry_url
+    object.__setattr__(settings, "feedback_base_url", "https://feedback.example.com/form")
+    object.__setattr__(settings, "paid_trial_entry_url", "")
+    try:
+        lite = render_lite_email(
+            {
+                "brief": {
+                    "mail_id": "mail-lite-001",
+                    "date": "2026-06-07",
+                    "today_theme": "基层治理中的协同处置",
+                    "email_subject": "升级后的免费简版",
+                    "featured_article": {
+                        "title": "把群众工作做成一张可执行清单",
+                        "source": "人民网",
+                        "published_at": "2026-06-07",
+                        "theme": "基层治理",
+                        "url": "https://example.com/featured",
+                        "one_sentence": "先解决群众的急难愁盼，再推动公共事项协商，治理工作才有信任基础。",
+                        "rewritable_expression": "可用表达：把群众的烦心事先办成，再去谈需要大家配合的大事。",
+                        "article_framework_map": {
+                            "framework_style": "发现痛点：先摸清顾虑 → 化解阻力：先办急事 → 推动协商：再谈共识"
+                        },
+                    },
+                    "today_takeaway": {
+                        "golden_sentences": [{"sentence": "这条金句不应覆盖 featured rewritable_expression。"}],
+                    },
+                    "daily_question": {
+                        "question": "如果你负责推进一项群众争议较大的公共工程，请谈谈工作思路。",
+                        "answer_framework": [
+                            "摸清诉求：先把群众顾虑和历史欠账找准。",
+                            "先办急事：优先解决群众最急的现实问题。",
+                            "公开协商：把方案摆到桌面上反复沟通。",
+                        ],
+                        "candidate_answer": "这是完整版参考答案，不应该出现在 lite 邮件里。",
+                    },
+                    "quick_reads": [
+                        {
+                            "title": "规范收费先把规则讲清楚",
+                            "source": "光明网",
+                            "theme": "消费治理",
+                            "one_sentence": "收费标准如果藏在长条款里，最后承担理解成本的还是普通消费者。",
+                        },
+                        {
+                            "title": "让技术红利真正落到中小主体",
+                            "source": "人民网观点",
+                            "theme": "数字普惠",
+                            "one_sentence": "推动新技术普惠应用，关键是降低中小主体接入门槛并完善公共支持。",
+                        },
+                    ],
                 },
-                "daily_question": {
-                    "question": "请谈谈如何做好跨部门协同。",
-                    "candidate_answer": "这是完整版答案，不应进入简版。",
-                },
-            },
-            "weekly_pdf": {"oss_pdf_path": "oss://bucket/weekly.pdf"},
-        }
-    )
+                "weekly_pdf": {"oss_pdf_path": "oss://bucket/weekly.pdf"},
+            }
+        )
+    finally:
+        object.__setattr__(settings, "feedback_base_url", original_feedback_base_url)
+        object.__setattr__(settings, "paid_trial_entry_url", original_paid_trial_entry_url)
 
-    body = lite["plain_text"] + lite["html_body"]
-    assert "基层治理中的协同处置" in body
-    assert "把问题解决在基层一线。" in body
-    assert "请谈谈如何做好跨部门协同。" in body
-    assert "这是完整版答案" not in body
+    assert isinstance(lite, dict)
+    assert set(lite) >= {"plain_text", "html_body"}
+    assert isinstance(lite["plain_text"], str)
+    assert isinstance(lite["html_body"], str)
+
+    html_body = lite["html_body"]
+    body = lite["plain_text"] + html_body
+    assert "今日精读文章" in html_body
+    assert ("3步看懂" in html_body) or ("先想 3 个角度" in html_body)
+    assert "今日一题" in html_body
+    assert "今日速读" in html_body
+    assert "付费内测" in html_body
+    assert "退订" in html_body
+    assert "把群众工作做成一张可执行清单" in body
+    assert "先解决群众的急难愁盼" in body
+    assert "摸清诉求" in html_body
+    assert "公开协商" in html_body
+    assert "规范收费先把规则讲清楚" in html_body
+    assert "让技术红利真正落到中小主体" in html_body
+    assert "https://feedback.example.com/form" in body
+    assert "这是完整版参考答案，不应该出现在 lite 邮件里。" not in body
     assert "oss://bucket/weekly.pdf" not in body
     assert "周末 PDF 下载" not in body
+
+
+def test_render_lite_email_degrades_gracefully_for_partial_content() -> None:
+    original_feedback_base_url = settings.feedback_base_url
+    original_paid_trial_entry_url = settings.paid_trial_entry_url
+    object.__setattr__(settings, "feedback_base_url", "https://feedback.example.com/form")
+    object.__setattr__(settings, "paid_trial_entry_url", "")
+    latest_json = {
+        "brief": {
+            "mail_id": "mail-lite-002",
+            "date": "2026-06-07",
+            "today_theme": "基层治理中的协同处置",
+            "featured_article": {
+                "source": "人民网",
+                "published_at": "2026-06-07",
+                "theme": "基层治理",
+                "one_sentence": "先把群众最在意的现实问题处理好，再推进后续协商，更容易形成共识。",
+                "rewritable_expression": "可用表达：先把急事办好，再把共识做实。",
+            },
+            "daily_question": {
+                "question": "如果你负责推进一项群众争议较大的公共工程，请谈谈工作思路。",
+                "answer_framework": [
+                    "先摸诉求：先把群众顾虑和现实堵点找准。"
+                ],
+            },
+            "quick_reads": [
+                {
+                    "title": "规范收费要先把规则讲清楚",
+                    "source": "光明网",
+                    "theme": "消费治理",
+                    "one_sentence": "收费规则透明，群众的理解成本才不会被转嫁。",
+                }
+            ],
+        }
+    }
+    try:
+        lite = render_lite_email(latest_json)
+    finally:
+        object.__setattr__(settings, "feedback_base_url", original_feedback_base_url)
+        object.__setattr__(settings, "paid_trial_entry_url", original_paid_trial_entry_url)
+
+    assert isinstance(lite, dict)
+    assert set(lite) >= {"plain_text", "html_body"}
+    assert latest_json.get("lite_quality_warning") in (None, ["featured_title"])
+
+    html_body = lite["html_body"]
+    body = lite["plain_text"] + html_body
+    assert "今日精读文章" in html_body
+    assert "今日一题" in html_body
+    assert "先想 3 个角度" in html_body
+    assert "今日速读" in html_body
+    assert "规范收费要先把规则讲清楚" in body
+    assert "先摸诉求" in body
+    assert "再定主线" in body
+    assert "稳妥推进" in body
