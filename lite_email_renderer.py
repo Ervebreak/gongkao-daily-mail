@@ -4,6 +4,7 @@ import html
 from typing import Any
 
 from config import settings
+from email_renderer import render_plain_unsubscribe_text, render_unsubscribe_button
 
 
 def _text(value: Any) -> str:
@@ -91,4 +92,13 @@ def render_lite_email(latest_json: dict[str, Any]) -> dict[str, str]:
   </div>
 </body>
 </html>"""
+    unsubscribe_text = render_plain_unsubscribe_text(brief)
+    if unsubscribe_text:
+        plain_text = f"{plain_text}\n\n{unsubscribe_text}"
+    unsubscribe_button = render_unsubscribe_button(brief)
+    if unsubscribe_button:
+        if "</body>" in html_body:
+            html_body = html_body.replace("</body>", f"{unsubscribe_button}\n</body>", 1)
+        else:
+            html_body = html_body + unsubscribe_button
     return {"plain_text": plain_text, "html_body": html_body}

@@ -129,6 +129,8 @@ class Settings:
     subject_prefix: str = get_env("MAIL_SUBJECT_PREFIX", "【公考晨读】")
     feedback_base_url: str = get_env("FEEDBACK_BASE_URL").strip()
     paid_trial_entry_url: str = get_env("PAID_TRIAL_ENTRY_URL").strip()
+    unsubscribe_email_raw: str = get_env("UNSUBSCRIBE_EMAIL").strip()
+    unsubscribe_mode: str = get_env("UNSUBSCRIBE_MODE", "mailto").strip().lower()
     feedback_prefix: str = get_env("FEEDBACK_PREFIX", "gongkao-morning-mailer/feedback").strip().strip("/")
     download_tracking_secret: str = get_env("DOWNLOAD_TRACKING_SECRET").strip()
     download_tracking_base_url: str = get_env("DOWNLOAD_TRACKING_BASE_URL").strip()
@@ -178,6 +180,14 @@ class Settings:
             for item in self.admin_report_emails_raw.replace(";", ",").split(",")
             if item.strip()
         ]
+
+    @property
+    def unsubscribe_email(self) -> str:
+        if self.unsubscribe_email_raw:
+            return self.unsubscribe_email_raw
+        if self.admin_report_emails:
+            return self.admin_report_emails[0]
+        return self.smtp_user.strip()
 
     @property
     def blocked_titles(self) -> list[str]:
