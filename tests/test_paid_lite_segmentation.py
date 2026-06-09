@@ -100,8 +100,12 @@ lite@example.com,active,free,
 def test_render_lite_email_returns_dict_and_keeps_structured_preview() -> None:
     original_feedback_base_url = settings.feedback_base_url
     original_paid_trial_entry_url = settings.paid_trial_entry_url
+    original_admin_report_emails_raw = settings.admin_report_emails_raw
+    original_smtp_user = settings.smtp_user
     object.__setattr__(settings, "feedback_base_url", "https://feedback.example.com/form")
     object.__setattr__(settings, "paid_trial_entry_url", "")
+    object.__setattr__(settings, "admin_report_emails_raw", "ops@example.com")
+    object.__setattr__(settings, "smtp_user", "smtp@example.com")
     try:
         lite = render_lite_email(
             {
@@ -155,6 +159,8 @@ def test_render_lite_email_returns_dict_and_keeps_structured_preview() -> None:
     finally:
         object.__setattr__(settings, "feedback_base_url", original_feedback_base_url)
         object.__setattr__(settings, "paid_trial_entry_url", original_paid_trial_entry_url)
+        object.__setattr__(settings, "admin_report_emails_raw", original_admin_report_emails_raw)
+        object.__setattr__(settings, "smtp_user", original_smtp_user)
 
     assert isinstance(lite, dict)
     assert set(lite) >= {"plain_text", "html_body"}
@@ -175,7 +181,7 @@ def test_render_lite_email_returns_dict_and_keeps_structured_preview() -> None:
     assert "公开协商" in html_body
     assert "规范收费先把规则讲清楚" in html_body
     assert "让技术红利真正落到中小主体" in html_body
-    assert "https://feedback.example.com/form" in body
+    assert "mailto:ops@example.com?" in body
     assert "这是完整版参考答案，不应该出现在 lite 邮件里。" not in body
     assert "oss://bucket/weekly.pdf" not in body
     assert "周末 PDF 下载" not in body
@@ -184,8 +190,12 @@ def test_render_lite_email_returns_dict_and_keeps_structured_preview() -> None:
 def test_render_lite_email_degrades_gracefully_for_partial_content() -> None:
     original_feedback_base_url = settings.feedback_base_url
     original_paid_trial_entry_url = settings.paid_trial_entry_url
+    original_admin_report_emails_raw = settings.admin_report_emails_raw
+    original_smtp_user = settings.smtp_user
     object.__setattr__(settings, "feedback_base_url", "https://feedback.example.com/form")
     object.__setattr__(settings, "paid_trial_entry_url", "")
+    object.__setattr__(settings, "admin_report_emails_raw", "ops@example.com")
+    object.__setattr__(settings, "smtp_user", "smtp@example.com")
     latest_json = {
         "brief": {
             "mail_id": "mail-lite-002",
@@ -219,6 +229,8 @@ def test_render_lite_email_degrades_gracefully_for_partial_content() -> None:
     finally:
         object.__setattr__(settings, "feedback_base_url", original_feedback_base_url)
         object.__setattr__(settings, "paid_trial_entry_url", original_paid_trial_entry_url)
+        object.__setattr__(settings, "admin_report_emails_raw", original_admin_report_emails_raw)
+        object.__setattr__(settings, "smtp_user", original_smtp_user)
 
     assert isinstance(lite, dict)
     assert set(lite) >= {"plain_text", "html_body"}
