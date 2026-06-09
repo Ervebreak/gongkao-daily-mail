@@ -179,3 +179,58 @@ def test_render_lite_email_returns_dict_and_keeps_structured_preview() -> None:
     assert "这是完整版参考答案，不应该出现在 lite 邮件里。" not in body
     assert "oss://bucket/weekly.pdf" not in body
     assert "周末 PDF 下载" not in body
+
+
+def test_render_lite_email_degrades_gracefully_for_partial_content() -> None:
+    original_feedback_base_url = settings.feedback_base_url
+    original_paid_trial_entry_url = settings.paid_trial_entry_url
+    object.__setattr__(settings, "feedback_base_url", "https://feedback.example.com/form")
+    object.__setattr__(settings, "paid_trial_entry_url", "")
+    latest_json = {
+        "brief": {
+            "mail_id": "mail-lite-002",
+            "date": "2026-06-07",
+            "today_theme": "基层治理中的协同处置",
+            "featured_article": {
+                "source": "人民网",
+                "published_at": "2026-06-07",
+                "theme": "基层治理",
+                "one_sentence": "先把群众最在意的现实问题处理好，再推进后续协商，更容易形成共识。",
+                "rewritable_expression": "可用表达：先把急事办好，再把共识做实。",
+            },
+            "daily_question": {
+                "question": "如果你负责推进一项群众争议较大的公共工程，请谈谈工作思路。",
+                "answer_framework": [
+                    "先摸诉求：先把群众顾虑和现实堵点找准。"
+                ],
+            },
+            "quick_reads": [
+                {
+                    "title": "规范收费要先把规则讲清楚",
+                    "source": "光明网",
+                    "theme": "消费治理",
+                    "one_sentence": "收费规则透明，群众的理解成本才不会被转嫁。",
+                }
+            ],
+        }
+    }
+    try:
+        lite = render_lite_email(latest_json)
+    finally:
+        object.__setattr__(settings, "feedback_base_url", original_feedback_base_url)
+        object.__setattr__(settings, "paid_trial_entry_url", original_paid_trial_entry_url)
+
+    assert isinstance(lite, dict)
+    assert set(lite) >= {"plain_text", "html_body"}
+    assert latest_json.get("lite_quality_warning") in (None, ["featured_title"])
+
+    html_body = lite["html_body"]
+    body = lite["plain_text"] + html_body
+    assert "今日精读文章" in html_body
+    assert "今日一题" in html_body
+    assert "先想 3 个角度" in html_body
+    assert "今日速读" in html_body
+    assert "规范收费要先把规则讲清楚" in body
+    assert "先摸诉求" in body
+    assert "再定主线" in body
+    assert "稳妥推进" in body

@@ -613,7 +613,13 @@ def _lite_theme(brief: dict[str, Any], latest_json: dict[str, Any]) -> str:
 def _lite_featured_title(brief: dict[str, Any]) -> str:
     featured = ensure_dict(brief.get("featured_article"))
     question = ensure_dict(brief.get("daily_question"))
-    return str(featured.get("title") or question.get("question_source_title") or "").strip()
+    return str(
+        featured.get("title")
+        or question.get("question_source_title")
+        or brief.get("email_subject")
+        or brief.get("today_theme")
+        or "今日晨读重点"
+    ).strip()
 
 
 def _lite_featured_one_sentence(brief: dict[str, Any]) -> str:
@@ -688,6 +694,29 @@ def _lite_answer_angles(brief: dict[str, Any]) -> list[str]:
             angles.append(angle)
         if len(angles) >= 3:
             break
+    hint_text = strip_display_prefix(
+        question.get("breaking_hint") or question.get("breaking_direction") or question.get("exam_focus") or "",
+        "作答主线",
+        "审题关键",
+    )
+    fallback_angles: list[str] = []
+    if hint_text:
+        parts = [part.strip("，。； ") for part in re.split(r"[；。]", str(hint_text)) if part.strip("，。； ")]
+        hint_labels = ("先稳矛盾", "再抓重点", "最后落地")
+        for idx, part in enumerate(parts[:3]):
+            fallback_angles.append(f"{hint_labels[idx]}：{clip_text(part, 20)}")
+    fallback_angles.extend(
+        [
+            "先摸诉求：先把群众顾虑和现实堵点找准。",
+            "再定主线：把解决问题和推动协商结合起来。",
+            "稳妥推进：依法沟通、逐步形成共识。",
+        ]
+    )
+    for item in fallback_angles:
+        if item and item not in angles:
+            angles.append(item)
+        if len(angles) >= 3:
+            break
     return angles
 
 
@@ -719,10 +748,6 @@ def _lite_required_missing(brief: dict[str, Any], latest_json: dict[str, Any]) -
         missing.append("featured_one_sentence")
     if not today_question_text(brief) and not question.get("question"):
         missing.append("daily_question")
-    if len(_lite_answer_angles(brief)) < 3:
-        missing.append("answer_framework_3")
-    if len(_lite_quick_reads(brief)) < 2:
-        missing.append("quick_reads_2")
     if not _lite_theme(brief, latest_json):
         missing.append("theme")
     return missing
@@ -731,8 +756,8 @@ def _lite_required_missing(brief: dict[str, Any], latest_json: dict[str, Any]) -
 def render_lite_plain_text(latest_json: dict[str, Any]) -> str:
     brief = _brief_from_latest_json(latest_json)
     missing = _lite_required_missing(brief, latest_json)
-    if missing:
-        raise ValueError(f"lite email missing required modules: {', '.join(missing)}")
+    if missing and isinstance(latest_json, dict):
+        latest_json["lite_quality_warning"] = missing
 
     featured = ensure_dict(brief.get("featured_article"))
     question_text = today_question_text(brief)
@@ -771,14 +796,15 @@ def render_lite_plain_text(latest_json: dict[str, Any]) -> str:
         ]
     )
     lines.extend(f"{idx}. {item}" for idx, item in enumerate(_lite_answer_angles(brief), start=1))
-    lines.extend(["", "今日速读"])
-    for idx, item in enumerate(quick_reads, start=1):
-        quick_meta = " / ".join(part for part in (item["source"], item["theme"]) if part)
-        lines.append(f"{idx}. {item['title']}")
-        if quick_meta:
-            lines.append(f"   {quick_meta}")
-        if item["one_sentence"]:
-            lines.append(f"   {item['one_sentence']}")
+    if quick_reads:
+        lines.extend(["", "今日速读"])
+        for idx, item in enumerate(quick_reads, start=1):
+            quick_meta = " / ".join(part for part in (item["source"], item["theme"]) if part)
+            lines.append(f"{idx}. {item['title']}")
+            if quick_meta:
+                lines.append(f"   {quick_meta}")
+            if item["one_sentence"]:
+                lines.append(f"   {item['one_sentence']}")
     lines.extend(
         [
             "",
@@ -793,8 +819,8 @@ def render_lite_plain_text(latest_json: dict[str, Any]) -> str:
 def render_lite_email(latest_json: dict[str, Any]) -> str:
     brief = _brief_from_latest_json(latest_json)
     missing = _lite_required_missing(brief, latest_json)
-    if missing:
-        raise ValueError(f"lite email missing required modules: {', '.join(missing)}")
+    if missing and isinstance(latest_json, dict):
+        latest_json["lite_quality_warning"] = missing
 
     featured = ensure_dict(brief.get("featured_article"))
     question_text = today_question_text(brief)
@@ -828,6 +854,13 @@ def render_lite_email(latest_json: dict[str, Any]) -> str:
     <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:14px;padding:14px 15px;margin-bottom:12px;">
       <div style="font-size:13px;color:#1d4ed8;font-weight:900;margin-bottom:6px;">3步看懂</div>
       <div style="font-size:15px;line-height:1.72;color:#1e3a8a;font-weight:800;">{h(three_step_line)}</div>
+    </div>"""
+    quick_reads_block = ""
+    if quick_read_cards:
+        quick_reads_block = f"""
+    <div style="margin-bottom:12px;">
+      <div style="font-size:13px;color:#0f172a;font-weight:900;margin:0 0 8px 2px;">今日速读</div>
+      {quick_read_cards}
     </div>"""
     return f"""<!doctype html>
 <html>
@@ -863,10 +896,7 @@ def render_lite_email(latest_json: dict[str, Any]) -> str:
       <ol style="margin:0;padding-left:18px;">{angle_items}</ol>
     </div>
 
-    <div style="margin-bottom:12px;">
-      <div style="font-size:13px;color:#0f172a;font-weight:900;margin:0 0 8px 2px;">今日速读</div>
-      {quick_read_cards}
-    </div>
+    {quick_reads_block}
 
     <div style="background:#fff8e8;border:1px solid #fed7aa;border-radius:16px;padding:15px 16px;">
       <div style="font-size:15px;font-weight:900;color:#92400e;margin-bottom:7px;">付费内测</div>
