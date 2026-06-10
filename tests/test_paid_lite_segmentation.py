@@ -120,8 +120,8 @@ def test_render_lite_email_returns_dict_and_keeps_structured_preview() -> None:
                         "published_at": "2026-06-07",
                         "theme": "基层治理",
                         "url": "https://example.com/featured",
-                        "one_sentence": "先解决群众的急难愁盼，再推动公共事项协商，治理工作才有信任基础。",
-                        "rewritable_expression": "可用表达：把群众的烦心事先办成，再去谈需要大家配合的大事。",
+                        "one_sentence": "先解决群众的急难愁盼，再推动公共事项协商，治理工作才有信任基础，也更容易把后续执行中的阻力提前化解掉。",
+                        "rewritable_expression": "可用表达：把群众的烦心事先办成，再去谈需要大家配合的大事，这样后续推进才更容易形成稳定共识。",
                         "article_framework_map": {
                             "framework_style": "发现痛点：先摸清顾虑 → 化解阻力：先办急事 → 推动协商：再谈共识"
                         },
@@ -143,7 +143,7 @@ def test_render_lite_email_returns_dict_and_keeps_structured_preview() -> None:
                             "title": "规范收费先把规则讲清楚",
                             "source": "光明网",
                             "theme": "消费治理",
-                            "one_sentence": "收费标准如果藏在长条款里，最后承担理解成本的还是普通消费者。",
+                            "one_sentence": "收费标准如果藏在长条款里，最后承担理解成本的还是普通消费者，治理透明度也会随之被削弱。",
                         },
                         {
                             "title": "让技术红利真正落到中小主体",
@@ -182,6 +182,9 @@ def test_render_lite_email_returns_dict_and_keeps_structured_preview() -> None:
     assert "规范收费先把规则讲清楚" in html_body
     assert "让技术红利真正落到中小主体" in html_body
     assert "mailto:ops@example.com?" in body
+    assert '<span style="font-weight:900;color:#0f172a;">1.</span>' not in html_body
+    assert "这样后续推进才更容易形成稳定共识" in body
+    assert "治理透明度也会随之被削弱" in body
     assert "这是完整版参考答案，不应该出现在 lite 邮件里。" not in body
     assert "oss://bucket/weekly.pdf" not in body
     assert "周末 PDF 下载" not in body
