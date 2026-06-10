@@ -632,7 +632,7 @@ def _lite_featured_one_sentence(brief: dict[str, Any]) -> str:
         or (overview[0] if overview else "")
         or brief.get("today_focus")
         or "",
-        110,
+        180,
     )
 
 
@@ -640,7 +640,7 @@ def _lite_three_step_line(brief: dict[str, Any]) -> str:
     lite_email = ensure_dict(brief.get("lite_email"))
     manual = str(lite_email.get("three_step_line") or "").strip()
     if manual:
-        return clip_text(manual, 30)
+        return clip_text(manual, 48)
 
     featured = ensure_dict(brief.get("featured_article"))
     framework_map = ensure_dict(featured.get("article_framework_map"))
@@ -656,18 +656,18 @@ def _lite_three_step_line(brief: dict[str, Any]) -> str:
             if len(labels) >= 3:
                 break
         line = " → ".join(labels)
-        return line[:30].rstrip("，、：:； ") if line else ""
+        return line[:48].rstrip("，、：:； ") if line else ""
 
     steps = normalize_framework_steps(as_list(framework_map.get("steps")), 3)
     labels = [re.sub(r"\s+", "", str(step.get("label") or "").strip())[:8].strip("，、：:； ") for step in steps]
     labels = [item for item in labels if item][:3]
     line = " → ".join(labels)
-    return line[:30].rstrip("，、：:； ") if line else ""
+    return line[:48].rstrip("，、：:； ") if line else ""
 
 
 def _lite_expression(brief: dict[str, Any]) -> str:
     featured = ensure_dict(brief.get("featured_article"))
-    return clip_text(strip_display_prefix(featured.get("rewritable_expression"), "可用表达", "一句表达"), 100)
+    return clip_text(strip_display_prefix(featured.get("rewritable_expression"), "可用表达", "一句表达"), 180)
 
 
 def _lite_answer_angles(brief: dict[str, Any]) -> list[str]:
@@ -688,7 +688,7 @@ def _lite_answer_angles(brief: dict[str, Any]) -> list[str]:
         else:
             label, content = text, ""
         label = re.sub(r"\s+", "", label.strip())[:8].strip("，、：:； ")
-        content = clip_text(content.strip(), 20)
+        content = clip_text(content.strip(), 42)
         angle = f"{label}：{content}" if content else label
         if angle:
             angles.append(angle)
@@ -704,7 +704,7 @@ def _lite_answer_angles(brief: dict[str, Any]) -> list[str]:
         parts = [part.strip("，。； ") for part in re.split(r"[；。]", str(hint_text)) if part.strip("，。； ")]
         hint_labels = ("先稳矛盾", "再抓重点", "最后落地")
         for idx, part in enumerate(parts[:3]):
-            fallback_angles.append(f"{hint_labels[idx]}：{clip_text(part, 20)}")
+            fallback_angles.append(f"{hint_labels[idx]}：{clip_text(part, 42)}")
     fallback_angles.extend(
         [
             "先摸诉求：先把群众顾虑和现实堵点找准。",
@@ -733,7 +733,7 @@ def _lite_quick_reads(brief: dict[str, Any]) -> list[dict[str, str]]:
                 "title": title,
                 "source": str(item.get("source") or "").strip(),
                 "theme": str(item.get("theme") or "").strip(),
-                "one_sentence": clip_text(item.get("one_sentence") or "", 45),
+                "one_sentence": clip_text(item.get("one_sentence") or "", 90),
             }
         )
     return cards
@@ -827,8 +827,8 @@ def render_lite_email(latest_json: dict[str, Any]) -> str:
     paid_url = _lite_paid_entry_url()
     three_step_line = _lite_three_step_line(brief)
     angle_items = "".join(
-        f'<li style="margin:0 0 8px;color:#334155;line-height:1.72;"><span style="font-weight:900;color:#0f172a;">{idx}.</span> {h(item)}</li>'
-        for idx, item in enumerate(_lite_answer_angles(brief), start=1)
+        f'<li style="margin:0 0 8px;color:#334155;line-height:1.72;">{h(item)}</li>'
+        for item in _lite_answer_angles(brief)
     )
     quick_read_cards = "".join(
         f"""
