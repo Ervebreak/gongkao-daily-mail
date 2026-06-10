@@ -3,7 +3,7 @@ from __future__ import annotations
 import html
 import re
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 from config import settings
 
@@ -525,6 +525,11 @@ def render_policy_coordinate_html(brief: dict[str, Any]) -> str:
 FEEDBACK_FORM_URL = "https://wj.qq.com/s2/26569188/8ddc/"
 FEEDBACK_UID_PLACEHOLDER = "__FEEDBACK_UID__"
 FEEDBACK_EMAIL_HASH_PLACEHOLDER = "__FEEDBACK_EMAIL_HASH__"
+UNSUBSCRIBE_SUBJECT = "退订公考晨读邮件"
+UNSUBSCRIBE_BODY = (
+    "你好，我想暂停/退订公考晨读邮件。"
+    "请将我当前接收这封邮件的邮箱从发送名单中移除，谢谢。"
+)
 
 
 def _append_query(url: str, params: dict[str, str]) -> str:
@@ -532,7 +537,7 @@ def _append_query(url: str, params: dict[str, str]) -> str:
     return f"{url}{separator}{urlencode(params)}"
 
 
-def render_unsubscribe_url(brief: dict[str, Any]) -> str:
+def _render_auto_unsubscribe_url(brief: dict[str, Any]) -> str:
     base_url = settings.feedback_base_url.strip()
     if not base_url:
         return ""
@@ -547,17 +552,40 @@ def render_unsubscribe_url(brief: dict[str, Any]) -> str:
     return _append_query(base_url, params)
 
 
+def _render_mailto_unsubscribe_url() -> str:
+    recipient = settings.unsubscribe_email.strip()
+    if not recipient:
+        return ""
+    query = urlencode(
+        {
+            "subject": UNSUBSCRIBE_SUBJECT,
+            "body": UNSUBSCRIBE_BODY,
+        },
+        quote_via=quote,
+    )
+    return f"mailto:{recipient}?{query}"
+
+
+def render_unsubscribe_url(brief: dict[str, Any]) -> str:
+    if settings.unsubscribe_mode == "auto" and settings.feedback_base_url.strip():
+        auto_url = _render_auto_unsubscribe_url(brief)
+        if auto_url:
+            return auto_url
+    return _render_mailto_unsubscribe_url()
+
+
 def render_unsubscribe_button(brief: dict[str, Any]) -> str:
     url = render_unsubscribe_url(brief)
     if not url:
         return ""
     return f"""
-    <div style="text-align:center;padding:8px 12px 18px;">
+    <div style="text-align:center;padding:8px 12px 18px;color:#64748b;font-size:12px;line-height:1.8;">
+      如果你暂时不想继续接收，可以
       <a href="{h(url)}" target="_blank"
-         style="display:inline-block;color:#64748b;text-decoration:none;border:1px solid #cbd5e1;
-                border-radius:999px;padding:7px 14px;font-size:12px;font-weight:700;">
-        不想继续接收，点击退订
+         style="color:#165dff;text-decoration:none;font-weight:800;">
+        点击这里发送退订邮件
       </a>
+      ，我会手动处理。
     </div>
     """
 
@@ -566,7 +594,7 @@ def render_plain_unsubscribe_text(brief: dict[str, Any]) -> str:
     url = render_unsubscribe_url(brief)
     if not url:
         return ""
-    return f"退订：{url}"
+    return f"如果你暂时不想继续接收，可以点击这里发送退订邮件，我会手动处理：{url}"
 
 
 def render_feedback_buttons(brief: dict[str, Any]) -> str:
