@@ -9,51 +9,6 @@ from typing import Any
 TITLE_PREFIX = "【公考晨读】"
 DISPLAY_LABELS = ("可用表达", "作答主线", "审题关键", "如果点原文，重点看", "可迁移框架")
 LEADING_RESIDUE = "：:·•・"
-SENTENCE_ENDING = "。！？；.!?」』）】》"
-TRUNCATED_TAILS = (
-    "可落地", "可以用于", "适合转化为", "有助于", "体现出", "关键在于", "主要包括",
-    "从而", "进而", "同时", "并且", "最", "畅通维", "清退四", "好人条", "探索收", "制度保", "信息透明", "责任主",
-)
-DANGLING_ENDINGS = (
-    "通过", "由于", "为了", "围绕", "依靠", "立足", "推动", "促进", "实现", "提升",
-    "强化", "完善", "构建", "形成", "建立", "转向", "转为", "赋能", "配套", "提出从",
-    "让", "把", "与", "和", "及", "并", "但", "而", "在", "为", "的", "监",
-)
-SEMANTIC_TRUNCATION_REPAIRS = {
-    "避免答": "帮助作答避免空泛。",
-    "供需矛": "供需矛盾。",
-    "过错责任": "过错责任认定。",
-    "和群": "和群众监督结合起来。",
-    "责任主": "责任主体。",
-    "平台责": "平台责任。",
-    "群众监": "群众监督。",
-}
-BODY_TEXT_PATHS = {
-    "brief.today_focus",
-    "brief.today_three_things.must_remember_sentence",
-    "brief.featured_article.one_sentence",
-    "brief.featured_article.original_reading_focus",
-    "brief.featured_article.article_framework_map.main_thread",
-    "brief.featured_article.article_framework_map.steps[*].content",
-    "brief.featured_article.three_useful_points",
-    "brief.featured_article.three_useful_points[*]",
-    "brief.featured_article.exam_use",
-    "brief.featured_article.exam_use[*]",
-    "brief.featured_article.usable_for_exam",
-    "brief.featured_article.rewritable_expression",
-    "brief.daily_question.exam_focus",
-    "brief.daily_question.breaking_hint",
-    "brief.daily_question.candidate_answer",
-    "brief.daily_question.output_sentence_template",
-    "brief.daily_question.thirty_second_answer",
-    "brief.today_takeaway.framework",
-    "brief.today_takeaway.common_knowledge_points",
-    "brief.today_takeaway.common_knowledge_points[*]",
-    "brief.today_takeaway.golden_sentences[*].sentence",
-    "brief.quick_reads[*].one_sentence",
-    "brief.quick_reads[*].exam_value",
-    "brief.policy_coordinate.exam_transfer",
-}
 DISPLAY_PREFIX_RULES = {
     "brief.featured_article.rewritable_expression": ("可用表达",),
     "brief.featured_article.original_reading_focus": ("如果点原文，重点看",),
@@ -74,8 +29,24 @@ def _clip(value: Any, limit: int = 90) -> str:
     return text if len(text) <= limit else text[:limit] + "..."
 
 
-def _issue(severity: str, code: str, message: str, path: str, *, auto_fixable: bool = False, blocking: bool = False, module_override: str = "") -> dict[str, Any]:
-    issue = {"severity": severity, "code": code, "message": message, "path": path, "auto_fixable": auto_fixable, "blocking": blocking}
+def _issue(
+    severity: str,
+    code: str,
+    message: str,
+    path: str,
+    *,
+    auto_fixable: bool = False,
+    blocking: bool = False,
+    module_override: str = "",
+) -> dict[str, Any]:
+    issue = {
+        "severity": severity,
+        "code": code,
+        "message": message,
+        "path": path,
+        "auto_fixable": auto_fixable,
+        "blocking": blocking,
+    }
     if module_override:
         issue["module_override"] = module_override
     return issue
@@ -148,135 +119,13 @@ def _normalized_body_path(path: str) -> str:
     return re.sub(r"\[\d+\]", "[*]", path or "")
 
 
-def _is_body_text_path(path: str) -> bool:
-    return _normalized_body_path(path) in BODY_TEXT_PATHS
-
-
-def _without_sentence_punctuation(text: str) -> str:
-    return (text or "").strip().rstrip(SENTENCE_ENDING).strip()
-
-
-def _last_clause(text: str) -> str:
-    parts = [part.strip() for part in re.split(r"[，,；;。！？]", text or "") if part.strip()]
-    return parts[-1] if parts else (text or "").strip()
-
-
-def _looks_incomplete(text: str) -> bool:
-    value = _text(text)
-    if not value:
-        return False
-    if any(marker in value for marker in ("……", "...", "…", "..")):
-        return True
-    if value.endswith(("，", "、", "：", "；", ",", ":", ";")):
-        return True
-    stripped = _without_sentence_punctuation(value)
-    if any(stripped.endswith(tail) for tail in TRUNCATED_TAILS):
-        return True
-    if any(stripped.endswith(tail) for tail in DANGLING_ENDINGS):
-        return True
-    if re.search(r"(?:^|[。！？；;])\s*(第[一二三四五六七八九十]步|一是|二是|三是|四是|第一[，,:：]|第二[，,:：]|第三[，,:：]|第四[，,:：])[^。！？.!?]{0,60}$", stripped):
-        if len(_last_clause(stripped)) <= 28:
-            return True
-    clause = _last_clause(value)
-    if clause.startswith(("让", "把")) and len(clause) <= 10:
-        return True
-    if clause.startswith(("通过", "依靠", "围绕", "立足", "提出从")) and len(clause) <= 18:
-        return True
-    return False
-
-
-def _suspected_truncated_tail(text: str) -> str:
-    stripped = _without_sentence_punctuation(text)
-    for tail in SEMANTIC_TRUNCATION_REPAIRS:
-        if stripped.endswith(tail):
-            return tail
-    for tail in TRUNCATED_TAILS:
-        if stripped.endswith(tail):
-            return tail
-    for tail in DANGLING_ENDINGS:
-        if stripped.endswith(tail):
-            return tail
-    return "未完成结构" if _looks_incomplete(text) else ""
-
-
-def _has_semantic_truncation_tail(text: str) -> bool:
-    stripped = _without_sentence_punctuation(text)
-    return any(stripped.endswith(tail) for tail in SEMANTIC_TRUNCATION_REPAIRS)
-
-
-def _module_from_path(path: str) -> str:
-    if ".daily_question." in path:
-        return "daily_question"
-    if ".featured_article." in path:
-        return "featured_article"
-    if ".today_takeaway." in path:
-        return "today_takeaway"
-    if ".quick_reads" in path:
-        return "quick_reads"
-    return "brief"
-
-
-def _normalize_trailing_semicolon(path: str, text: str) -> str:
-    if _normalized_body_path(path) not in {"brief.daily_question.thirty_second_answer", "brief.daily_question.output_sentence_template"}:
-        return text
-    fixed = (text or "").rstrip()
-    if fixed.endswith(("；", ";", "，", ",", "、", "：", ":")):
-        return fixed.rstrip("；;，,、：: ").rstrip() + "。"
-    return text
-
-
-def _repair_known_truncated_body(path: str, value: str) -> str:
-    normalized_path = _normalized_body_path(path)
-    original = _text(value)
-    text = _without_sentence_punctuation(original)
-    if not text:
-        return original
-    for tail, replacement in SEMANTIC_TRUNCATION_REPAIRS.items():
-        if text.endswith(tail):
-            repaired = text[: -len(tail)] + replacement
-            return repaired if not _has_semantic_truncation_tail(repaired) else original
-    if normalized_path == "brief.featured_article.original_reading_focus":
-        if text.endswith("责任主"):
-            return text + "体和平台责任边界。"
-        if text.endswith("最"):
-            return text + "值得借鉴的部分。"
-        if text.endswith("好人条"):
-            return text + "款”等内容，这些都是分析公共服务设施从配置到有效使用的关键材料。"
-    if normalized_path == "brief.featured_article.article_framework_map.main_thread" and text.endswith("探索收"):
-        return text + "束全文。"
-    if normalized_path == "brief.today_takeaway.framework":
-        if text.endswith("清退四"):
-            return text + "个环节形成治理闭环。"
-        if "找得到" in text and "敢用" in text and "会用" in text and "第一步" in text and "第二步" not in text:
-            return "“找得到—敢用—会用”三层治理框架：先打通信息壁垒，让设备位置可查；再强化法律宣传，让群众敢于出手；最后开展实操培训，让设备真正用得上。"
-    if normalized_path == "brief.quick_reads[*].one_sentence":
-        if text.endswith("畅通维"):
-            return text + "权渠道。"
-        if text.endswith("信息透明"):
-            return text + "化等方面破解供需错位。"
-        if text.endswith("制度保"):
-            return text + "障。"
-    if normalized_path == "brief.daily_question.candidate_answer":
-        if text.endswith("限期停业整改"):
-            return text + "；再次违规或造成严重后果的，直接移出白名单，并将线索移交市场监管、文旅等部门依法处理。"
-        if text.endswith("第四，建立维护考核的硬约束") and "AED" in text:
-            return text + "，明确设备维护责任人，定期检查电池和电极片状态，将有效运行率纳入责任单位考核。"
-    return original
-
-
 def _clean_text_field(path: str, value: str) -> str:
     normalized_path = _normalized_body_path(path)
     if path in {"subject", "brief.email_subject", "brief.subject"}:
         return _dedupe_subject_prefix(value)
-    cleaned = _strip_labels(value, DISPLAY_PREFIX_RULES[normalized_path]) if normalized_path in DISPLAY_PREFIX_RULES else _strip_leading_colon(_collapse_repeated_label(value))
-    if _is_body_text_path(path):
-        cleaned = _normalize_trailing_semicolon(path, cleaned)
-        repaired = _repair_known_truncated_body(path, cleaned)
-        if repaired != cleaned:
-            return repaired
-        if cleaned and not cleaned.endswith(tuple(SENTENCE_ENDING)) and not _looks_incomplete(cleaned):
-            cleaned += "。"
-    return cleaned
+    if normalized_path in DISPLAY_PREFIX_RULES:
+        return _strip_labels(value, DISPLAY_PREFIX_RULES[normalized_path])
+    return _strip_leading_colon(_collapse_repeated_label(value))
 
 
 def _clean_html(html: str) -> str:
@@ -321,7 +170,14 @@ def _nonblocking_issues(data: dict[str, Any]) -> list[dict[str, Any]]:
             ratio = difflib.SequenceMatcher(None, left_key, right_key).ratio()
             contained = left_key in right_key or right_key in left_key
             if ratio >= 0.86 or (contained and min(len(left_key), len(right_key)) >= 18):
-                issues.append(_issue("low", "golden_sentence_near_duplicate", f"第 {left + 1} 条和第 {right + 1} 条金句相似度较高，建议人工确认。", "brief.today_takeaway.golden_sentences"))
+                issues.append(
+                    _issue(
+                        "low",
+                        "golden_sentence_near_duplicate",
+                        f"第 {left + 1} 条和第 {right + 1} 条金句相似度较高，建议人工确认。",
+                        "brief.today_takeaway.golden_sentences",
+                    )
+                )
     question = brief.get("daily_question") if isinstance(brief.get("daily_question"), dict) else {}
     thirty_second = _text(question.get("thirty_second_answer") or question.get("output_sentence_template"))
     if len(thirty_second) > 120:
@@ -346,7 +202,16 @@ def _daily_question_structure_issues(data: dict[str, Any]) -> list[dict[str, Any
     issues: list[dict[str, Any]] = []
     for name, keywords in groups.items():
         if not any(keyword in text for keyword in keywords):
-            issues.append(_issue("high", f"daily_question_missing_{name}", f"今日一题题干疑似缺少{labels[name]}要素；不在清洁度守卫中硬改，交给 daily_question 重写逻辑处理。", "brief.daily_question.question", blocking=True, module_override="daily_question"))
+            issues.append(
+                _issue(
+                    "high",
+                    f"daily_question_missing_{name}",
+                    f"今日一题题干疑似缺少{labels[name]}要素；不在清洁度守卫中硬改，交给 daily_question 重写逻辑处理。",
+                    "brief.daily_question.question",
+                    blocking=True,
+                    module_override="daily_question",
+                )
+            )
     return issues
 
 
@@ -364,29 +229,18 @@ def check_cleanliness(data: dict[str, Any]) -> dict[str, Any]:
             stripped = _strip_labels(value, DISPLAY_PREFIX_RULES[normalized_path])
             if stripped != _text(value):
                 issues.append(_issue("high", "display_label_prefix", "字段值不应携带栏目标题前缀，标题由模板渲染。", path, auto_fixable=True, blocking=True))
-        if _is_body_text_path(path):
-            text_value = _text(value)
-            cleaned_value = _clean_text_field(path, value)
-            if cleaned_value != text_value and not _looks_incomplete(cleaned_value):
-                issues.append(_issue("medium", "body_field_semantic_fix", "正文型字段已做语义补全或标点清洁，需以复检结果为准。", path, auto_fixable=True))
-            if cleaned_value != text_value and normalized_path in {"brief.daily_question.thirty_second_answer", "brief.daily_question.output_sentence_template"} and text_value.rstrip().endswith(("；", ";", "，", ",", "、", "：", ":")):
-                issues.append(_issue("high", "trailing_semicolon_answer", "今日一题30秒输出疑似半截句，已字段级补成完整句。", path, auto_fixable=True, blocking=True, module_override="daily_question"))
-            truncated_tail = _suspected_truncated_tail(cleaned_value if cleaned_value != text_value else value)
-            if truncated_tail:
-                known_repair = _repair_known_truncated_body(path, value)
-                issues.append(_issue("high", "suspected_truncated_sentence", f"正文型字段疑似半截句，结尾停在“{truncated_tail}”。", path, auto_fixable=known_repair != text_value or normalized_path in {"brief.daily_question.thirty_second_answer", "brief.daily_question.output_sentence_template"}, blocking=True, module_override=_module_from_path(path)))
     rewritable = _text((brief.get("featured_article") if isinstance(brief.get("featured_article"), dict) else {}).get("rewritable_expression"))
-    if re.match(r"^\s*可用表达\s*[：:]?", rewritable):
+    if rewritable.startswith("可用表达") or rewritable.startswith("可用表达：") or rewritable.startswith("可用表达:"):
         issues.append(_issue("high", "rewritable_expression_label_prefix", "可用表达字段值不应包含可用表达前缀。", "brief.featured_article.rewritable_expression", auto_fixable=True, blocking=True))
     subject = _text(data.get("subject"))
     email_subject = _text(brief.get("email_subject"))
     html_body = _text(data.get("html_body"))
     plain_text = _text(data.get("plain_text"))
-    if re.search(r"(【公考晨读】\s*){2,}", subject):
+    if subject.count("【公考晨读】") >= 2:
         issues.append(_issue("high", "duplicate_subject_prefix", "subject 存在重复【公考晨读】前缀。", "subject", auto_fixable=True, blocking=True))
-    if re.search(r"(【公考晨读】\s*){2,}", email_subject):
+    if email_subject.count("【公考晨读】") >= 2:
         issues.append(_issue("high", "duplicate_subject_prefix", "brief.email_subject 存在重复【公考晨读】前缀。", "brief.email_subject", auto_fixable=True, blocking=True))
-    if re.search(r"(【公考晨读】\s*){2,}", html_body):
+    if html_body.count("【公考晨读】") >= 2:
         issues.append(_issue("high", "duplicate_subject_prefix", "HTML 顶部标题疑似存在重复【公考晨读】前缀。", "html_body", auto_fixable=True, blocking=True))
     label = _contains_repeated_label(plain_text)
     if label:
@@ -421,7 +275,7 @@ def _repair_thirty_second_answer_from_root(root: Any) -> str:
     current = _text(question.get("thirty_second_answer"))
     fallback = _text(question.get("output_sentence_template"))
     target_text = current or fallback
-    if target_text and not _looks_incomplete(target_text):
+    if target_text:
         return ""
     framework = question.get("answer_framework") or question.get("answer_frame") or []
     if not isinstance(framework, list):
@@ -473,6 +327,7 @@ def _sync_rendered_outputs(data: dict[str, Any]) -> dict[str, Any]:
         return fixed
     try:
         from email_renderer import render_email_html, render_plain_text
+
         fixed["plain_text"] = render_plain_text(brief)
         fixed["html_body"] = render_email_html(brief)
     except Exception:
