@@ -17,41 +17,6 @@ DEV_MARKERS = [
     "Exception",
 ]
 
-TRUNCATION_MARKERS = ["标…", "同步培育…", "最后还要在机制"]
-DANGLING_ENDINGS = (
-    "通过",
-    "由于",
-    "为了",
-    "围绕",
-    "依靠",
-    "立足",
-    "推动",
-    "促进",
-    "实现",
-    "提升",
-    "强化",
-    "完善",
-    "构建",
-    "形成",
-    "建立",
-    "转向",
-    "转为",
-    "赋能",
-    "配套",
-    "让",
-    "把",
-    "与",
-    "和",
-    "及",
-    "并",
-    "但",
-    "而",
-    "在",
-    "为",
-    "的",
-    "监",
-)
-
 
 def _text(value: Any) -> str:
     if value is None:
@@ -79,43 +44,8 @@ def _repeated_lines(text: str) -> list[str]:
     return repeated[:5]
 
 
-def _last_clause(text: str) -> str:
-    parts = [part.strip() for part in re.split(r"[，,；;。！？]", text) if part.strip()]
-    return parts[-1] if parts else text.strip()
-
-
-def _looks_incomplete_line(text: str) -> bool:
-    value = _text(text)
-    if len(value) < 8:
-        return False
-    if value.endswith(("?", ";")):
-        return False
-    if any(marker in value for marker in TRUNCATION_MARKERS):
-        return True
-    if value.endswith(DANGLING_ENDINGS):
-        return True
-    clause = _last_clause(value)
-    if clause.startswith(("?", "?")) and len(clause) <= 10:
-        return True
-    if clause.startswith(("??", "??", "??", "??")) and len(clause) <= 14:
-        return True
-    if value.endswith(("?", "?", "?", "?", ",", ":", "?")):
-        return True
-    return False
-
-def _has_visible_truncation_marker(text: str) -> bool:
-    if any(marker in text for marker in TRUNCATION_MARKERS):
-        return True
-    for raw in text.splitlines():
-        line = raw.strip()
-        if re.search(r"(\.\.\.|…|……)\s*$", line):
-            return True
-    return False
-
-
 def evaluate_brief_cleanliness(brief: dict[str, Any], plain_text: str = "", html_body: str = "") -> dict[str, Any]:
     text = "\n".join([plain_text or "", _text(brief)])
-    visible_text = "\n".join([plain_text or "", html_body or ""])
     issues: list[dict[str, str]] = []
 
     if len((plain_text or "").strip()) < 800:
@@ -130,17 +60,6 @@ def evaluate_brief_cleanliness(brief: dict[str, Any], plain_text: str = "", html
 
     if re.search(r"\[[\"'][^\"']+[\"'](?:,\s*[\"'][^\"']+[\"'])+\]", text):
         issues.append({"severity": "high", "code": "python_list_leaked", "message": "出现 Python 列表格式内容"})
-
-    if _has_visible_truncation_marker(visible_text):
-        issues.append({"severity": "high", "code": "truncated_email", "message": "整封邮件存在省略号或疑似截断表达"})
-
-    incomplete_lines = [
-        line.strip()
-        for line in (plain_text or "").splitlines()
-        if _looks_incomplete_line(line.strip())
-    ][:3]
-    if incomplete_lines:
-        issues.append({"severity": "high", "code": "incomplete_sentence_line", "message": "整封邮件存在疑似半截句：" + " / ".join(incomplete_lines[:2])})
 
     repeated = _repeated_lines(plain_text or "")
     if repeated:

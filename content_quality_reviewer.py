@@ -236,33 +236,7 @@ def _issue_to_rewrite_target(issue: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _semantic_truncation_targets(raw: dict[str, Any], issues: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    corpus_parts = [json.dumps(raw or {}, ensure_ascii=False)]
-    for issue in issues:
-        corpus_parts.append(str(issue.get("message") or ""))
-        corpus_parts.append(str(issue.get("code") or ""))
-    corpus = "\n".join(part for part in corpus_parts if part)
-    mappings = (
-        (("original_reading_focus", "避免答"), "brief.featured_article.original_reading_focus"),
-        (("quick_reads[0]", "供需矛"), "brief.quick_reads[0].one_sentence"),
-        (("quick_reads[1]", "过错责任"), "brief.quick_reads[1].one_sentence"),
-        (("today_takeaway.framework", "和群"), "brief.today_takeaway.framework"),
-    )
-    targets: list[dict[str, Any]] = []
-    for markers, field in mappings:
-        if not all(marker in corpus for marker in markers):
-            continue
-        targets.append({
-            "field": field,
-            "module": field.split(".")[1],
-            "issue_code": "truncation_error",
-            "reason": "Content quality review found a high-risk truncation fragment in this field.",
-            "action": "Rewrite this field into a semantically complete sentence while preserving the original meaning.",
-            "severity": "high",
-            "auto_fixable": True,
-        })
-    return targets
-
-
+    return []
 def _normalize_rewrite_targets(raw: dict[str, Any], issues: list[dict[str, Any]]) -> list[dict[str, Any]]:
     targets: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()

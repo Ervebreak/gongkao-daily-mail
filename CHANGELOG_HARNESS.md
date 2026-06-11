@@ -46,7 +46,6 @@ Follow-ups:
 
 1. This stage only improves input quality and observability; it does not yet make `policy_profile` a hard decision layer for final display.
 2. If full-text input later introduces noisy recall, tune query composition and keyword deduplication before changing backend display thresholds.
-
 ## 2026-06-02 - Add reading guide review checks
 
 Reason:

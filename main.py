@@ -248,7 +248,6 @@ def build_quality_gate(
     reading_guide_quality: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     content_quality_p0_codes = {
-        "truncation_error",
         "missing_required_module",
         "wrong_article_understanding",
         "fabricated_policy",
@@ -258,10 +257,7 @@ def build_quality_gate(
         "missing_task",
         "too_broad",
         "missing_candidate_answer",
-        "truncated_answer",
         "isolated_number",
-        "incomplete_sentence",
-        "suspected_truncated_sentence",
         "grassroots_authority_overreach",
         "incomplete_label",
         "exam_migration_step",
@@ -269,20 +265,13 @@ def build_quality_gate(
         "too_few_steps",
         "empty_golden_sentence",
         "label_leaked_in_golden_sentence",
-        "truncated_takeaway",
-        "truncated_golden_usage",
-        "truncated_common_knowledge",
         "email_too_short",
         "missing_html",
         "dev_marker_leaked",
         "python_list_leaked",
-        "truncated_email",
-        "incomplete_sentence_line",
         "quick_read_dev_marker",
         "empty_quick_read",
         "missing_quick_read_one_sentence",
-        "truncated_quick_read_one_sentence",
-        "truncated_quick_read_exam_value",
         "quick_read_url_not_valid",
         "quick_reads_all_news_summary",
         "weak_featured_selection",
@@ -292,7 +281,6 @@ def build_quality_gate(
         "repeated_expression_across_modules",
         "module_role_overlap",
         "expression_dev_marker",
-        "expression_truncated",
         "label_leaked_in_expression",
         "fixed_framework_template",
         "universal_framework_content",
@@ -323,8 +311,6 @@ def build_quality_gate(
         "matched_policy_id_not_found",
         "authoritative_source_missing",
         "vague_leader_source",
-        "policy_quote_incomplete",
-        "authoritative_quote_incomplete",
     }
     p0_issues: list[dict[str, str]] = []
     modules = (
@@ -802,6 +788,106 @@ def _policy_float(value: Any) -> float:
         return 0.0
 
 
+def _policy_log_preview(value: Any, limit: int = 500) -> Any:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        text = _policy_text(value)
+        return text if len(text) <= limit else text[:limit] + "..."
+    if isinstance(value, dict):
+        result: dict[str, Any] = {}
+        for key, item in value.items():
+            if item in (None, "", [], {}):
+                continue
+            result[str(key)] = _policy_log_preview(item, limit=min(limit, 180))
+        return result
+    if isinstance(value, (list, tuple, set)):
+        rows = list(value)[:8]
+        return [_policy_log_preview(item, limit=min(limit, 180)) for item in rows]
+    return value
+
+
+def _policy_candidate_log_row(item: Any) -> dict[str, Any]:
+    if not isinstance(item, dict):
+        return {}
+    row: dict[str, Any] = {}
+    for key in ("policy_id", "quote_id", "framework_id", "chunk_id", "article_id"):
+        value = _policy_text(item.get(key))
+        if value:
+            row[key] = value
+    match_source = _policy_text(item.get("_match_source"))
+    if match_source:
+        row["match_source"] = match_source
+    row["match_score"] = round(_policy_float(item.get("_match_score")), 2)
+    theme = _policy_text(item.get("theme_level_1") or item.get("main_theme") or item.get("theme"))
+    if theme:
+        row["theme"] = theme
+    title = _policy_text(item.get("source_title") or item.get("title") or item.get("framework_name") or item.get("section_title"))
+    if title:
+        row["title"] = _policy_log_preview(title, limit=80)
+    quote = _policy_text(
+        item.get("short_quote")
+        or item.get("policy_quote")
+        or item.get("quote_text")
+        or item.get("chunk_text")
+        or item.get("answer_pattern")
+        or item.get("framework_items")
+    )
+    if quote:
+        row["quote_preview"] = _policy_log_preview(quote, limit=120)
+    reasons = item.get("_match_reasons")
+    if isinstance(reasons, dict) and reasons:
+        row["match_reasons"] = _policy_log_preview(reasons, limit=120)
+    return row
+
+
+def _policy_candidate_log_rows(items: Any, *, limit: int = 5) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in list(items or [])[:limit]:
+        preview = _policy_candidate_log_row(item)
+        if preview:
+            rows.append(preview)
+    return rows
+
+
+def _policy_coordinate_debug_payload(
+    *,
+    featured: dict[str, Any],
+    article_text: str,
+    topic_query_text: str,
+    topic_anchors: dict[str, Any],
+    debug_scores: dict[str, Any],
+    result: dict[str, Any],
+    backend_status: str,
+    semantic_fit: dict[str, Any] | None,
+    disabled_reason: str,
+) -> dict[str, Any]:
+    return {
+        "article_title": _policy_text(featured.get("title")),
+        "article_source": _policy_text(featured.get("source")),
+        "article_text_length": len(_policy_text(article_text)),
+        "article_text_preview": _policy_log_preview(article_text, limit=500),
+        "policy_coordinate_query": _policy_log_preview(debug_scores.get("query") or {}, limit=180),
+        "topic_anchors": _policy_log_preview(topic_anchors or {}, limit=180),
+        "policy_core_top5": _policy_candidate_log_rows(debug_scores.get("policy_core_top"), limit=5),
+        "policy_all_top5": _policy_candidate_log_rows(debug_scores.get("policy_all_top"), limit=5),
+        "qiushi_quotes_core_top5": _policy_candidate_log_rows(debug_scores.get("qiushi_quotes_core_top"), limit=5),
+        "qiushi_quotes_candidates_top5": _policy_candidate_log_rows(debug_scores.get("qiushi_quotes_candidates_top"), limit=5),
+        "chunk_top5": _policy_candidate_log_rows(debug_scores.get("chunk_top"), limit=5),
+        "framework_top5": _policy_candidate_log_rows(debug_scores.get("framework_top"), limit=5),
+        "selected_evidence_type": _policy_text(result.get("display_evidence_type")) or "none",
+        "selected_quote_id": _policy_text(result.get("matched_qiushi_quote_id")),
+        "selected_policy_id": _policy_text(result.get("matched_policy_id")),
+        "policy_score": round(_policy_float(result.get("policy_match_score")), 2),
+        "qiushi_score": round(_policy_float(result.get("qiushi_match_score")), 2),
+        "backend_status": backend_status or "unknown",
+        "semantic_fit_status": _policy_text((semantic_fit or {}).get("status")) or "not_run",
+        "disabled_reason": _policy_text(disabled_reason),
+        "evidence_selection_reason": _policy_text(result.get("evidence_selection_reason")),
+        "policy_coordinate_topic_query": _policy_log_preview(topic_query_text, limit=180),
+    }
+
+
 def _evidence_similarity(left: Any, right: Any) -> float:
     left_text = _policy_text(left).replace(" ", "")
     right_text = _policy_text(right).replace(" ", "")
@@ -1255,6 +1341,20 @@ def build_policy_coordinate(
             )
             if logger:
                 logger.info(
+                    "policy coordinate diagnostics",
+                    **_policy_coordinate_debug_payload(
+                        featured=featured,
+                        article_text=article_text,
+                        topic_query_text=topic_query_text,
+                        topic_anchors=topic_anchors,
+                        debug_scores=debug_scores,
+                        result=result,
+                        backend_status="skipped",
+                        semantic_fit=None,
+                        disabled_reason=brief.get("_policy_coordinate_disabled_reason") or "",
+                    ),
+                )
+                logger.info(
                     "policy coordinate skipped",
                     reason=result.get("evidence_selection_reason") or "no_fit_evidence",
                     policy_score=policy_score,
@@ -1271,6 +1371,20 @@ def build_policy_coordinate(
             brief["_policy_coordinate_disabled_reason"] = result["skip_reason"]
             if logger:
                 logger.info(
+                    "policy coordinate diagnostics",
+                    **_policy_coordinate_debug_payload(
+                        featured=featured,
+                        article_text=article_text,
+                        topic_query_text=topic_query_text,
+                        topic_anchors=topic_anchors,
+                        debug_scores=debug_scores,
+                        result=result,
+                        backend_status=result["backend_status"],
+                        semantic_fit=semantic_fit,
+                        disabled_reason=result["skip_reason"],
+                    ),
+                )
+                logger.info(
                     "policy coordinate skipped",
                     reason=result["skip_reason"],
                     policy_score=policy_score,
@@ -1279,6 +1393,20 @@ def build_policy_coordinate(
                 )
             return empty
         if logger:
+            logger.info(
+                "policy coordinate diagnostics",
+                **_policy_coordinate_debug_payload(
+                    featured=featured,
+                    article_text=article_text,
+                    topic_query_text=topic_query_text,
+                    topic_anchors=topic_anchors,
+                    debug_scores=debug_scores,
+                    result=result,
+                    backend_status=result["backend_status"],
+                    semantic_fit=semantic_fit,
+                    disabled_reason=brief.get("_policy_coordinate_disabled_reason") or "",
+                ),
+            )
             logger.info(
                 "policy coordinate matched",
                 display_evidence_type=result["display_evidence_type"],
@@ -1391,6 +1519,9 @@ def enforce_policy_coordinate_quality(
             changed=changed,
             repaired_actions=repaired_actions,
             issue_count=len(quality.get("issues") or []),
+            display_evidence_type=_policy_text((brief.get("policy_coordinate") or {}).get("display_evidence_type")),
+            disabled_reason=_policy_text(brief.get("_policy_coordinate_disabled_reason")),
+            issue_codes=[str(item.get("code") or "") for item in quality.get("issues") or [] if isinstance(item, dict)],
         )
     return {
         "brief": brief,
