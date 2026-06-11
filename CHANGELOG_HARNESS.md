@@ -1,5 +1,26 @@
 # Harness Change Log
 
+## 2026-06-11 - Add policy coordinate diagnostics only
+
+Reason:
+
+- Policy coordinate matching already computes candidate rankings and hide/display reasons, but the run log does not expose enough context to diagnose why a module was shown or suppressed.
+- This round is intentionally observability-only: it should help inspect query inputs, top candidates, backend status, semantic-fit status, and disabled reasons without changing match scores, thresholds, or render behavior.
+
+Files:
+
+- `main.py`
+- `policy_coordinate_matcher.py`
+- `tests/test_policy_coordinate_diagnostics.py`
+- `CHANGELOG_HARNESS.md`
+
+Current behavior:
+
+- Added a structured `policy coordinate diagnostics` log event during policy-coordinate build.
+- Logs now include compact input previews, topic anchors, matcher top candidates, selected evidence ids, scores, backend status, semantic-fit status, and disabled reason.
+- Expanded matcher debug output so `framework_top` also exposes up to 5 items for diagnostics.
+- Existing matching results, thresholds, display logic, and final rendering behavior remain unchanged.
+
 ## 2026-06-11 - Policy coordinate stage 2 profile input
 
 Reason:
