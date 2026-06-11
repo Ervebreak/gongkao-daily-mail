@@ -566,7 +566,7 @@ def match_policy_coordinate_candidates(
                 "qiushi_quotes_core_top": [_public_result(row) for row in _top(quote_core_scores, limit=5)],
                 "qiushi_quotes_candidates_top": [_public_result(row) for row in _top(quote_candidate_scores, limit=5)],
                 "chunk_top": [_public_result(row) for row in _top(chunk_scores, limit=5)],
-                "framework_top": [_public_result(row) for row in _top(framework_scores, limit=3)],
+                "framework_top": [_public_result(row) for row in _top(framework_scores, limit=5)],
             },
         }
     }
