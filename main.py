@@ -15,6 +15,7 @@ except Exception:
 
 from config import settings
 from feedback import handle_feedback, is_feedback_invocation
+from history import normalize_title
 from lite_email_renderer import render_lite_email
 from logger import RunLogger
 
@@ -1080,7 +1081,76 @@ def _policy_exam_transfer_fallback(featured: dict[str, Any], question: dict[str,
     return "遇到申论综合分析、基层治理和面试实务类题目，可从政策依据、问题转译、平台机制和落实闭环展开。"
 
 
-def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = None) -> dict[str, Any]:
+def _policy_limit_text(value: Any, limit: int = 4000) -> str:
+    text = _policy_text(value)
+    return text if len(text) <= limit else text[:limit].rstrip()
+
+
+def _policy_preview(value: Any, limit: int = 500) -> str:
+    text = _policy_text(value)
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + "..."
+
+
+def _policy_article_body_text(article: Any) -> str:
+    if article is None:
+        return ""
+    if isinstance(article, dict):
+        for key in ("full_text", "text", "content", "article_text", "original_text", "raw_text", "body"):
+            text = _policy_text(article.get(key))
+            if text:
+                return text
+        return ""
+    for attr in ("text", "full_text", "content", "article_text", "original_text", "raw_text"):
+        text = _policy_text(getattr(article, attr, ""))
+        if text:
+            return text
+    return _policy_text(getattr(article, "body", None))
+
+
+def _featured_article_full_text(featured: dict[str, Any]) -> str:
+    for key in ("full_text", "text", "content", "article_text", "original_text", "raw_text", "body"):
+        text = _policy_text(featured.get(key))
+        if text:
+            return text
+    return ""
+
+
+def _find_source_article_for_featured(featured: dict[str, Any], source_articles: list[Any] | None) -> Any | None:
+    if not source_articles:
+        return None
+    featured_url = _policy_text(featured.get("url") or featured.get("source_url") or featured.get("original_url"))
+    featured_title_key = normalize_title(_policy_text(featured.get("title")))
+    for article in source_articles:
+        article_url = _policy_text(getattr(article, "url", "") if not isinstance(article, dict) else article.get("url"))
+        if featured_url and article_url and article_url == featured_url:
+            return article
+    if not featured_title_key:
+        return None
+    for article in source_articles:
+        article_title = _policy_text(getattr(article, "title", "") if not isinstance(article, dict) else article.get("title"))
+        if article_title and normalize_title(article_title) == featured_title_key:
+            return article
+    return None
+
+
+def _resolve_policy_article_full_text(featured: dict[str, Any], source_articles: list[Any] | None) -> tuple[str, str]:
+    featured_text = _featured_article_full_text(featured)
+    if featured_text:
+        return featured_text, "featured_article"
+    source_article = _find_source_article_for_featured(featured, source_articles)
+    source_text = _policy_article_body_text(source_article)
+    if source_text:
+        return source_text, "source_articles"
+    return "", "brief_fallback"
+
+
+def build_policy_coordinate(
+    brief: dict[str, Any],
+    logger: RunLogger | None = None,
+    source_articles: list[Any] | None = None,
+) -> dict[str, Any]:
     empty = {
         "theme": "",
         "policy_quote": "",
@@ -1111,6 +1181,7 @@ def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = No
         from policy_coordinate_matcher import match_policy_coordinate_candidates
         from policy_coordinate_semantic_fit import policy_match_semantic_fit
         from policy_coordinate_topic_anchors import build_policy_topic_anchors
+        from policy_profile_builder import build_policy_profile, resolve_policy_profile_text
         from policy_coordinate_usage_history import (
             load_policy_coordinate_usage_history,
             recent_policy_coordinate_usage,
@@ -1129,7 +1200,9 @@ def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = No
                 usage_history_path=usage_meta.get("usage_history_path"),
                 usage_history_bad_lines=usage_meta.get("usage_history_bad_lines"),
             )
-        article_text = " ".join(
+        article_title = _policy_text(featured.get("title"))
+        article_source = _policy_text(featured.get("source"))
+        brief_article_text = " ".join(
             _policy_text(featured.get(key))
             for key in [
                 "one_sentence",
@@ -1141,13 +1214,29 @@ def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = No
                 "article_framework",
             ]
         )
+        article_full_text, article_text_source = _resolve_policy_article_full_text(featured, source_articles)
+        policy_profile_text, policy_profile_source = resolve_policy_profile_text(article_full_text, brief)
+        policy_profile = build_policy_profile(
+            article_title=article_title,
+            article_source=article_source,
+            article_full_text=article_full_text,
+            brief=brief,
+        )
         topic_anchors = build_policy_topic_anchors(brief)
         topic_query_text = _policy_text(topic_anchors.get("query_text"))
+        profile_summary_text = " ".join(
+            _policy_text(policy_profile.get(key))
+            for key in ("core_problem", "governance_logic", "value_orientation")
+        )
         keywords = (
             _policy_list(topic_anchors.get("fine_grained_tags"))
             + _policy_list(takeaway.get("keywords"))
             + _policy_list(featured.get("title"))
             + _policy_list(featured.get("article_framework_map"))
+            + _policy_list(policy_profile.get("fine_anchors"))
+            + _policy_list(policy_profile.get("negative_behaviors"))
+            + _policy_list(policy_profile.get("positive_behaviors"))
+            + _policy_list(policy_profile.get("retrieval_queries"))
         )
         exam_scenarios = (
             _policy_list(featured.get("exam_use"))
@@ -1156,10 +1245,31 @@ def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = No
             + _policy_list(question.get("topic_category"))
             + _policy_list(question.get("exam_focus"))
         )
+        matcher_article_text = " ".join(
+            part
+            for part in [
+                topic_query_text,
+                brief_article_text,
+                profile_summary_text,
+                _policy_limit_text(policy_profile_text, 4000),
+            ]
+            if part
+        ).strip()
+        if logger:
+            logger.info(
+                "policy coordinate profile",
+                article_title=article_title,
+                article_source=article_source,
+                article_text_source=article_text_source if article_full_text else policy_profile_source,
+                article_text_length=len(policy_profile_text),
+                article_text_preview=_policy_preview(policy_profile_text, 500),
+                policy_profile=policy_profile,
+                retrieval_queries=_policy_list(policy_profile.get("retrieval_queries")),
+            )
         matches = match_policy_coordinate_candidates(
-            article_title=_policy_text(featured.get("title")),
+            article_title=article_title,
             article_summary=topic_query_text or _policy_text(featured.get("one_sentence") or featured.get("core_viewpoint")),
-            article_text=" ".join([topic_query_text, article_text]).strip(),
+            article_text=matcher_article_text,
             main_theme=_policy_text(topic_anchors.get("primary_theme")) or _policy_text(brief.get("today_theme") or featured.get("theme")),
             sub_themes=_policy_list(topic_anchors.get("fine_grained_tags")) + _policy_list(takeaway.get("keywords")),
             keywords=keywords,
@@ -1325,11 +1435,15 @@ def build_policy_coordinate(brief: dict[str, Any], logger: RunLogger | None = No
         return empty
 
 
-def ensure_policy_coordinate_for_render(brief: dict[str, Any], logger: RunLogger | None = None) -> dict[str, Any]:
+def ensure_policy_coordinate_for_render(
+    brief: dict[str, Any],
+    logger: RunLogger | None = None,
+    source_articles: list[Any] | None = None,
+) -> dict[str, Any]:
     coordinate = brief.get("policy_coordinate") if isinstance(brief.get("policy_coordinate"), dict) else {}
     if coordinate and _policy_text(coordinate.get("display_evidence_type")) not in {"", "none"}:
         return brief
-    brief["policy_coordinate"] = build_policy_coordinate(brief, logger=logger)
+    brief["policy_coordinate"] = build_policy_coordinate(brief, logger=logger, source_articles=source_articles)
     return brief
 
 
@@ -1652,7 +1766,7 @@ def recompute_after_brief_change(
     subject = brief.get("email_subject") or f"公考晨读 {today}"
     if not str(subject).startswith(settings.subject_prefix):
         subject = f"{settings.subject_prefix}{subject}"
-    brief = ensure_policy_coordinate_for_render(brief, logger=logger)
+    brief = ensure_policy_coordinate_for_render(brief, logger=logger, source_articles=articles)
     rendered = render_brief_outputs(brief, str(subject))
     quality = evaluate_all_quality(
         brief,
@@ -2713,7 +2827,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
     if not str(subject).startswith(settings.subject_prefix):
         subject = f"{settings.subject_prefix}{subject}"
 
-    brief = ensure_policy_coordinate_for_render(brief, logger=logger)
+    brief = ensure_policy_coordinate_for_render(brief, logger=logger, source_articles=articles)
     plain_text = render_plain_text(brief)
     html_body = render_email_html(brief)
     brief_quality = evaluate_brief_cleanliness(brief, plain_text, html_body)
@@ -2753,7 +2867,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                 logger.info("framework map quality after minor auto fixes", **framework_quality)
                 takeaway_quality = evaluate_takeaway(brief)
                 logger.info("today takeaway quality after minor auto fixes", **takeaway_quality)
-                brief = ensure_policy_coordinate_for_render(brief, logger=logger)
+                brief = ensure_policy_coordinate_for_render(brief, logger=logger, source_articles=articles)
                 plain_text = render_plain_text(brief)
                 html_body = render_email_html(brief)
                 brief_quality = evaluate_brief_cleanliness(brief, plain_text, html_body)

@@ -21,6 +21,31 @@ Current behavior:
 - Expanded matcher debug output so `framework_top` also exposes up to 5 items for diagnostics.
 - Existing matching results, thresholds, display logic, and final rendering behavior remain unchanged.
 
+## 2026-06-11 - Policy coordinate stage 2 profile input
+
+Reason:
+
+- The current `policy_coordinate` matcher mainly consumes brief summary fields and can miss policy semantics that only appear in the full article body.
+- This stage adds full-text-aware `policy_profile` extraction and logging, but keeps the existing policy-coordinate scoring thresholds and display decisions unchanged.
+
+Files changed:
+
+- `policy_profile_builder.py`
+- `main.py`
+- `tests/test_policy_profile_builder.py`
+- `CHANGELOG_HARNESS.md`
+
+Latest behavior:
+
+- Added `policy_profile_builder.py` to build `core_problem`, `governance_logic`, `value_orientation`, `negative_behaviors`, `positive_behaviors`, `fine_anchors`, and `retrieval_queries` from article title, source, and full text with brief fallback.
+- `build_policy_coordinate(...)` now accepts `source_articles`, prefers full article text from the original crawl payload, and falls back to `featured_article` text-like fields or brief-composed text when full text is unavailable.
+- Policy-coordinate matching now receives the new policy-profile summaries, anchors, and retrieval queries as extra input, but the existing matching thresholds and display/hide logic are unchanged.
+- Runtime logs now include a `policy coordinate profile` event with `article_title`, `article_source`, `article_text_source`, `article_text_length`, truncated text preview, full `policy_profile`, and generated `retrieval_queries`.
+
+Follow-ups:
+
+1. This stage only improves input quality and observability; it does not yet make `policy_profile` a hard decision layer for final display.
+2. If full-text input later introduces noisy recall, tune query composition and keyword deduplication before changing backend display thresholds.
 ## 2026-06-02 - Add reading guide review checks
 
 Reason:
