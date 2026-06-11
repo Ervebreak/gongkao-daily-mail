@@ -361,6 +361,52 @@ def _top(scored: list[Candidate], *, limit: int, min_score: float = 1) -> list[C
     ][:limit]
 
 
+def _candidate_identity(row: Candidate) -> str:
+    source = str(row.get("source") or "").strip()
+    candidate_id = str(row.get("id") or "").strip()
+    article_id = str(row.get("article_id") or "").strip()
+    if candidate_id:
+        return f"{source}:{candidate_id}"
+    if article_id:
+        return f"{source}:article:{article_id}"
+    return f"{source}:{id(row)}"
+
+
+def _dedupe_scored(scored: list[Candidate]) -> list[Candidate]:
+    kept: dict[str, Candidate] = {}
+    for row in sorted(scored, key=lambda item: item.get("score", 0), reverse=True):
+        identity = _candidate_identity(row)
+        if identity not in kept:
+            kept[identity] = row
+    return list(kept.values())
+
+
+def _priority_decision(
+    *,
+    best_authoritative: Candidate | None,
+    best_policy: Candidate | None,
+    authoritative_threshold: float,
+    policy_threshold: float,
+) -> str:
+    authoritative_score = float((best_authoritative or {}).get("score") or 0.0)
+    policy_score = float((best_policy or {}).get("score") or 0.0)
+    if best_authoritative and authoritative_score >= authoritative_threshold:
+        return (
+            "authoritative_quote_selected"
+            if not best_policy or policy_score < policy_threshold
+            else "authoritative_quote_selected_over_policy_fallback"
+        )
+    if best_policy and policy_score >= policy_threshold:
+        return "policy_statement_fallback_selected"
+    if best_authoritative and best_policy:
+        return "hidden_below_threshold_authoritative_and_policy"
+    if best_authoritative:
+        return "hidden_below_threshold_authoritative_only"
+    if best_policy:
+        return "hidden_below_threshold_policy_only"
+    return "hidden_no_candidate"
+
+
 def _public_result(scored: Candidate | None) -> Candidate | None:
     if not scored:
         return None
@@ -504,7 +550,8 @@ def match_policy_coordinate_candidates(
         if _eligible_policy_from_all(item)
     ]
     policy_all_scores = _apply_usage_penalties(policy_all_scores, kind="policy", usage_context=usage_context)
-    best_policy_score = _best(policy_core_scores + policy_all_scores)
+    policy_statement_scores = _dedupe_scored(policy_core_scores + policy_all_scores)
+    best_policy_score = _best(policy_statement_scores)
 
     quote_core_scores = [
         _score_qiushi_quote(item, query, source="qiushi_quotes_core")
@@ -518,7 +565,14 @@ def match_policy_coordinate_candidates(
         if not _is_disabled(item)
     ]
     quote_candidate_scores = _apply_usage_penalties(quote_candidate_scores, kind="qiushi_quote", usage_context=usage_context)
-    best_quote_score = _best(quote_core_scores + quote_candidate_scores)
+    authoritative_scores = _dedupe_scored(quote_core_scores + quote_candidate_scores)
+    best_quote_score = _best(authoritative_scores)
+    final_source_priority_decision = _priority_decision(
+        best_authoritative=best_quote_score,
+        best_policy=best_policy_score,
+        authoritative_threshold=60,
+        policy_threshold=65,
+    )
 
     article_scores = [_score_article_index(item, query) for item in load_qiushi_article_index() if item.get("status", "active") != "disabled"]
     best_article_scores = _top(article_scores, limit=3)
@@ -541,8 +595,8 @@ def match_policy_coordinate_candidates(
     matched_chunks = [_public_result(row) for row in _top(chunk_scores, limit=3, min_score=25)]
     best_framework_score = _best(framework_scores, min_score=30)
     selected_repeat_notes = {
-        "policy": _annotate_repeat_selection(best_policy_score, policy_core_scores + policy_all_scores, min_score=1),
-        "qiushi_quote": _annotate_repeat_selection(best_quote_score, quote_core_scores + quote_candidate_scores, min_score=1),
+        "policy": _annotate_repeat_selection(best_policy_score, policy_statement_scores, min_score=1),
+        "qiushi_quote": _annotate_repeat_selection(best_quote_score, authoritative_scores, min_score=1),
         "framework": _annotate_repeat_selection(best_framework_score, framework_scores, min_score=30),
     }
     return {
@@ -565,6 +619,9 @@ def match_policy_coordinate_candidates(
                 "policy_all_top": [_public_result(row) for row in _top(policy_all_scores, limit=5)],
                 "qiushi_quotes_core_top": [_public_result(row) for row in _top(quote_core_scores, limit=5)],
                 "qiushi_quotes_candidates_top": [_public_result(row) for row in _top(quote_candidate_scores, limit=5)],
+                "authoritative_candidates_top10": [_public_result(row) for row in _top(authoritative_scores, limit=10)],
+                "policy_statement_candidates_top10": [_public_result(row) for row in _top(policy_statement_scores, limit=10)],
+                "final_source_priority_decision": final_source_priority_decision,
                 "chunk_top": [_public_result(row) for row in _top(chunk_scores, limit=5)],
                 "framework_top": [_public_result(row) for row in _top(framework_scores, limit=5)],
             },

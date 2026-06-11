@@ -873,6 +873,8 @@ def _policy_coordinate_debug_payload(
         "policy_all_top5": _policy_candidate_log_rows(debug_scores.get("policy_all_top"), limit=5),
         "qiushi_quotes_core_top5": _policy_candidate_log_rows(debug_scores.get("qiushi_quotes_core_top"), limit=5),
         "qiushi_quotes_candidates_top5": _policy_candidate_log_rows(debug_scores.get("qiushi_quotes_candidates_top"), limit=5),
+        "authoritative_candidates_top10": _policy_candidate_log_rows(debug_scores.get("authoritative_candidates_top10"), limit=10),
+        "policy_statement_candidates_top10": _policy_candidate_log_rows(debug_scores.get("policy_statement_candidates_top10"), limit=10),
         "chunk_top5": _policy_candidate_log_rows(debug_scores.get("chunk_top"), limit=5),
         "framework_top5": _policy_candidate_log_rows(debug_scores.get("framework_top"), limit=5),
         "selected_evidence_type": _policy_text(result.get("display_evidence_type")) or "none",
@@ -884,6 +886,7 @@ def _policy_coordinate_debug_payload(
         "semantic_fit_status": _policy_text((semantic_fit or {}).get("status")) or "not_run",
         "disabled_reason": _policy_text(disabled_reason),
         "evidence_selection_reason": _policy_text(result.get("evidence_selection_reason")),
+        "final_source_priority_decision": _policy_text(debug_scores.get("final_source_priority_decision")),
         "policy_coordinate_topic_query": _policy_log_preview(topic_query_text, limit=180),
     }
 
@@ -917,9 +920,8 @@ def _policy_coordinate_display_fields(
 ) -> dict[str, Any]:
     has_policy = bool(policy_quote and policy_source)
     has_qiushi = bool(authoritative_quote and authoritative_source)
-    max_score = max(policy_score if has_policy else 0.0, qiushi_score if has_qiushi else 0.0)
-    redundant = has_policy and has_qiushi and _evidence_redundant(policy_quote, authoritative_quote)
-    score_gap = abs(policy_score - qiushi_score)
+    authoritative_ready = has_qiushi and qiushi_score >= 60
+    policy_ready = has_policy and policy_score >= 65
 
     if not has_policy and not has_qiushi:
         return {
@@ -930,108 +932,38 @@ def _policy_coordinate_display_fields(
             "evidence_selection_reason": "policy_quote 和 authoritative_quote 都不可展示。",
         }
 
-    if max_score < 30:
-        return {
-            "display_evidence_type": "none",
-            "display_evidence_label": "",
-            "display_evidence_quote": "",
-            "display_evidence_source": "",
-            "evidence_selection_reason": f"policy_score={policy_score:.1f}、qiushi_score={qiushi_score:.1f}，整体贴合度不足，隐藏模块。",
-        }
-
-    if has_policy and not has_qiushi:
-        return {
-            "display_evidence_type": "policy",
-            "display_evidence_label": "政策原文",
-            "display_evidence_quote": policy_quote,
-            "display_evidence_source": policy_source,
-            "evidence_selection_reason": f"仅政策原文可稳定展示，policy_score={policy_score:.1f}。",
-        }
-
-    if has_qiushi and not has_policy:
+    if authoritative_ready:
         return {
             "display_evidence_type": "qiushi",
             "display_evidence_label": "权威论述",
             "display_evidence_quote": authoritative_quote,
             "display_evidence_source": authoritative_source,
-            "evidence_selection_reason": f"仅权威论述可稳定展示，qiushi_score={qiushi_score:.1f}。",
+            "evidence_selection_reason": (
+                f"按权威表达优先展示，qiushi_score={qiushi_score:.1f}"
+                + (f"，policy_score={policy_score:.1f}" if has_policy else "")
+                + "。"
+            ),
         }
 
-    if redundant:
-        if policy_score >= qiushi_score:
-            return {
-                "display_evidence_type": "policy",
-                "display_evidence_label": "政策原文",
-                "display_evidence_quote": policy_quote,
-                "display_evidence_source": policy_source,
-                "evidence_selection_reason": f"两条依据语义重复，优先保留更具体的政策原文，policy_score={policy_score:.1f}，qiushi_score={qiushi_score:.1f}。",
-            }
-        return {
-            "display_evidence_type": "qiushi",
-            "display_evidence_label": "权威论述",
-            "display_evidence_quote": authoritative_quote,
-            "display_evidence_source": authoritative_source,
-            "evidence_selection_reason": f"两条依据语义重复，优先保留更贴近文章的权威论述，policy_score={policy_score:.1f}，qiushi_score={qiushi_score:.1f}。",
-        }
-
-    if policy_score >= 45 and qiushi_score >= 45:
-        if score_gap >= 12:
-            if policy_score > qiushi_score:
-                return {
-                    "display_evidence_type": "policy",
-                    "display_evidence_label": "政策原文",
-                    "display_evidence_quote": policy_quote,
-                    "display_evidence_source": policy_source,
-                    "evidence_selection_reason": f"两条依据都可用，但政策原文贴合度明显更高，policy_score={policy_score:.1f}，qiushi_score={qiushi_score:.1f}。",
-                }
-            return {
-                "display_evidence_type": "qiushi",
-                "display_evidence_label": "权威论述",
-                "display_evidence_quote": authoritative_quote,
-                "display_evidence_source": authoritative_source,
-                "evidence_selection_reason": f"两条依据都可用，但权威论述贴合度明显更高，policy_score={policy_score:.1f}，qiushi_score={qiushi_score:.1f}。",
-            }
-        return {
-            "display_evidence_type": "both",
-            "display_evidence_label": "政策原文 / 权威论述",
-            "display_evidence_quote": f"{policy_quote} / {authoritative_quote}",
-            "display_evidence_source": f"{policy_source} / {authoritative_source}",
-            "evidence_selection_reason": f"政策原文和权威论述都高度贴切且不重复，policy_score={policy_score:.1f}，qiushi_score={qiushi_score:.1f}。",
-        }
-
-    if policy_score >= 45 and policy_score >= qiushi_score:
+    if policy_ready:
         return {
             "display_evidence_type": "policy",
             "display_evidence_label": "政策原文",
             "display_evidence_quote": policy_quote,
             "display_evidence_source": policy_source,
-            "evidence_selection_reason": f"政策原文更贴合当天文章，policy_score={policy_score:.1f}，qiushi_score={qiushi_score:.1f}。",
-        }
-
-    if qiushi_score >= 45 and qiushi_score >= policy_score:
-        return {
-            "display_evidence_type": "qiushi",
-            "display_evidence_label": "权威论述",
-            "display_evidence_quote": authoritative_quote,
-            "display_evidence_source": authoritative_source,
-            "evidence_selection_reason": f"权威论述更贴合当天文章，policy_score={policy_score:.1f}，qiushi_score={qiushi_score:.1f}。",
-        }
-
-    if policy_score >= qiushi_score:
-        return {
-            "display_evidence_type": "policy",
-            "display_evidence_label": "政策原文",
-            "display_evidence_quote": policy_quote,
-            "display_evidence_source": policy_source,
-            "evidence_selection_reason": f"中等贴合度场景下优先展示分数更高的政策原文，policy_score={policy_score:.1f}，qiushi_score={qiushi_score:.1f}。",
+            "evidence_selection_reason": (
+                f"权威表达未达展示阈值，回退到政策原文，policy_score={policy_score:.1f}"
+                + (f"，qiushi_score={qiushi_score:.1f}" if has_qiushi else "")
+                + "。"
+            ),
         }
 
     return {
-        "display_evidence_type": "qiushi",
-        "display_evidence_label": "权威论述",
-        "display_evidence_quote": authoritative_quote,
-        "display_evidence_source": authoritative_source,
-        "evidence_selection_reason": f"中等贴合度场景下优先展示分数更高的权威论述，policy_score={policy_score:.1f}，qiushi_score={qiushi_score:.1f}。",
+        "display_evidence_type": "none",
+        "display_evidence_label": "",
+        "display_evidence_quote": "",
+        "display_evidence_source": "",
+        "evidence_selection_reason": f"权威表达与政策原文均未达到展示阈值，policy_score={policy_score:.1f}，qiushi_score={qiushi_score:.1f}。",
     }
 
 
@@ -1052,7 +984,6 @@ def _refresh_policy_coordinate_display_fields(coordinate: dict[str, Any]) -> dic
     coordinate["source_type"] = {
         "policy": "policy_only",
         "qiushi": "qiushi_only",
-        "both": "policy_plus_qiushi",
         "none": "none",
     }.get(display_type, "none")
     return coordinate
@@ -1060,9 +991,13 @@ def _refresh_policy_coordinate_display_fields(coordinate: dict[str, Any]) -> dic
 
 def _policy_coordinate_backend_status(coordinate: dict[str, Any]) -> tuple[str, str]:
     policy_score = _policy_float(coordinate.get("policy_match_score"))
+    qiushi_score = _policy_float(coordinate.get("qiushi_match_score"))
+    display_type = _policy_text(coordinate.get("display_evidence_type")).lower()
     source_type = _policy_text(coordinate.get("source_type")).lower()
-    if policy_score < 60:
-        return ("skipped", f"weak_match: policy_match_score={policy_score:.1f} below backend threshold 60.")
+    if display_type == "none" or source_type == "none":
+        return ("skipped", "weak_match: no qualified authoritative quote or policy statement after priority routing.")
+    if source_type == "qiushi_only" and qiushi_score < 60:
+        return ("skipped", f"weak_match: qiushi_only qiushi_match_score={qiushi_score:.1f} below backend threshold 60.")
     if source_type == "policy_only" and policy_score < 65:
         return ("skipped", f"weak_match: policy_only policy_match_score={policy_score:.1f} below backend threshold 65.")
     return ("ok", "")

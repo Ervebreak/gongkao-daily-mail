@@ -51,6 +51,30 @@ def _hits(text: str, terms: list[str]) -> list[str]:
     return [term for term in terms if term and term in compact_text]
 
 
+def _anchor_specific_terms(article_anchors: Any) -> list[str]:
+    values: list[str] = []
+    if isinstance(article_anchors, dict):
+        fine_grained = article_anchors.get("fine_grained_tags")
+        if isinstance(fine_grained, (list, tuple, set)):
+            values.extend(_text(item) for item in fine_grained)
+        values.extend(
+            _text(article_anchors.get(key))
+            for key in ("query_text", "primary_theme", "policy_profile_query")
+        )
+    else:
+        values.append(_text(article_anchors))
+    seen: set[str] = set()
+    terms: list[str] = []
+    for value in values:
+        candidate = value.strip()
+        compact_candidate = _compact(candidate)
+        if len(compact_candidate) < 4 or compact_candidate in seen or candidate in GENERIC_OVERLAP_TERMS:
+            continue
+        seen.add(compact_candidate)
+        terms.append(candidate)
+    return terms
+
+
 def _evidence_text(policy_coordinate: dict[str, Any]) -> str:
     return _text(
         [
@@ -71,6 +95,7 @@ def policy_match_semantic_fit(article_anchors: Any, policy_coordinate: dict[str,
     anchor_hits = _hits(anchor_text, ARTICLE_FINE_TERMS)
     evidence_hits = _hits(evidence_text, EVIDENCE_FIT_TERMS)
     generic_hits = _hits(evidence_text, GENERIC_OVERLAP_TERMS)
+    specific_anchor_hits = _hits(evidence_text, _anchor_specific_terms(article_anchors))
     source_type = _text(policy_coordinate.get("source_type")).lower()
 
     if not anchor_hits:
@@ -81,16 +106,18 @@ def policy_match_semantic_fit(article_anchors: Any, policy_coordinate: dict[str,
             "anchor_hits": [],
             "evidence_hits": evidence_hits,
             "generic_hits": generic_hits,
+            "specific_anchor_hits": specific_anchor_hits,
         }
 
-    if evidence_hits:
+    if evidence_hits or specific_anchor_hits:
         return {
             "display": True,
             "status": "ok",
             "reason": "",
             "anchor_hits": anchor_hits,
-            "evidence_hits": evidence_hits,
+            "evidence_hits": evidence_hits or specific_anchor_hits,
             "generic_hits": generic_hits,
+            "specific_anchor_hits": specific_anchor_hits,
         }
 
     if source_type == "policy_only" or generic_hits:
@@ -105,6 +132,7 @@ def policy_match_semantic_fit(article_anchors: Any, policy_coordinate: dict[str,
             "anchor_hits": anchor_hits,
             "evidence_hits": [],
             "generic_hits": generic_hits,
+            "specific_anchor_hits": specific_anchor_hits,
         }
 
     return {
@@ -114,6 +142,7 @@ def policy_match_semantic_fit(article_anchors: Any, policy_coordinate: dict[str,
         "anchor_hits": anchor_hits,
         "evidence_hits": [],
         "generic_hits": generic_hits,
+        "specific_anchor_hits": specific_anchor_hits,
     }
 
 
