@@ -76,6 +76,10 @@ def test_multi_query_merges_specific_authoritative_quote_into_candidates(monkeyp
 
     debug_scores = merged["debug_scores"]
     assert len(calls) == 3
+    specific_call = next(call for call in calls if call.get("article_summary") == "正确政绩观 面子工程")
+    assert "正确政绩观" in specific_call["keywords"]
+    assert "面子工程" in specific_call["keywords"]
+    assert "正确政绩观 面子工程" in specific_call["keywords"]
     assert debug_scores["multi_query_enabled"] is True
     assert debug_scores["retrieval_query_count"] == 2
     assert debug_scores["retrieval_queries_used"] == ["基层治理", "正确政绩观 面子工程"]
@@ -116,3 +120,11 @@ def test_multi_query_falls_back_to_single_match_when_queries_missing(monkeypatch
     assert len(calls) == 1
     assert debug_scores["multi_query_enabled"] is False
     assert debug_scores["retrieval_query_count"] == 0
+
+
+def test_query_keywords_split_compound_query():
+    keywords = matcher._query_keywords("正确政绩观 面子工程")
+
+    assert "正确政绩观 面子工程" in keywords
+    assert "正确政绩观" in keywords
+    assert "面子工程" in keywords

@@ -122,6 +122,33 @@ def _extract_keywords(*values: Any, limit: int = 30) -> list[str]:
     return keywords
 
 
+def _dedupe_query_keywords(values: list[str], *, limit: int = 12) -> list[str]:
+    seen: set[str] = set()
+    keywords: list[str] = []
+    for item in values:
+        text = str(item or "").strip()
+        if not text:
+            continue
+        key = _compact(text)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        keywords.append(text)
+        if len(keywords) >= limit:
+            break
+    return keywords
+
+
+def _query_keywords(query_text: str, *, limit: int = 10) -> list[str]:
+    text = str(query_text or "").strip()
+    if not text:
+        return []
+    parts = re.split(r"[\s,，、;；/|]+", text)
+    split_keywords = [part.strip() for part in parts if part.strip()]
+    extracted_keywords = _extract_keywords(text, limit=limit)
+    return _dedupe_query_keywords([text, *split_keywords, *extracted_keywords], limit=limit)
+
+
 def policy_topic_route_keywords(*values: Any) -> list[str]:
     combined = _as_text(values)
     compact_combined = _compact(combined)
@@ -829,13 +856,14 @@ def match_policy_coordinate_candidates_multi_query(
     merged_keyword_input = _as_list(keywords)
 
     for query_text in queries_used:
+        query_keywords = _query_keywords(query_text)
         query_result = match_policy_coordinate_candidates(
             article_title=article_title,
             article_summary=query_text,
             article_text=query_text,
             main_theme=main_theme,
             sub_themes=sub_themes,
-            keywords=merged_keyword_input + [query_text],
+            keywords=_dedupe_query_keywords(merged_keyword_input + query_keywords),
             exam_scenarios=exam_scenarios,
             article=article,
             recent_usage=recent_usage,
