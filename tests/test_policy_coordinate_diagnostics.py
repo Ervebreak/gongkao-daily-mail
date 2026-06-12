@@ -44,6 +44,9 @@ def test_policy_coordinate_debug_payload_contains_required_fields():
                     "short_quote": "Strengthen platform accountability.",
                 }
             ],
+            "expanded_authoritative_article_ids": ["article-1"],
+            "expanded_authoritative_quote_count": 1,
+            "expanded_authoritative_quote_ids": ["quote-1"],
             "final_source_priority_decision": "authoritative_quote_selected_over_policy_fallback",
             "chunk_top": [],
             "framework_top": [],
@@ -70,6 +73,9 @@ def test_policy_coordinate_debug_payload_contains_required_fields():
     assert payload["policy_score"] == 72.4
     assert payload["policy_core_top5"][0]["policy_id"] == "policy-1"
     assert payload["authoritative_candidates_top10"][0]["quote_id"] == "quote-1"
+    assert payload["expanded_authoritative_article_ids"] == ["article-1"]
+    assert payload["expanded_authoritative_quote_count"] == 1
+    assert payload["expanded_authoritative_quote_ids"] == ["quote-1"]
     assert payload["policy_statement_candidates_top10"][0]["policy_id"] == "policy-1"
     assert payload["final_source_priority_decision"] == "authoritative_quote_selected_over_policy_fallback"
 

@@ -381,6 +381,54 @@ def _dedupe_scored(scored: list[Candidate]) -> list[Candidate]:
     return list(kept.values())
 
 
+def _collect_article_ids(*scored_groups: list[Candidate]) -> list[str]:
+    article_ids: list[str] = []
+    seen: set[str] = set()
+    for group in scored_groups:
+        for row in group:
+            article_id = str(row.get("article_id") or row.get("id") or "").strip()
+            if not article_id or article_id in seen:
+                continue
+            seen.add(article_id)
+            article_ids.append(article_id)
+    return article_ids
+
+
+def _boost_authoritative_candidate(row: Candidate, *, article_id: str, boost: float) -> Candidate:
+    boosted = dict(row)
+    boosted["score"] = float(boosted.get("score", 0.0)) + boost
+    reasons = dict(boosted.get("reasons") or {})
+    reasons["expanded_from_article_id"] = article_id
+    reasons["expanded_article_boost"] = boost
+    reasons["_semantic_hits"] = max(int(reasons.get("_semantic_hits", 0) or 0), 1)
+    boosted["reasons"] = reasons
+    return boosted
+
+
+def _expand_authoritative_scores(
+    *,
+    base_scores: list[Candidate],
+    expanded_article_ids: list[str],
+    boost: float = 6.0,
+) -> tuple[list[Candidate], list[str]]:
+    if not expanded_article_ids:
+        return [], []
+    expanded_id_set = {article_id for article_id in expanded_article_ids if article_id}
+    expanded_scores: list[Candidate] = []
+    expanded_quote_ids: list[str] = []
+    seen_quote_ids: set[str] = set()
+    for row in base_scores:
+        article_id = str(row.get("article_id") or "").strip()
+        quote_id = str(row.get("id") or "").strip()
+        if not article_id or article_id not in expanded_id_set or not quote_id:
+            continue
+        expanded_scores.append(_boost_authoritative_candidate(row, article_id=article_id, boost=boost))
+        if quote_id not in seen_quote_ids:
+            seen_quote_ids.add(quote_id)
+            expanded_quote_ids.append(quote_id)
+    return expanded_scores, expanded_quote_ids
+
+
 def _priority_decision(
     *,
     best_authoritative: Candidate | None,
@@ -565,20 +613,14 @@ def match_policy_coordinate_candidates(
         if not _is_disabled(item)
     ]
     quote_candidate_scores = _apply_usage_penalties(quote_candidate_scores, kind="qiushi_quote", usage_context=usage_context)
-    authoritative_scores = _dedupe_scored(quote_core_scores + quote_candidate_scores)
-    best_quote_score = _best(authoritative_scores)
-    final_source_priority_decision = _priority_decision(
-        best_authoritative=best_quote_score,
-        best_policy=best_policy_score,
-        authoritative_threshold=60,
-        policy_threshold=65,
-    )
 
     article_scores = [_score_article_index(item, query) for item in load_qiushi_article_index() if item.get("status", "active") != "disabled"]
     best_article_scores = _top(article_scores, limit=3)
+    direct_authoritative_scores = _dedupe_scored(quote_core_scores + quote_candidate_scores)
+    direct_best_quote_score = _best(direct_authoritative_scores)
     boosted_article_ids = {str(row.get("id")) for row in best_article_scores if row.get("id")}
-    if best_quote_score and best_quote_score.get("article_id"):
-        boosted_article_ids.add(str(best_quote_score["article_id"]))
+    if direct_best_quote_score and direct_best_quote_score.get("article_id"):
+        boosted_article_ids.add(str(direct_best_quote_score["article_id"]))
 
     chunk_scores = [
         _score_chunk(item, query, boosted_article_ids)
@@ -591,6 +633,26 @@ def match_policy_coordinate_candidates(
         if not _is_disabled(item)
     ]
     framework_scores = _apply_usage_penalties(framework_scores, kind="framework", usage_context=usage_context)
+
+    chunk_top_scores = _top(chunk_scores, limit=5)
+    framework_top_scores = _top(framework_scores, limit=5)
+    expanded_authoritative_article_ids = _collect_article_ids(
+        best_article_scores,
+        chunk_top_scores,
+        framework_top_scores,
+    )
+    expanded_authoritative_scores, expanded_authoritative_quote_ids = _expand_authoritative_scores(
+        base_scores=quote_core_scores + quote_candidate_scores,
+        expanded_article_ids=expanded_authoritative_article_ids,
+    )
+    authoritative_scores = _dedupe_scored(quote_core_scores + quote_candidate_scores + expanded_authoritative_scores)
+    best_quote_score = _best(authoritative_scores)
+    final_source_priority_decision = _priority_decision(
+        best_authoritative=best_quote_score,
+        best_policy=best_policy_score,
+        authoritative_threshold=60,
+        policy_threshold=65,
+    )
 
     matched_chunks = [_public_result(row) for row in _top(chunk_scores, limit=3, min_score=25)]
     best_framework_score = _best(framework_scores, min_score=30)
@@ -621,9 +683,12 @@ def match_policy_coordinate_candidates(
                 "qiushi_quotes_candidates_top": [_public_result(row) for row in _top(quote_candidate_scores, limit=5)],
                 "authoritative_candidates_top10": [_public_result(row) for row in _top(authoritative_scores, limit=10)],
                 "policy_statement_candidates_top10": [_public_result(row) for row in _top(policy_statement_scores, limit=10)],
+                "expanded_authoritative_article_ids": expanded_authoritative_article_ids,
+                "expanded_authoritative_quote_count": len(expanded_authoritative_quote_ids),
+                "expanded_authoritative_quote_ids": expanded_authoritative_quote_ids,
                 "final_source_priority_decision": final_source_priority_decision,
-                "chunk_top": [_public_result(row) for row in _top(chunk_scores, limit=5)],
-                "framework_top": [_public_result(row) for row in _top(framework_scores, limit=5)],
+                "chunk_top": [_public_result(row) for row in chunk_top_scores],
+                "framework_top": [_public_result(row) for row in framework_top_scores],
             },
         }
     }
