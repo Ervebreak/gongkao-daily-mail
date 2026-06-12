@@ -1,5 +1,32 @@
 # Harness Change Log
 
+## 2026-06-12 - Policy coordinate stage 4 reranker
+
+Reason:
+
+- Stage 3 already routes authoritative expressions ahead of policy statements, but final selection still depends only on rule scores and can overfit broad thematic overlap.
+- This stage adds a lightweight LLM reranker so the module only displays when a candidate really explains the article's core contradiction, while keeping the retrieval layer rule-based.
+
+Files changed:
+
+- `main.py`
+- `llm_client.py`
+- `policy_coordinate_reranker.py`
+- `policy_coordinate_semantic_fit.py`
+- `email_renderer.py`
+- `tests/test_policy_coordinate_diagnostics.py`
+- `tests/test_policy_coordinate_reranker.py`
+- `tests/test_policy_coordinate_semantic_fit.py`
+- `CHANGELOG_HARNESS.md`
+
+Latest behavior:
+
+- Added `policy_coordinate_reranker.py` to rerank up to 10 authoritative candidates first, then policy-statement candidates only as fallback.
+- Reranker inputs are clipped to article title, compact `policy_profile`, summary text, and compact candidate rows to control token use.
+- Display thresholds now follow stage 4 routing: authoritative rerank must reach 70, policy-statement rerank must reach 75, otherwise the module stays hidden.
+- Logs now include `rerank_input_summary`, `authoritative_rerank_result`, `policy_statement_rerank_result`, `final_display_type`, and `hidden_reason`.
+- Added a small semantic-fit override so a specific reranked authoritative explanation is not rejected only because old keyword lists miss it.
+
 ## 2026-06-11 - Add policy coordinate diagnostics only
 
 Reason:

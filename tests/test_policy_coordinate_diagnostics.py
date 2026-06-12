@@ -93,7 +93,7 @@ def test_policy_coordinate_display_falls_back_to_policy_statement():
         policy_source="Policy source",
         authoritative_quote="Authoritative quote",
         authoritative_source="Qiushi",
-        policy_score=68.0,
+        policy_score=78.0,
         qiushi_score=58.0,
     )
 

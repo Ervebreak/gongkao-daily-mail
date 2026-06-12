@@ -38,3 +38,18 @@ def test_authoritative_quote_with_specific_anchor_overlap_is_not_misclassified()
     }
 
     assert should_display_policy_match(article_anchors, coordinate) is True
+
+
+def test_authoritative_quote_can_pass_with_specific_rerank_connection():
+    article_anchors = {
+        "query_text": "cover-up face project inspection-oriented response",
+        "fine_grained_tags": ["cover-up", "face project", "inspection-oriented response"],
+    }
+    coordinate = {
+        "source_type": "qiushi_only",
+        "display_evidence_type": "qiushi",
+        "authoritative_quote": "We should reject short-term image projects and inspection-only rectification.",
+        "article_connection": "It directly criticizes cover-up, face projects, and inspection-oriented response in the article.",
+    }
+
+    assert should_display_policy_match(article_anchors, coordinate) is True

@@ -429,10 +429,21 @@ def should_render_policy_coordinate(brief: dict[str, Any]) -> bool:
         policy_match_score = float(coordinate.get("policy_match_score") or 0)
     except (TypeError, ValueError):
         policy_match_score = 0.0
+    try:
+        qiushi_match_score = float(coordinate.get("qiushi_match_score") or 0)
+    except (TypeError, ValueError):
+        qiushi_match_score = 0.0
     source_type = str(coordinate.get("source_type") or "").strip().lower()
-    if policy_match_score < 60:
+    display_level = str(coordinate.get("display_level") or "").strip().lower()
+    if display_level == "hidden":
         return False
-    if source_type == "policy_only" and policy_match_score < 65:
+    if display_type == "qiushi" and qiushi_match_score < 70:
+        return False
+    if display_type == "policy" and policy_match_score < 75:
+        return False
+    if source_type == "qiushi_only" and qiushi_match_score < 70:
+        return False
+    if source_type == "policy_only" and policy_match_score < 75:
         return False
     answer_angles = as_list(coordinate.get("answer_angles"))
     if any(has_truncated_answer_angle(item) for item in answer_angles):
