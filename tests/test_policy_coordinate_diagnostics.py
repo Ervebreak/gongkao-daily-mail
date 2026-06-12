@@ -47,6 +47,19 @@ def test_policy_coordinate_debug_payload_contains_required_fields():
             "expanded_authoritative_article_ids": ["article-1"],
             "expanded_authoritative_quote_count": 1,
             "expanded_authoritative_quote_ids": ["quote-1"],
+            "multi_query_enabled": True,
+            "retrieval_query_count": 2,
+            "retrieval_queries_used": ["基层治理", "正确政绩观 面子工程"],
+            "per_query_authoritative_top_ids": [
+                {"query": "基层治理", "quote_ids": ["quote-generic"]},
+                {"query": "正确政绩观 面子工程", "quote_ids": ["quote-1"]},
+            ],
+            "per_query_policy_top_ids": [
+                {"query": "基层治理", "policy_ids": ["policy-generic"]},
+                {"query": "正确政绩观 面子工程", "policy_ids": ["policy-1"]},
+            ],
+            "merged_authoritative_count": 2,
+            "merged_policy_count": 2,
             "final_source_priority_decision": "authoritative_quote_selected_over_policy_fallback",
             "chunk_top": [],
             "framework_top": [],
@@ -76,6 +89,11 @@ def test_policy_coordinate_debug_payload_contains_required_fields():
     assert payload["expanded_authoritative_article_ids"] == ["article-1"]
     assert payload["expanded_authoritative_quote_count"] == 1
     assert payload["expanded_authoritative_quote_ids"] == ["quote-1"]
+    assert payload["multi_query_enabled"] is True
+    assert payload["retrieval_query_count"] == 2
+    assert payload["retrieval_queries_used"] == ["基层治理", "正确政绩观 面子工程"]
+    assert payload["merged_authoritative_count"] == 2
+    assert payload["merged_policy_count"] == 2
     assert payload["policy_statement_candidates_top10"][0]["policy_id"] == "policy-1"
     assert payload["final_source_priority_decision"] == "authoritative_quote_selected_over_policy_fallback"
 

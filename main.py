@@ -934,6 +934,13 @@ def _policy_coordinate_debug_payload(
         "expanded_authoritative_article_ids": _policy_log_preview(debug_scores.get("expanded_authoritative_article_ids") or [], limit=180),
         "expanded_authoritative_quote_count": int(debug_scores.get("expanded_authoritative_quote_count") or 0),
         "expanded_authoritative_quote_ids": _policy_log_preview(debug_scores.get("expanded_authoritative_quote_ids") or [], limit=180),
+        "multi_query_enabled": bool(debug_scores.get("multi_query_enabled")),
+        "retrieval_query_count": int(debug_scores.get("retrieval_query_count") or 0),
+        "retrieval_queries_used": _policy_log_preview(debug_scores.get("retrieval_queries_used") or [], limit=180),
+        "per_query_authoritative_top_ids": _policy_log_preview(debug_scores.get("per_query_authoritative_top_ids") or [], limit=240),
+        "per_query_policy_top_ids": _policy_log_preview(debug_scores.get("per_query_policy_top_ids") or [], limit=240),
+        "merged_authoritative_count": int(debug_scores.get("merged_authoritative_count") or 0),
+        "merged_policy_count": int(debug_scores.get("merged_policy_count") or 0),
         "policy_statement_candidates_top10": _policy_candidate_log_rows(debug_scores.get("policy_statement_candidates_top10"), limit=10),
         "chunk_top5": _policy_candidate_log_rows(debug_scores.get("chunk_top"), limit=5),
         "framework_top5": _policy_candidate_log_rows(debug_scores.get("framework_top"), limit=5),
@@ -1181,7 +1188,7 @@ def _build_policy_coordinate_legacy(
     }
     try:
         from knowledge_base_loader import load_qiushi_article_index
-        from policy_coordinate_matcher import match_policy_coordinate_candidates
+        from policy_coordinate_matcher import match_policy_coordinate_candidates_multi_query
         from policy_coordinate_reranker import (
             build_rerank_input_summary,
             rerank_policy_coordinate_candidates,
@@ -1570,7 +1577,7 @@ def build_policy_coordinate(
                 retrieval_queries=_policy_list(policy_profile.get("retrieval_queries")),
             )
 
-        matches = match_policy_coordinate_candidates(
+        matches = match_policy_coordinate_candidates_multi_query(
             article_title=article_title,
             article_summary=topic_query_text or _policy_text(featured.get("one_sentence") or featured.get("core_viewpoint")),
             article_text=matcher_article_text,
@@ -1579,6 +1586,7 @@ def build_policy_coordinate(
             keywords=keywords,
             exam_scenarios=exam_scenarios,
             recent_usage=recent_usage,
+            retrieval_queries=_policy_list(policy_profile.get("retrieval_queries")),
         ).get("matched_policy_coordinate_candidates", {})
         policy = matches.get("best_policy") if isinstance(matches.get("best_policy"), dict) else {}
         quote = matches.get("best_qiushi_quote") if isinstance(matches.get("best_qiushi_quote"), dict) else {}

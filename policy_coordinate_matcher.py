@@ -122,6 +122,33 @@ def _extract_keywords(*values: Any, limit: int = 30) -> list[str]:
     return keywords
 
 
+def _dedupe_query_keywords(values: list[str], *, limit: int = 12) -> list[str]:
+    seen: set[str] = set()
+    keywords: list[str] = []
+    for item in values:
+        text = str(item or "").strip()
+        if not text:
+            continue
+        key = _compact(text)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        keywords.append(text)
+        if len(keywords) >= limit:
+            break
+    return keywords
+
+
+def _query_keywords(query_text: str, *, limit: int = 10) -> list[str]:
+    text = str(query_text or "").strip()
+    if not text:
+        return []
+    parts = re.split(r"[\s,，、;；/|]+", text)
+    split_keywords = [part.strip() for part in parts if part.strip()]
+    extracted_keywords = _extract_keywords(text, limit=limit)
+    return _dedupe_query_keywords([text, *split_keywords, *extracted_keywords], limit=limit)
+
+
 def policy_topic_route_keywords(*values: Any) -> list[str]:
     combined = _as_text(values)
     compact_combined = _compact(combined)
@@ -465,6 +492,81 @@ def _public_result(scored: Candidate | None) -> Candidate | None:
     return result
 
 
+def _public_score(item: Candidate | None) -> float:
+    if not isinstance(item, dict):
+        return 0.0
+    try:
+        return float(item.get("_match_score") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _merge_public_candidates(items: list[Candidate], *, id_fields: list[str], limit: int) -> list[Candidate]:
+    kept: dict[str, Candidate] = {}
+    anonymous: list[Candidate] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        candidate_id = ""
+        for field in id_fields:
+            candidate_id = str(item.get(field) or "").strip()
+            if candidate_id:
+                break
+        if not candidate_id:
+            anonymous.append(item)
+            continue
+        previous = kept.get(candidate_id)
+        if previous is None or _public_score(item) > _public_score(previous):
+            kept[candidate_id] = item
+    merged = list(kept.values()) + anonymous
+    merged.sort(key=_public_score, reverse=True)
+    return merged[:limit]
+
+
+def _top_public_ids(items: list[Candidate], *, id_fields: list[str], limit: int = 10) -> list[str]:
+    ids: list[str] = []
+    seen: set[str] = set()
+    for item in items[:limit]:
+        if not isinstance(item, dict):
+            continue
+        candidate_id = ""
+        for field in id_fields:
+            candidate_id = str(item.get(field) or "").strip()
+            if candidate_id:
+                break
+        if not candidate_id or candidate_id in seen:
+            continue
+        seen.add(candidate_id)
+        ids.append(candidate_id)
+    return ids
+
+
+def _priority_decision_public(
+    *,
+    best_authoritative: Candidate | None,
+    best_policy: Candidate | None,
+    authoritative_threshold: float,
+    policy_threshold: float,
+) -> str:
+    authoritative_score = _public_score(best_authoritative)
+    policy_score = _public_score(best_policy)
+    if best_authoritative and authoritative_score >= authoritative_threshold:
+        return (
+            "authoritative_quote_selected"
+            if not best_policy or policy_score < policy_threshold
+            else "authoritative_quote_selected_over_policy_fallback"
+        )
+    if best_policy and policy_score >= policy_threshold:
+        return "policy_statement_fallback_selected"
+    if best_authoritative and best_policy:
+        return "hidden_below_threshold_authoritative_and_policy"
+    if best_authoritative:
+        return "hidden_below_threshold_authoritative_only"
+    if best_policy:
+        return "hidden_below_threshold_policy_only"
+    return "hidden_no_candidate"
+
+
 def _recent_usage_context(recent_usage: list[dict[str, Any]] | None) -> dict[str, Any]:
     rows = [item for item in (recent_usage or []) if isinstance(item, dict)]
     rows = sorted(rows, key=lambda item: _parse_usage_date(item.get("date")), reverse=True)
@@ -692,3 +794,192 @@ def match_policy_coordinate_candidates(
             },
         }
     }
+
+
+def match_policy_coordinate_candidates_multi_query(
+    article_title: str = "",
+    article_summary: str = "",
+    article_text: str = "",
+    main_theme: str = "",
+    sub_themes: Any = None,
+    keywords: Any = None,
+    exam_scenarios: Any = None,
+    article: dict[str, Any] | None = None,
+    recent_usage: list[dict[str, Any]] | None = None,
+    retrieval_queries: Any = None,
+) -> dict[str, Any]:
+    queries_used: list[str] = []
+    seen_queries: set[str] = set()
+    for item in _as_list(retrieval_queries)[:8]:
+        query_text = str(item or "").strip()
+        if not query_text or query_text in seen_queries:
+            continue
+        seen_queries.add(query_text)
+        queries_used.append(query_text)
+
+    base_result = match_policy_coordinate_candidates(
+        article_title=article_title,
+        article_summary=article_summary,
+        article_text=article_text,
+        main_theme=main_theme,
+        sub_themes=sub_themes,
+        keywords=keywords,
+        exam_scenarios=exam_scenarios,
+        article=article,
+        recent_usage=recent_usage,
+    )
+    if not queries_used:
+        debug_scores = (
+            base_result.get("matched_policy_coordinate_candidates", {}).get("debug_scores")
+            if isinstance(base_result.get("matched_policy_coordinate_candidates"), dict)
+            else {}
+        )
+        if isinstance(debug_scores, dict):
+            debug_scores.setdefault("multi_query_enabled", False)
+            debug_scores.setdefault("retrieval_query_count", 0)
+            debug_scores.setdefault("retrieval_queries_used", [])
+            debug_scores.setdefault("per_query_authoritative_top_ids", [])
+            debug_scores.setdefault("per_query_policy_top_ids", [])
+            debug_scores.setdefault(
+                "merged_authoritative_count",
+                len(list(debug_scores.get("authoritative_candidates_top10") or [])),
+            )
+            debug_scores.setdefault(
+                "merged_policy_count",
+                len(list(debug_scores.get("policy_statement_candidates_top10") or [])),
+            )
+        return base_result
+
+    per_query_results = []
+    per_query_authoritative_top_ids: list[dict[str, Any]] = []
+    per_query_policy_top_ids: list[dict[str, Any]] = []
+    merged_keyword_input = _as_list(keywords)
+
+    for query_text in queries_used:
+        query_keywords = _query_keywords(query_text)
+        query_result = match_policy_coordinate_candidates(
+            article_title=article_title,
+            article_summary=query_text,
+            article_text=query_text,
+            main_theme=main_theme,
+            sub_themes=sub_themes,
+            keywords=_dedupe_query_keywords(merged_keyword_input + query_keywords),
+            exam_scenarios=exam_scenarios,
+            article=article,
+            recent_usage=recent_usage,
+        )
+        per_query_results.append(query_result)
+        query_debug = (
+            query_result.get("matched_policy_coordinate_candidates", {}).get("debug_scores")
+            if isinstance(query_result.get("matched_policy_coordinate_candidates"), dict)
+            else {}
+        )
+        authoritative_top = list((query_debug or {}).get("authoritative_candidates_top10") or [])
+        policy_top = list((query_debug or {}).get("policy_statement_candidates_top10") or [])
+        per_query_authoritative_top_ids.append(
+            {"query": query_text, "quote_ids": _top_public_ids(authoritative_top, id_fields=["quote_id"], limit=10)}
+        )
+        per_query_policy_top_ids.append(
+            {"query": query_text, "policy_ids": _top_public_ids(policy_top, id_fields=["policy_id"], limit=10)}
+        )
+
+    all_results = [base_result, *per_query_results]
+    merged_authoritative = _merge_public_candidates(
+        [
+            item
+            for result in all_results
+            for item in list(
+                ((result.get("matched_policy_coordinate_candidates") or {}).get("debug_scores") or {}).get(
+                    "authoritative_candidates_top10"
+                )
+                or []
+            )
+        ],
+        id_fields=["quote_id"],
+        limit=10,
+    )
+    merged_policy = _merge_public_candidates(
+        [
+            item
+            for result in all_results
+            for item in list(
+                ((result.get("matched_policy_coordinate_candidates") or {}).get("debug_scores") or {}).get(
+                    "policy_statement_candidates_top10"
+                )
+                or []
+            )
+        ],
+        id_fields=["policy_id"],
+        limit=10,
+    )
+    merged_articles = _merge_public_candidates(
+        [
+            item
+            for result in all_results
+            for item in list(
+                ((result.get("matched_policy_coordinate_candidates") or {}).get("debug_scores") or {}).get(
+                    "best_article_index"
+                )
+                or []
+            )
+        ],
+        id_fields=["article_id"],
+        limit=5,
+    )
+    merged_chunks = _merge_public_candidates(
+        [
+            item
+            for result in all_results
+            for item in list(
+                ((result.get("matched_policy_coordinate_candidates") or {}).get("debug_scores") or {}).get("chunk_top")
+                or []
+            )
+        ],
+        id_fields=["chunk_id"],
+        limit=5,
+    )
+    merged_frameworks = _merge_public_candidates(
+        [
+            item
+            for result in all_results
+            for item in list(
+                ((result.get("matched_policy_coordinate_candidates") or {}).get("debug_scores") or {}).get(
+                    "framework_top"
+                )
+                or []
+            )
+        ],
+        id_fields=["framework_id"],
+        limit=5,
+    )
+
+    merged = base_result.get("matched_policy_coordinate_candidates", {})
+    debug_scores = merged.get("debug_scores") if isinstance(merged.get("debug_scores"), dict) else {}
+    best_policy = merged_policy[0] if merged_policy else {}
+    best_qiushi_quote = merged_authoritative[0] if merged_authoritative else {}
+    best_framework = merged_frameworks[0] if merged_frameworks else {}
+
+    merged["best_policy"] = best_policy or None
+    merged["best_qiushi_quote"] = best_qiushi_quote or None
+    merged["best_framework"] = best_framework or None
+    merged["matched_chunks"] = merged_chunks[:3]
+    if isinstance(debug_scores, dict):
+        debug_scores["authoritative_candidates_top10"] = merged_authoritative
+        debug_scores["policy_statement_candidates_top10"] = merged_policy
+        debug_scores["best_article_index"] = merged_articles[:3]
+        debug_scores["chunk_top"] = merged_chunks
+        debug_scores["framework_top"] = merged_frameworks
+        debug_scores["multi_query_enabled"] = True
+        debug_scores["retrieval_query_count"] = len(queries_used)
+        debug_scores["retrieval_queries_used"] = queries_used
+        debug_scores["per_query_authoritative_top_ids"] = per_query_authoritative_top_ids
+        debug_scores["per_query_policy_top_ids"] = per_query_policy_top_ids
+        debug_scores["merged_authoritative_count"] = len(merged_authoritative)
+        debug_scores["merged_policy_count"] = len(merged_policy)
+        debug_scores["final_source_priority_decision"] = _priority_decision_public(
+            best_authoritative=best_qiushi_quote or None,
+            best_policy=best_policy or None,
+            authoritative_threshold=60,
+            policy_threshold=65,
+        )
+    return base_result
