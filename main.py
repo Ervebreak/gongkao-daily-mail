@@ -850,6 +850,63 @@ def _policy_candidate_log_rows(items: Any, *, limit: int = 5) -> list[dict[str, 
     return rows
 
 
+def _policy_coordinate_rerank_candidates(items: Any, *, family: str) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in list(items or [])[:10]:
+        if not isinstance(item, dict):
+            continue
+        candidate_id = _policy_text(item.get("quote_id") or item.get("policy_id"))
+        quote = _policy_text(
+            item.get("quote_text")
+            or item.get("policy_quote")
+            or item.get("short_quote")
+            or item.get("quote_preview")
+        )
+        if not candidate_id or not quote or candidate_id in seen:
+            continue
+        seen.add(candidate_id)
+        rows.append(
+            {
+                "id": candidate_id,
+                "quote": _policy_limit_text(quote, 160),
+                "source": _policy_text(item.get("source_title") or item.get("title")),
+                "source_type": _policy_text(item.get("source_type") or item.get("_match_source") or family),
+                "rule_score": round(_policy_float(item.get("_match_score") or item.get("match_score")), 2),
+            }
+        )
+    return rows
+
+
+def _policy_coordinate_rerank_article_summary(
+    featured: dict[str, Any],
+    policy_profile: dict[str, Any],
+) -> str:
+    segments = [
+        featured.get("one_sentence"),
+        featured.get("core_viewpoint"),
+        featured.get("main_thread"),
+        featured.get("original_overview"),
+        policy_profile.get("core_problem"),
+        policy_profile.get("governance_logic"),
+        policy_profile.get("value_orientation"),
+    ]
+    return _policy_limit_text(" ".join(_policy_text(item) for item in segments if _policy_text(item)), 600)
+
+
+def _policy_coordinate_candidate_by_id(items: Any, candidate_id: str) -> dict[str, Any]:
+    target = _policy_text(candidate_id)
+    if not target:
+        return {}
+    for item in list(items or []):
+        if not isinstance(item, dict):
+            continue
+        current = _policy_text(item.get("quote_id") or item.get("policy_id"))
+        if current == target:
+            return item
+    return {}
+
+
 def _policy_coordinate_debug_payload(
     *,
     featured: dict[str, Any],
@@ -882,11 +939,16 @@ def _policy_coordinate_debug_payload(
         "selected_policy_id": _policy_text(result.get("matched_policy_id")),
         "policy_score": round(_policy_float(result.get("policy_match_score")), 2),
         "qiushi_score": round(_policy_float(result.get("qiushi_match_score")), 2),
+        "rerank_input_summary": _policy_log_preview(debug_scores.get("rerank_input_summary") or {}, limit=240),
+        "authoritative_rerank_result": _policy_log_preview(debug_scores.get("authoritative_rerank_result") or {}, limit=240),
+        "policy_statement_rerank_result": _policy_log_preview(debug_scores.get("policy_statement_rerank_result") or {}, limit=240),
         "backend_status": backend_status or "unknown",
         "semantic_fit_status": _policy_text((semantic_fit or {}).get("status")) or "not_run",
         "disabled_reason": _policy_text(disabled_reason),
         "evidence_selection_reason": _policy_text(result.get("evidence_selection_reason")),
         "final_source_priority_decision": _policy_text(debug_scores.get("final_source_priority_decision")),
+        "final_display_type": _policy_text(debug_scores.get("final_display_type")) or _policy_text(result.get("display_evidence_type")) or "none",
+        "hidden_reason": _policy_text(debug_scores.get("hidden_reason")),
         "policy_coordinate_topic_query": _policy_log_preview(topic_query_text, limit=180),
     }
 
@@ -920,8 +982,8 @@ def _policy_coordinate_display_fields(
 ) -> dict[str, Any]:
     has_policy = bool(policy_quote and policy_source)
     has_qiushi = bool(authoritative_quote and authoritative_source)
-    authoritative_ready = has_qiushi and qiushi_score >= 60
-    policy_ready = has_policy and policy_score >= 65
+    authoritative_ready = has_qiushi and qiushi_score >= 70
+    policy_ready = has_policy and policy_score >= 75
 
     if not has_policy and not has_qiushi:
         return {
@@ -996,10 +1058,10 @@ def _policy_coordinate_backend_status(coordinate: dict[str, Any]) -> tuple[str, 
     source_type = _policy_text(coordinate.get("source_type")).lower()
     if display_type == "none" or source_type == "none":
         return ("skipped", "weak_match: no qualified authoritative quote or policy statement after priority routing.")
-    if source_type == "qiushi_only" and qiushi_score < 60:
-        return ("skipped", f"weak_match: qiushi_only qiushi_match_score={qiushi_score:.1f} below backend threshold 60.")
-    if source_type == "policy_only" and policy_score < 65:
-        return ("skipped", f"weak_match: policy_only policy_match_score={policy_score:.1f} below backend threshold 65.")
+    if source_type == "qiushi_only" and qiushi_score < 70:
+        return ("skipped", f"weak_match: qiushi_only qiushi_match_score={qiushi_score:.1f} below backend threshold 70.")
+    if source_type == "policy_only" and policy_score < 75:
+        return ("skipped", f"weak_match: policy_only policy_match_score={policy_score:.1f} below backend threshold 75.")
     return ("ok", "")
 
 
@@ -1081,7 +1143,7 @@ def _resolve_policy_article_full_text(featured: dict[str, Any], source_articles:
     return "", "brief_fallback"
 
 
-def build_policy_coordinate(
+def _build_policy_coordinate_legacy(
     brief: dict[str, Any],
     logger: RunLogger | None = None,
     source_articles: list[Any] | None = None,
@@ -1105,6 +1167,9 @@ def build_policy_coordinate(
         "source_type": "none",
         "policy_match_score": 0.0,
         "qiushi_match_score": 0.0,
+        "policy_rule_score": 0.0,
+        "qiushi_rule_score": 0.0,
+        "display_level": "hidden",
         "display_evidence_type": "none",
         "display_evidence_label": "",
         "display_evidence_quote": "",
@@ -1114,6 +1179,10 @@ def build_policy_coordinate(
     try:
         from knowledge_base_loader import load_qiushi_article_index
         from policy_coordinate_matcher import match_policy_coordinate_candidates
+        from policy_coordinate_reranker import (
+            build_rerank_input_summary,
+            rerank_policy_coordinate_candidates,
+        )
         from policy_coordinate_semantic_fit import policy_match_semantic_fit
         from policy_coordinate_topic_anchors import build_policy_topic_anchors
         from policy_profile_builder import build_policy_profile, resolve_policy_profile_text
@@ -1333,6 +1402,451 @@ def build_policy_coordinate(
                 **_policy_coordinate_debug_payload(
                     featured=featured,
                     article_text=article_text,
+                    topic_query_text=topic_query_text,
+                    topic_anchors=topic_anchors,
+                    debug_scores=debug_scores,
+                    result=result,
+                    backend_status=result["backend_status"],
+                    semantic_fit=semantic_fit,
+                    disabled_reason=brief.get("_policy_coordinate_disabled_reason") or "",
+                ),
+            )
+            logger.info(
+                "policy coordinate matched",
+                display_evidence_type=result["display_evidence_type"],
+                evidence_selection_reason=result["evidence_selection_reason"],
+                policy_score=result["policy_match_score"],
+                qiushi_score=result["qiushi_match_score"],
+                matched_policy_id=result["matched_policy_id"],
+                matched_qiushi_quote_id=result["matched_qiushi_quote_id"],
+                matched_framework_id=result["matched_framework_id"],
+                matched_chunk_ids=result["matched_chunk_ids"],
+                source_type=result["source_type"],
+                backend_status=result["backend_status"],
+                semantic_fit_status=result["semantic_fit_status"],
+            )
+            if usage_debug.get("selected_repeat_notes"):
+                logger.info(
+                    "policy coordinate usage dedup",
+                    usage_history_path=usage_meta.get("usage_history_path"),
+                    recent_usage_count=len(recent_usage),
+                    selected_repeat_notes=usage_debug.get("selected_repeat_notes"),
+                )
+        return result
+    except Exception as exc:
+        if logger:
+            logger.info("policy coordinate failed", error=str(exc))
+        return empty
+
+
+def build_policy_coordinate(
+    brief: dict[str, Any],
+    logger: RunLogger | None = None,
+    source_articles: list[Any] | None = None,
+) -> dict[str, Any]:
+    empty = {
+        "theme": "",
+        "policy_quote": "",
+        "policy_source": "",
+        "policy_source_type": "",
+        "policy_translation": "",
+        "authoritative_quote": "",
+        "authoritative_source": "",
+        "article_connection": "",
+        "exam_transfer": "",
+        "answer_angles": [],
+        "matched_policy_id": "",
+        "matched_qiushi_quote_id": "",
+        "matched_qiushi_article_id": "",
+        "matched_framework_id": "",
+        "matched_chunk_ids": [],
+        "source_type": "none",
+        "policy_match_score": 0.0,
+        "qiushi_match_score": 0.0,
+        "policy_rule_score": 0.0,
+        "qiushi_rule_score": 0.0,
+        "display_level": "hidden",
+        "display_evidence_type": "none",
+        "display_evidence_label": "",
+        "display_evidence_quote": "",
+        "display_evidence_source": "",
+        "evidence_selection_reason": "",
+    }
+    try:
+        from knowledge_base_loader import load_qiushi_article_index
+        from policy_coordinate_matcher import match_policy_coordinate_candidates
+        from policy_coordinate_reranker import (
+            build_rerank_input_summary,
+            rerank_policy_coordinate_candidates,
+        )
+        from policy_coordinate_semantic_fit import policy_match_semantic_fit
+        from policy_coordinate_topic_anchors import build_policy_topic_anchors
+        from policy_profile_builder import build_policy_profile, resolve_policy_profile_text
+        from policy_coordinate_usage_history import (
+            load_policy_coordinate_usage_history,
+            recent_policy_coordinate_usage,
+        )
+
+        featured = brief.get("featured_article") if isinstance(brief.get("featured_article"), dict) else {}
+        question = brief.get("daily_question") if isinstance(brief.get("daily_question"), dict) else {}
+        takeaway = brief.get("today_takeaway") if isinstance(brief.get("today_takeaway"), dict) else {}
+        brief.pop("_policy_coordinate_disabled_reason", None)
+        usage_history, usage_meta = load_policy_coordinate_usage_history()
+        recent_usage = recent_policy_coordinate_usage(usage_history, days=14)
+        if logger and usage_meta.get("usage_history_warning"):
+            logger.info(
+                "policy coordinate usage history warning",
+                warning=usage_meta.get("usage_history_warning"),
+                usage_history_path=usage_meta.get("usage_history_path"),
+                usage_history_bad_lines=usage_meta.get("usage_history_bad_lines"),
+            )
+        article_title = _policy_text(featured.get("title"))
+        article_source = _policy_text(featured.get("source"))
+        brief_article_text = " ".join(
+            _policy_text(featured.get(key))
+            for key in [
+                "one_sentence",
+                "core_viewpoint",
+                "main_thread",
+                "original_overview",
+                "three_useful_points",
+                "exam_use",
+                "article_framework",
+            ]
+        )
+        article_full_text, article_text_source = _resolve_policy_article_full_text(featured, source_articles)
+        policy_profile_text, policy_profile_source = resolve_policy_profile_text(article_full_text, brief)
+        policy_profile = build_policy_profile(
+            article_title=article_title,
+            article_source=article_source,
+            article_full_text=article_full_text,
+            brief=brief,
+        )
+        topic_anchors = build_policy_topic_anchors(brief)
+        topic_query_text = _policy_text(topic_anchors.get("query_text"))
+        profile_summary_text = " ".join(
+            _policy_text(policy_profile.get(key))
+            for key in ("core_problem", "governance_logic", "value_orientation")
+        )
+        keywords = (
+            _policy_list(topic_anchors.get("fine_grained_tags"))
+            + _policy_list(takeaway.get("keywords"))
+            + _policy_list(featured.get("title"))
+            + _policy_list(featured.get("article_framework_map"))
+            + _policy_list(policy_profile.get("fine_anchors"))
+            + _policy_list(policy_profile.get("negative_behaviors"))
+            + _policy_list(policy_profile.get("positive_behaviors"))
+            + _policy_list(policy_profile.get("retrieval_queries"))
+        )
+        exam_scenarios = (
+            _policy_list(featured.get("exam_use"))
+            + _policy_list(featured.get("usable_for_exam"))
+            + _policy_list(question.get("question_type"))
+            + _policy_list(question.get("topic_category"))
+            + _policy_list(question.get("exam_focus"))
+        )
+        matcher_article_text = " ".join(
+            part
+            for part in [
+                topic_query_text,
+                brief_article_text,
+                profile_summary_text,
+                _policy_limit_text(policy_profile_text, 4000),
+            ]
+            if part
+        ).strip()
+        if logger:
+            logger.info(
+                "policy coordinate profile",
+                article_title=article_title,
+                article_source=article_source,
+                article_text_source=article_text_source if article_full_text else policy_profile_source,
+                article_text_length=len(policy_profile_text),
+                article_text_preview=_policy_preview(policy_profile_text, 500),
+                policy_profile=policy_profile,
+                retrieval_queries=_policy_list(policy_profile.get("retrieval_queries")),
+            )
+
+        matches = match_policy_coordinate_candidates(
+            article_title=article_title,
+            article_summary=topic_query_text or _policy_text(featured.get("one_sentence") or featured.get("core_viewpoint")),
+            article_text=matcher_article_text,
+            main_theme=_policy_text(topic_anchors.get("primary_theme")) or _policy_text(brief.get("today_theme") or featured.get("theme")),
+            sub_themes=_policy_list(topic_anchors.get("fine_grained_tags")) + _policy_list(takeaway.get("keywords")),
+            keywords=keywords,
+            exam_scenarios=exam_scenarios,
+            recent_usage=recent_usage,
+        ).get("matched_policy_coordinate_candidates", {})
+        policy = matches.get("best_policy") if isinstance(matches.get("best_policy"), dict) else {}
+        quote = matches.get("best_qiushi_quote") if isinstance(matches.get("best_qiushi_quote"), dict) else {}
+        framework = matches.get("best_framework") if isinstance(matches.get("best_framework"), dict) else {}
+        chunks = matches.get("matched_chunks") if isinstance(matches.get("matched_chunks"), list) else []
+        debug_scores = matches.get("debug_scores") if isinstance(matches.get("debug_scores"), dict) else {}
+        usage_debug = debug_scores.get("usage_history") if isinstance(debug_scores.get("usage_history"), dict) else {}
+
+        article_index = {str(item.get("article_id") or ""): item for item in load_qiushi_article_index()}
+        authoritative_candidates_raw = (
+            list(debug_scores.get("authoritative_candidates_top10") or [])
+            if isinstance(debug_scores.get("authoritative_candidates_top10"), list)
+            else []
+        )
+        if not authoritative_candidates_raw and quote:
+            authoritative_candidates_raw = [quote]
+        policy_statement_candidates_raw = (
+            list(debug_scores.get("policy_statement_candidates_top10") or [])
+            if isinstance(debug_scores.get("policy_statement_candidates_top10"), list)
+            else []
+        )
+        if not policy_statement_candidates_raw and policy:
+            policy_statement_candidates_raw = [policy]
+
+        authoritative_candidate_rows = _policy_coordinate_rerank_candidates(
+            authoritative_candidates_raw,
+            family="authoritative_quote",
+        )
+        policy_statement_candidate_rows = _policy_coordinate_rerank_candidates(
+            policy_statement_candidates_raw,
+            family="policy_statement",
+        )
+        rerank_article_summary = _policy_coordinate_rerank_article_summary(featured, policy_profile)
+        debug_scores["rerank_input_summary"] = build_rerank_input_summary(
+            article_title=article_title,
+            policy_profile=policy_profile,
+            article_summary=rerank_article_summary,
+            authoritative_candidates=authoritative_candidate_rows,
+            policy_statement_candidates=policy_statement_candidate_rows,
+        )
+
+        authoritative_rerank_result = rerank_policy_coordinate_candidates(
+            article_title=article_title,
+            policy_profile=policy_profile,
+            article_summary=rerank_article_summary,
+            candidate_quotes=authoritative_candidates_raw,
+            candidate_family="authoritative_quote",
+        )
+        debug_scores["authoritative_rerank_result"] = authoritative_rerank_result
+
+        selected_policy = policy if isinstance(policy, dict) else {}
+        selected_quote = quote if isinstance(quote, dict) else {}
+        policy_rule_score = _policy_float(policy.get("_match_score"))
+        qiushi_rule_score = _policy_float(quote.get("_match_score"))
+        selected_policy_match_score = 0.0
+        selected_qiushi_match_score = 0.0
+        selected_display_level = "hidden"
+        selected_article_connection = ""
+        selected_exam_transfer = ""
+        selected_reason = ""
+        final_display_type = "none"
+        hidden_reason = ""
+
+        authoritative_selected = False
+        authoritative_fit_score = _policy_float(authoritative_rerank_result.get("fit_score"))
+        if (
+            _policy_text(authoritative_rerank_result.get("display_level")).lower() != "hidden"
+            and authoritative_fit_score >= 70
+        ):
+            reranked_quote = _policy_coordinate_candidate_by_id(
+                authoritative_candidates_raw,
+                authoritative_rerank_result.get("selected_id"),
+            )
+            reranked_authoritative_quote = _choose_authoritative_quote(reranked_quote) if reranked_quote else ""
+            reranked_authoritative_source = (
+                _authoritative_source(reranked_quote, article_index) if reranked_authoritative_quote else ""
+            )
+            if reranked_quote and reranked_authoritative_quote and reranked_authoritative_source:
+                selected_quote = reranked_quote
+                selected_qiushi_match_score = authoritative_fit_score
+                selected_display_level = _policy_text(authoritative_rerank_result.get("display_level")).lower() or "b"
+                selected_article_connection = _policy_text(authoritative_rerank_result.get("article_connection"))
+                selected_exam_transfer = _policy_text(authoritative_rerank_result.get("exam_transfer"))
+                selected_reason = _policy_text(authoritative_rerank_result.get("reason"))
+                final_display_type = "qiushi"
+                debug_scores["final_source_priority_decision"] = "authoritative_quote_selected_by_reranker"
+                authoritative_selected = True
+            else:
+                hidden_reason = "authoritative_selected_source_missing"
+        else:
+            hidden_reason = _policy_text(
+                authoritative_rerank_result.get("hidden_reason") or authoritative_rerank_result.get("reason")
+            ) or "authoritative_quote_below_threshold"
+
+        if authoritative_selected:
+            debug_scores["policy_statement_rerank_result"] = {
+                "selected_id": "",
+                "fit_score": 0,
+                "reason": "skipped_after_authoritative_selected",
+                "article_connection": "",
+                "exam_transfer": "",
+                "display_level": "hidden",
+                "hidden_reason": "skipped_after_authoritative_selected",
+            }
+        else:
+            policy_rerank_result = rerank_policy_coordinate_candidates(
+                article_title=article_title,
+                policy_profile=policy_profile,
+                article_summary=rerank_article_summary,
+                candidate_quotes=policy_statement_candidates_raw,
+                candidate_family="policy_statement",
+            )
+            debug_scores["policy_statement_rerank_result"] = policy_rerank_result
+            policy_fit_score = _policy_float(policy_rerank_result.get("fit_score"))
+            if (
+                _policy_text(policy_rerank_result.get("display_level")).lower() != "hidden"
+                and policy_fit_score >= 75
+            ):
+                reranked_policy = _policy_coordinate_candidate_by_id(
+                    policy_statement_candidates_raw,
+                    policy_rerank_result.get("selected_id"),
+                )
+                reranked_policy_quote = _choose_policy_quote(reranked_policy) if reranked_policy else ""
+                if reranked_policy and reranked_policy_quote:
+                    selected_policy = reranked_policy
+                    selected_policy_match_score = policy_fit_score
+                    selected_display_level = _policy_text(policy_rerank_result.get("display_level")).lower() or "b"
+                    selected_article_connection = _policy_text(policy_rerank_result.get("article_connection"))
+                    selected_exam_transfer = _policy_text(policy_rerank_result.get("exam_transfer"))
+                    selected_reason = _policy_text(policy_rerank_result.get("reason"))
+                    final_display_type = "policy"
+                    debug_scores["final_source_priority_decision"] = (
+                        "authoritative_quote_rejected_policy_statement_selected"
+                    )
+                else:
+                    hidden_reason = "policy_statement_selected_quote_missing"
+                    debug_scores["final_source_priority_decision"] = "policy_statement_selected_quote_missing"
+            else:
+                hidden_reason = _policy_text(
+                    policy_rerank_result.get("hidden_reason") or policy_rerank_result.get("reason")
+                ) or hidden_reason or "policy_statement_below_threshold"
+                debug_scores["final_source_priority_decision"] = (
+                    "authoritative_quote_rejected_policy_statement_hidden"
+                )
+
+        policy_quote = _choose_policy_quote(selected_policy)
+        authoritative_quote = _choose_authoritative_quote(selected_quote) if selected_quote else ""
+        authoritative_source = _authoritative_source(selected_quote, article_index) if authoritative_quote else ""
+        if authoritative_quote and not authoritative_source:
+            authoritative_quote = ""
+            selected_qiushi_match_score = 0.0
+            if final_display_type == "qiushi":
+                final_display_type = "none"
+                hidden_reason = "authoritative_selected_source_missing"
+        theme = _policy_text(
+            selected_policy.get("theme_level_1")
+            or selected_quote.get("theme_level_1")
+            or featured.get("theme")
+            or brief.get("today_theme")
+        )
+        fallback_article_connection = _policy_article_connection(featured, selected_policy, theme)
+        fallback_exam_transfer = normalize_exam_transfer(
+            _policy_exam_transfer(featured, selected_policy, question),
+            _policy_text(selected_policy.get("exam_usage")),
+            _policy_text(selected_quote.get("exam_usage")),
+            _policy_text(featured.get("exam_use")),
+            _policy_exam_transfer_fallback(featured, question),
+        )
+        result = {
+            **empty,
+            "theme": theme,
+            "policy_quote": policy_quote,
+            "policy_source": _policy_text(selected_policy.get("source_title")),
+            "policy_source_type": _policy_text(selected_policy.get("source_type")),
+            "policy_translation": _policy_text(selected_policy.get("plain_explanation")),
+            "authoritative_quote": authoritative_quote,
+            "authoritative_source": authoritative_source,
+            "article_connection": selected_article_connection or fallback_article_connection,
+            "exam_transfer": selected_exam_transfer or fallback_exam_transfer,
+            "answer_angles": _policy_answer_angles(selected_policy, featured, question),
+            "matched_policy_id": _policy_text(selected_policy.get("policy_id")),
+            "matched_qiushi_quote_id": _policy_text(selected_quote.get("quote_id")) if authoritative_quote else "",
+            "matched_qiushi_article_id": _policy_text(selected_quote.get("article_id")) if authoritative_quote else "",
+            "matched_framework_id": _policy_text(framework.get("framework_id")),
+            "matched_chunk_ids": [_policy_text(item.get("chunk_id")) for item in chunks if isinstance(item, dict) and item.get("chunk_id")],
+            "policy_match_score": selected_policy_match_score,
+            "qiushi_match_score": selected_qiushi_match_score,
+            "policy_rule_score": policy_rule_score,
+            "qiushi_rule_score": qiushi_rule_score,
+            "display_level": selected_display_level,
+        }
+        exam_transfer_text = _policy_text(result.get("exam_transfer"))
+        if exam_transfer_text.startswith("适用于") or not _policy_transfer_has_specific_angles(exam_transfer_text):
+            result["exam_transfer"] = normalize_exam_transfer(_policy_exam_transfer_fallback(featured, question))
+
+        result = _refresh_policy_coordinate_display_fields(result)
+        if final_display_type == "qiushi":
+            result["evidence_selection_reason"] = selected_reason or "authoritative_quote_selected_by_reranker"
+        elif final_display_type == "policy":
+            result["evidence_selection_reason"] = selected_reason or "policy_statement_selected_by_reranker"
+        elif hidden_reason:
+            result["evidence_selection_reason"] = hidden_reason
+        debug_scores["final_display_type"] = _policy_text(result.get("display_evidence_type")) or final_display_type or "none"
+        debug_scores["hidden_reason"] = "" if result.get("display_evidence_type") != "none" else hidden_reason
+
+        backend_status, backend_status_reason = _policy_coordinate_backend_status(result)
+        result["backend_status"] = backend_status
+        if result.get("display_evidence_type") == "none":
+            result["backend_status"] = "skipped"
+            brief["_policy_coordinate_disabled_reason"] = (
+                f"weak_match: {result.get('evidence_selection_reason') or 'no_fit_evidence'}"
+            )
+            if logger:
+                logger.info(
+                    "policy coordinate diagnostics",
+                    **_policy_coordinate_debug_payload(
+                        featured=featured,
+                        article_text=policy_profile_text,
+                        topic_query_text=topic_query_text,
+                        topic_anchors=topic_anchors,
+                        debug_scores=debug_scores,
+                        result=result,
+                        backend_status="skipped",
+                        semantic_fit=None,
+                        disabled_reason=brief.get("_policy_coordinate_disabled_reason") or "",
+                    ),
+                )
+                logger.info(
+                    "policy coordinate skipped",
+                    reason=result.get("evidence_selection_reason") or "no_fit_evidence",
+                    policy_score=result.get("policy_match_score"),
+                    qiushi_score=result.get("qiushi_match_score"),
+                )
+            return empty
+        if backend_status_reason:
+            brief["_policy_coordinate_disabled_reason"] = backend_status_reason
+        semantic_fit = policy_match_semantic_fit(topic_anchors, result)
+        result["semantic_fit_status"] = semantic_fit.get("status", "ok")
+        if not semantic_fit.get("display", True):
+            result["backend_status"] = "skipped"
+            result["skip_reason"] = semantic_fit.get("reason") or "weak_match"
+            brief["_policy_coordinate_disabled_reason"] = result["skip_reason"]
+            if logger:
+                logger.info(
+                    "policy coordinate diagnostics",
+                    **_policy_coordinate_debug_payload(
+                        featured=featured,
+                        article_text=policy_profile_text,
+                        topic_query_text=topic_query_text,
+                        topic_anchors=topic_anchors,
+                        debug_scores=debug_scores,
+                        result=result,
+                        backend_status=result["backend_status"],
+                        semantic_fit=semantic_fit,
+                        disabled_reason=result["skip_reason"],
+                    ),
+                )
+                logger.info(
+                    "policy coordinate skipped",
+                    reason=result["skip_reason"],
+                    policy_score=result.get("policy_match_score"),
+                    qiushi_score=result.get("qiushi_match_score"),
+                    source_type=result["source_type"],
+                )
+            return empty
+        if logger:
+            logger.info(
+                "policy coordinate diagnostics",
+                **_policy_coordinate_debug_payload(
+                    featured=featured,
+                    article_text=policy_profile_text,
                     topic_query_text=topic_query_text,
                     topic_anchors=topic_anchors,
                     debug_scores=debug_scores,

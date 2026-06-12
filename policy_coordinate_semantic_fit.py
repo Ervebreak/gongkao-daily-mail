@@ -89,6 +89,18 @@ def _evidence_text(policy_coordinate: dict[str, Any]) -> str:
     )
 
 
+def _rerank_authoritative_override(policy_coordinate: dict[str, Any], generic_hits: list[str]) -> bool:
+    display_type = _text(policy_coordinate.get("display_evidence_type")).lower()
+    if display_type != "qiushi":
+        return False
+    article_connection = _compact(policy_coordinate.get("article_connection"))
+    if len(article_connection) < 18:
+        return False
+    if generic_hits and len(article_connection) < 30:
+        return False
+    return True
+
+
 def policy_match_semantic_fit(article_anchors: Any, policy_coordinate: dict[str, Any]) -> dict[str, Any]:
     anchor_text = _text(article_anchors)
     evidence_text = _evidence_text(policy_coordinate)
@@ -116,6 +128,17 @@ def policy_match_semantic_fit(article_anchors: Any, policy_coordinate: dict[str,
             "reason": "",
             "anchor_hits": anchor_hits,
             "evidence_hits": evidence_hits or specific_anchor_hits,
+            "generic_hits": generic_hits,
+            "specific_anchor_hits": specific_anchor_hits,
+        }
+
+    if _rerank_authoritative_override(policy_coordinate, generic_hits):
+        return {
+            "display": True,
+            "status": "ok_rerank_override",
+            "reason": "",
+            "anchor_hits": anchor_hits,
+            "evidence_hits": [],
             "generic_hits": generic_hits,
             "specific_anchor_hits": specific_anchor_hits,
         }

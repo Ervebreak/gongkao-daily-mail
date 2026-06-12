@@ -70,6 +70,7 @@ def chat_completion(
     user_prompt: str,
     timeout: int | None = None,
     trace: dict[str, Any] | None = None,
+    system_prompt: str | None = None,
 ) -> dict[str, Any]:
     if not settings.dashscope_api_key:
         raise RuntimeError("DASHSCOPE_API_KEY is required in prod mode.")
@@ -80,7 +81,7 @@ def chat_completion(
         "temperature": settings.llm_temperature,
         "response_format": {"type": "json_object"},
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt or SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ],
     }
@@ -91,6 +92,7 @@ def chat_completion(
             "timeout_seconds": effective_timeout,
             "prompt_chars": len(user_prompt or ""),
             "base_url": settings.dashscope_base_url,
+            "custom_system_prompt": bool(system_prompt),
         }
     )
     _emit_llm_trace("llm_request_start", **trace_payload)
