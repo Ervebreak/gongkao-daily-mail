@@ -2105,10 +2105,16 @@ def send_weekly_pdf_candidate(
     load_meta: dict[str, Any],
     logger: RunLogger,
 ) -> dict[str, Any]:
-    from email_sender import save_send_audit, send_segmented_email, split_effective_recipient_records
+    from email_sender import (
+        load_subscriber_table_for_segmentation,
+        save_send_audit,
+        send_segmented_email,
+        split_recipient_records,
+    )
     from harness_metrics import append_morning_metrics
 
-    segments, recipient_source = split_effective_recipient_records(test_mode=test_invocation, today=delivery_date)
+    subscribers_table, recipient_source = load_subscriber_table_for_segmentation(test_mode=test_invocation)
+    segments = split_recipient_records(subscribers_table.get("records") or [], today=delivery_date)
     attachment, attachment_meta = weekly_pdf_attachment_from_candidate(candidate)
     logger.info(
         "weekly pdf candidate attachment status",
@@ -2118,6 +2124,7 @@ def send_weekly_pdf_candidate(
         full_count=len(segments.get("full") or []),
         lite_count=len(segments.get("lite") or []),
         skipped_count=len(segments.get("skipped") or []),
+        variant_counts=segments.get("variant_counts") or {},
         recipient_source=recipient_source,
     )
     if settings.weekly_pdf_attach and not attachment and segments.get("full"):
@@ -2326,7 +2333,12 @@ def evaluate_candidate_with_current_quality(
 def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
     from candidate_store import load_candidate
     from daily_archive import archive_daily_content
-    from email_sender import save_send_audit, send_segmented_email, split_effective_recipient_records
+    from email_sender import (
+        load_subscriber_table_for_segmentation,
+        save_send_audit,
+        send_segmented_email,
+        split_recipient_records,
+    )
     from email_renderer import render_email_html, render_plain_text
     from harness_metrics import append_morning_metrics
     from history import append_records
@@ -2490,12 +2502,14 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
     brief = candidate.get("brief") if isinstance(candidate.get("brief"), dict) else {}
     final_selection = candidate.get("final_selection") if isinstance(candidate.get("final_selection"), dict) else summarize_final_selection(brief)
     article_stats = candidate.get("article_stats") if isinstance(candidate.get("article_stats"), dict) else {}
-    segments, recipient_source = split_effective_recipient_records(test_mode=test_invocation, today=delivery_date)
+    subscribers_table, recipient_source = load_subscriber_table_for_segmentation(test_mode=test_invocation)
+    segments = split_recipient_records(subscribers_table.get("records") or [], today=delivery_date)
     logger.info(
         "candidate recipient tier stats",
         full_count=len(segments.get("full") or []),
         lite_count=len(segments.get("lite") or []),
         skipped_count=len(segments.get("skipped") or []),
+        variant_counts=segments.get("variant_counts") or {},
         recipient_source=recipient_source,
         send_mode=settings.send_mode,
     )
@@ -2513,6 +2527,8 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
             test_mode=test_invocation,
             segments=segments,
             recipient_source=recipient_source,
+            enable_trial_reminders=True,
+            subscribers_table=subscribers_table,
         )
         logger.info("candidate email send result", subject=subject, **send_result)
     else:
@@ -2809,7 +2825,12 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
     from content_quality_reviewer import evaluate_content_quality, get_content_quality_model_plan
     from daily_archive import archive_daily_content, is_official_morning_run
     from email_renderer import render_email_html, render_plain_text
-    from email_sender import save_send_audit, send_segmented_email, split_effective_recipient_records
+    from email_sender import (
+        load_subscriber_table_for_segmentation,
+        save_send_audit,
+        send_segmented_email,
+        split_recipient_records,
+    )
     from fetch_articles import get_candidate_articles_with_stats
     from duplication_quality import evaluate_duplication
     from expression_quality import evaluate_expression_quality
@@ -3316,13 +3337,15 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
     quality_blocked = (not test_invocation) and quality_gate.get("overall") == "fail"
     llm_trace_summary = summarize_llm_trace(llm_trace_events)
     logger.info("llm trace summary", summary=llm_trace_summary)
-    segments, recipient_source = split_effective_recipient_records(test_mode=test_invocation, today=today)
+    subscribers_table, recipient_source = load_subscriber_table_for_segmentation(test_mode=test_invocation)
+    segments = split_recipient_records(subscribers_table.get("records") or [], today=today)
     logger.info(
         "recipient tier stats",
         valid_recipient_count=len(segments.get("full") or []) + len(segments.get("lite") or []),
         full_count=len(segments.get("full") or []),
         lite_count=len(segments.get("lite") or []),
         skipped_count=len(segments.get("skipped") or []),
+        variant_counts=segments.get("variant_counts") or {},
         recipient_source=recipient_source,
         send_mode=settings.send_mode,
     )
@@ -3563,6 +3586,8 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
             attachments=weekly_attachments,
             segments=segments,
             recipient_source=recipient_source,
+            enable_trial_reminders=True,
+            subscribers_table=subscribers_table,
         )
         logger.info("email send result", subject=subject, **send_result)
     else:
