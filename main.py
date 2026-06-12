@@ -2510,7 +2510,6 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
         lite_count=len(segments.get("lite") or []),
         skipped_count=len(segments.get("skipped") or []),
         variant_counts=segments.get("variant_counts") or {},
-        variant_assignments=segments.get("variant_assignments") or [],
         recipient_source=recipient_source,
         send_mode=settings.send_mode,
     )
@@ -3347,7 +3346,6 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
         lite_count=len(segments.get("lite") or []),
         skipped_count=len(segments.get("skipped") or []),
         variant_counts=segments.get("variant_counts") or {},
-        variant_assignments=segments.get("variant_assignments") or [],
         recipient_source=recipient_source,
         send_mode=settings.send_mode,
     )

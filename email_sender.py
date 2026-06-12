@@ -153,15 +153,16 @@ def parse_subscribers_csv(csv_text: str) -> list[str]:
 
 def parse_subscribers_csv_table(csv_text: str) -> dict[str, Any]:
     reader = csv.DictReader(io.StringIO(csv_text))
+    source_fieldnames = [str(name or "").strip() for name in (reader.fieldnames or []) if str(name or "").strip()]
     fieldnames = _subscriber_fieldnames(reader.fieldnames)
     if not reader.fieldnames or "email" not in fieldnames:
-        return {"fieldnames": fieldnames, "records": []}
+        return {"fieldnames": fieldnames, "source_fieldnames": source_fieldnames, "records": []}
     rows: list[dict[str, str]] = []
     for row_index, row in enumerate(reader):
         record = {name: row.get(name, "") for name in fieldnames}
         record["_row_index"] = str(row_index)
         rows.append(record)
-    return {"fieldnames": fieldnames, "records": normalize_recipient_records(rows)}
+    return {"fieldnames": fieldnames, "source_fieldnames": source_fieldnames, "records": normalize_recipient_records(rows)}
 
 
 def parse_subscribers_csv_all_records(csv_text: str) -> list[dict[str, str]]:
@@ -390,6 +391,7 @@ def recipient_variant(record: dict[str, str], today: str | dt.date | None = None
     plan = str(record.get("plan") or "free").strip().lower() or "free"
     today_date = _today_date(today)
     paid_until = _parse_date(str(record.get("paid_until") or ""))
+    reminder_sent = _reminder_tokens(record.get("reminder_sent", ""))
     if send_mode == "full":
         if plan == "paid_trial":
             if not paid_until:
@@ -397,11 +399,11 @@ def recipient_variant(record: dict[str, str], today: str | dt.date | None = None
             remaining_days = (paid_until - today_date).days
             if remaining_days < 0:
                 return "expired_lite"
-            if remaining_days == 3:
+            if remaining_days == 3 and "d3" not in reminder_sent:
                 return "full_trial_d3"
-            if remaining_days == 1:
+            if remaining_days == 1 and "d1" not in reminder_sent:
                 return "full_trial_d1"
-            if remaining_days == 0:
+            if remaining_days == 0 and "d0" not in reminder_sent:
                 return "full_trial_d0"
             return "full_normal"
         if plan in PAID_PLANS and paid_until and paid_until < today_date:
@@ -415,11 +417,11 @@ def recipient_variant(record: dict[str, str], today: str | dt.date | None = None
         remaining_days = (paid_until - today_date).days
         if remaining_days < 0:
             return "expired_lite"
-        if plan == "paid_trial" and remaining_days == 3:
+        if plan == "paid_trial" and remaining_days == 3 and "d3" not in reminder_sent:
             return "full_trial_d3"
-        if plan == "paid_trial" and remaining_days == 1:
+        if plan == "paid_trial" and remaining_days == 1 and "d1" not in reminder_sent:
             return "full_trial_d1"
-        if plan == "paid_trial" and remaining_days == 0:
+        if plan == "paid_trial" and remaining_days == 0 and "d0" not in reminder_sent:
             return "full_trial_d0"
         return "full_normal"
     return "free_lite"
@@ -583,6 +585,13 @@ def backup_and_save_subscribers_table_to_oss(table: dict[str, Any]) -> dict[str,
     meta["subscribers_record_count"] = len(records)
     meta["subscribers_fieldnames"] = fieldnames
     return meta
+
+
+def subscribers_table_needs_reminder_field_backfill(table: dict[str, Any] | None) -> bool:
+    if not isinstance(table, dict):
+        return False
+    source_fieldnames = [str(name or "").strip() for name in (table.get("source_fieldnames") or []) if str(name or "").strip()]
+    return "reminder_sent" not in source_fieldnames
 
 
 def apply_successful_reminder_updates(
@@ -863,16 +872,26 @@ def send_segmented_email(
         "subscribers_write_ok": False,
         "subscribers_backup_ok": False,
         "subscribers_write_skipped": True,
+        "subscribers_write_skip_reason": "trial_reminders_disabled",
     }
     reminder_update_meta: dict[str, Any] = {
         "subscribers_reminder_updates": 0,
         "subscribers_reminder_update_emails": [],
         "subscribers_reminder_update_variants": {},
     }
+    needs_reminder_field_backfill = subscribers_table_needs_reminder_field_backfill(subscribers_table)
     if enable_trial_reminders and subscribers_table and not test_mode and str(subscribers_table.get("storage") or "").lower() == "oss":
         reminder_update_meta = apply_successful_reminder_updates(subscribers_table, variant_results)
-        subscribers_write_meta = backup_and_save_subscribers_table_to_oss(subscribers_table)
-        subscribers_write_meta["subscribers_write_skipped"] = False
+        if reminder_update_meta["subscribers_reminder_updates"] > 0 or needs_reminder_field_backfill:
+            subscribers_write_meta = backup_and_save_subscribers_table_to_oss(subscribers_table)
+            subscribers_write_meta["subscribers_write_skipped"] = False
+            subscribers_write_meta["subscribers_write_skip_reason"] = ""
+        else:
+            subscribers_write_meta["subscribers_write_skip_reason"] = "no_subscriber_changes"
+    elif subscribers_table and str(subscribers_table.get("storage") or "").lower() != "oss":
+        subscribers_write_meta["subscribers_write_skip_reason"] = "subscribers_storage_not_oss"
+    elif test_mode:
+        subscribers_write_meta["subscribers_write_skip_reason"] = "test_mode"
     audit = update_send_audit_results(delivery_date, audit, full_result, lite_result, variant_results=variant_results)
     return {
         "send_mode": "individual",
