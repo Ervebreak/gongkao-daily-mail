@@ -25,3 +25,16 @@ def test_policy_match_with_formalism_and_burden_reduction_is_displayed():
     }
 
     assert should_display_policy_match(article_anchors, coordinate) is True
+
+
+def test_authoritative_quote_with_specific_anchor_overlap_is_not_misclassified():
+    article_anchors = {
+        "query_text": "cover-up face project inspection-oriented response",
+        "fine_grained_tags": ["cover-up", "face project", "inspection-oriented response"],
+    }
+    coordinate = {
+        "source_type": "qiushi_only",
+        "authoritative_quote": "We should reject cover-up logic and face-project thinking, and accept public supervision.",
+    }
+
+    assert should_display_policy_match(article_anchors, coordinate) is True
