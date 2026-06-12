@@ -645,6 +645,37 @@ def _lite_paid_entry_url() -> str:
     return settings.paid_trial_entry_url.strip() or FEEDBACK_FORM_URL
 
 
+def _lite_paid_mailto_url() -> str:
+    recipient = settings.unsubscribe_email.strip()
+    if not recipient:
+        return ""
+    query = urlencode(
+        {
+            "subject": "体验完整版晨读邮件",
+            "body": "你好，我想体验完整版晨读邮件，请发我内测说明和付款方式。",
+        },
+        quote_via=quote,
+    )
+    return f"mailto:{recipient}?{query}"
+
+
+def _lite_paid_feature_list() -> list[str]:
+    return [
+        "今日一题参考答案",
+        "文章框架图",
+        "考场转化",
+        "金句拆解",
+        "周末 PDF 汇编",
+    ]
+
+
+def _lite_paid_plan_list() -> list[str]:
+    return [
+        "4.9 元 / 7 天",
+        "9.9 元 / 30 天",
+    ]
+
+
 def _lite_theme(brief: dict[str, Any], latest_json: dict[str, Any]) -> str:
     return str(brief.get("today_theme") or brief.get("email_subject") or latest_json.get("subject") or "").strip()
 
@@ -802,6 +833,8 @@ def render_lite_plain_text(latest_json: dict[str, Any]) -> str:
     question_text = today_question_text(brief)
     three_step_line = _lite_three_step_line(brief)
     quick_reads = _lite_quick_reads(brief)
+    paid_url = _lite_paid_entry_url()
+    paid_mailto_url = _lite_paid_mailto_url() or paid_url
     meta = " / ".join(
         part
         for part in (
@@ -848,8 +881,15 @@ def render_lite_plain_text(latest_json: dict[str, Any]) -> str:
         [
             "",
             "付费内测",
-            "完整版包含：完整文章框架、参考答案、金句拆解、素材迁移、周末复盘资料包。",
-            f"入口：{_lite_paid_entry_url()}",
+            "完整版今天多什么：",
+            *[f"- {item}" for item in _lite_paid_feature_list()],
+            "",
+            "早鸟方案：",
+            *[f"- {item}" for item in _lite_paid_plan_list()],
+            "",
+            f"主入口（回复“体验”）：{paid_mailto_url}" if paid_mailto_url else "",
+            f"次入口（报名表）：{paid_url}" if paid_url else "",
+            "暂时不参加也没关系，免费简版会继续保留。",
         ]
     )
     return "\n".join(line for line in lines if line is not None)
@@ -864,7 +904,16 @@ def render_lite_email(latest_json: dict[str, Any]) -> str:
     featured = ensure_dict(brief.get("featured_article"))
     question_text = today_question_text(brief)
     paid_url = _lite_paid_entry_url()
+    paid_mailto_url = _lite_paid_mailto_url() or paid_url
     three_step_line = _lite_three_step_line(brief)
+    paid_feature_items = "".join(
+        f'<li style="margin:0 0 6px;color:#78350f;line-height:1.72;">{h(item)}</li>'
+        for item in _lite_paid_feature_list()
+    )
+    paid_plan_badges = "".join(
+        f'<span style="display:inline-block;background:#fff;border:1px solid #fdba74;border-radius:999px;padding:7px 11px;margin:0 8px 8px 0;font-size:13px;font-weight:900;color:#9a3412;">{h(item)}</span>'
+        for item in _lite_paid_plan_list()
+    )
     angle_items = "".join(
         f'<li style="margin:0 0 8px;color:#334155;line-height:1.72;">{h(item)}</li>'
         for item in _lite_answer_angles(brief)
@@ -939,8 +988,15 @@ def render_lite_email(latest_json: dict[str, Any]) -> str:
 
     <div style="background:#fff8e8;border:1px solid #fed7aa;border-radius:16px;padding:15px 16px;">
       <div style="font-size:15px;font-weight:900;color:#92400e;margin-bottom:7px;">付费内测</div>
-      <div style="font-size:14px;line-height:1.8;color:#78350f;margin-bottom:10px;">完整版包含：完整文章框架、参考答案、金句拆解、素材迁移、周末复盘资料包。</div>
-      <a href="{h(paid_url)}" target="_blank" style="display:inline-block;background:#f59e0b;color:#fff;text-decoration:none;border-radius:999px;padding:10px 16px;font-size:14px;font-weight:900;">了解付费内测</a>
+      <div style="font-size:14px;line-height:1.8;color:#78350f;margin-bottom:8px;">完整版今天多什么</div>
+      <ul style="margin:0 0 12px;padding-left:18px;">{paid_feature_items}</ul>
+      <div style="font-size:14px;line-height:1.8;color:#78350f;margin-bottom:8px;">早鸟方案</div>
+      <div style="margin:0 0 12px;">{paid_plan_badges}</div>
+      <div style="margin-bottom:10px;">
+        <a href="{h(paid_mailto_url)}" target="_blank" style="display:inline-block;background:#f59e0b;color:#fff;text-decoration:none;border-radius:999px;padding:10px 16px;font-size:14px;font-weight:900;margin:0 8px 8px 0;">回复“体验”领取说明</a>
+        <a href="{h(paid_url)}" target="_blank" style="display:inline-block;background:#fff;color:#b45309;text-decoration:none;border:1px solid #fdba74;border-radius:999px;padding:10px 16px;font-size:14px;font-weight:900;margin:0 8px 8px 0;">填写报名表</a>
+      </div>
+      <div style="font-size:13px;line-height:1.8;color:#92400e;">暂时不参加也没关系，免费简版会继续保留。</div>
     </div>
   </div>
 </body>
