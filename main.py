@@ -2117,15 +2117,13 @@ def send_weekly_pdf_candidate(
     logger: RunLogger,
 ) -> dict[str, Any]:
     from email_sender import (
-        load_subscriber_table_for_segmentation,
         save_send_audit,
         send_segmented_email,
-        split_recipient_records,
+        split_effective_recipient_records,
     )
     from harness_metrics import append_morning_metrics
 
-    subscribers_table, recipient_source = load_subscriber_table_for_segmentation(test_mode=test_invocation)
-    segments = split_recipient_records(subscribers_table.get("records") or [], today=delivery_date)
+    segments, recipient_source = split_effective_recipient_records(test_mode=test_invocation, today=delivery_date)
     attachment, attachment_meta = weekly_pdf_attachment_from_candidate(candidate)
     lite_attachment, lite_attachment_meta = weekly_pdf_preview_attachment_from_candidate(candidate)
     logger.info(
