@@ -400,6 +400,27 @@ def render_typst(data: dict[str, Any]) -> str:
                 return text
         return ""
 
+    def row_list(row: dict[str, Any], *keys: str) -> list[str]:
+        for key in keys:
+            value = row.get(key)
+            if isinstance(value, list):
+                rows = [clean(item) for item in value if clean(item)]
+                if rows:
+                    return rows
+        return []
+
+    def material_example_blocks(row: dict[str, Any]) -> str:
+        blocks: list[str] = []
+        for example in as_list(row.get("usage_examples"))[:3]:
+            if not isinstance(example, dict):
+                continue
+            theme = clean(example.get("theme"))
+            content = clean(example.get("example"))
+            if not theme or not content:
+                continue
+            blocks.append(f'#material-example[{typst_text(theme)}][{typst_text(content)}]')
+        return "\n#v(6pt)\n".join(blocks)
+
     material_parts: list[str] = []
     for idx, row in enumerate(data.get("material_cards") or [], start=1):
         if not isinstance(row, dict):
@@ -409,26 +430,19 @@ def render_typst(data: dict[str, Any]) -> str:
         source_dates = row_value(row, "source_dates", "date")
         source_articles = row_value(row, "source_articles", "source_title")
         target_topics = row_value(row, "target_topics", "theme")
-        core_topic = row_value(row, "core_topic")
-        generalizable_logic = row_value(row, "generalizable_logic")
         factual_anchor = row_value(row, "factual_anchor", "anchor")
-        exam_paragraph = row_value(row, "exam_paragraph", "exam_value")
-        exam_paragraph_specific = row_value(row, "exam_paragraph_specific")
-        exam_paragraph_general = row_value(row, "exam_paragraph_general")
-        can_use_for = row_value(row, "can_use_for")
+        material_summary = row_value(row, "material_summary")
+        example_blocks = material_example_blocks(row)
         suggested_question_types = row_value(row, "suggested_question_types")
         not_suitable_for = row_value(row, "not_suitable_for")
-        memory_sentence = row_value(row, "memory_sentence")
-        use_tip = row_value(row, "use_tip")
         use_boundary = row_value(row, "use_boundary")
         material_parts.append(
             f'#material-card[{typst_text(title)}][{typst_text(material_type)}][{typst_text(source_dates)}][{typst_text(source_articles)}]'
-            f'[{typst_text(target_topics)}][{typst_text(core_topic)}][{typst_text(generalizable_logic)}]'
-            f'[{typst_text(factual_anchor)}][{typst_text(exam_paragraph)}][{typst_text(exam_paragraph_specific)}]'
-            f'[{typst_text(exam_paragraph_general)}][{typst_text(can_use_for)}][{typst_text(suggested_question_types)}]'
-            f'[{typst_text(not_suitable_for)}][{typst_text(memory_sentence)}][{typst_text(use_tip)}][{typst_text(use_boundary)}]'
+            f'[{typst_text(material_summary)}][{typst_text(factual_anchor)}][{example_blocks}]'
+            f'[{typst_text(use_boundary)}][{typst_text(target_topics)}][{typst_text(suggested_question_types)}][{typst_text(not_suitable_for)}]'
         )
     material_cards = "\n#v(7pt)\n".join(material_parts)
+    has_material_cards = bool(material_parts)
 
     practice_parts: list[str] = []
     for idx, row in enumerate(data.get("practice_questions") or [], start=1):
@@ -473,6 +487,33 @@ def render_typst(data: dict[str, Any]) -> str:
         else '#muted[暂无可展示训练题]'
     )
     overview_keywords = t_badges(data.get("hot_keywords") or [], 8)
+    review_order_text = (
+        "先看本页速览，再看作文素材积累和金句表达库，再做本周 3 道考场迁移训练；周内没怎么看邮件的同学，再看每日内容压缩回看。"
+        if has_material_cards
+        else "先看本页速览，再看金句表达库，再做本周 3 道考场迁移训练；周内没怎么看邮件的同学，再看每日内容压缩回看。"
+    )
+    review_method_text = (
+        "这份 PDF 按“重点优先”重新组织：先抓考点、作文素材、表达和训练题，再回看每日内容。"
+        if has_material_cards
+        else "这份 PDF 按“重点优先”重新组织：先抓考点、表达和训练题，再回看每日内容。"
+    )
+    material_section = ""
+    next_section_no = 3
+    if has_material_cards:
+        material_section = f"""
+#pagebreak()
+= {next_section_no:02d}｜作文素材积累·一例多用
+#info-strip[使用建议][只保留本周真正有事实依据、能迁移到考场表达里的素材；宁缺毋滥，不为凑数补卡。]
+{material_cards}
+"""
+        next_section_no += 1
+    expression_section_no = next_section_no
+    next_section_no += 1
+    practice_section_no = next_section_no
+    next_section_no += 1
+    daily_section_no = next_section_no
+    next_section_no += 1
+    quick_section_no = next_section_no
 
     return f"""
 #set document(title: [公考晨读周复盘资料包 V1.3])
@@ -539,6 +580,29 @@ def render_typst(data: dict[str, Any]) -> str:
   #if use-tip != "" [#info-strip[用法提示][#use-tip]]
   #if use-boundary != "" [#muted[使用边界：#use-boundary]]
 ]
+#let material-example(theme, body) = block(fill: rgb("#f8fbff"), stroke: 0.45pt + line, inset: 8pt, radius: 6pt, width: 100%, breakable: true)[
+  #text(weight: "bold", fill: brand)[#theme]
+  #v(3pt)
+  #body
+]
+#let material-card(title, material-type, source-dates, source-articles, material-summary, factual-anchor, examples, use-boundary, target-topics, suggested-question-types, not-suitable-for) = block(fill: white, stroke: 0.6pt + line, inset: 10pt, radius: 7.5pt, width: 100%, breakable: true)[
+  #text(size: 12pt, weight: "bold", fill: brand)[作文素材积累·#title（一例多用）]
+  #if material-type != "" [#linebreak()#badge[#material-type]]
+  #v(5pt)
+  #if source-dates != "" or source-articles != "" [#info-strip[来源][#source-dates#if source-dates != "" and source-articles != "" [｜#source-articles]]]
+  #if target-topics != "" [#info-strip[可用主题方向][#target-topics]]
+  #if suggested-question-types != "" [#info-strip[适用题型][#suggested-question-types]]
+  #if factual-anchor != "" [#info-strip[事实锚点][#factual-anchor]]
+  #if material-summary != "" [#info-strip[素材简介][#material-summary]]
+  #if examples != "" [
+    #v(4pt)
+    #text(weight: "bold", fill: brand)[作文示例]
+    #v(4pt)
+    #examples
+  ]
+  #if not-suitable-for != "" [#info-strip[不适合用于][#not-suitable-for]]
+  #if use-boundary != "" [#muted[使用边界：#use-boundary]]
+]
 #let practice-card(title, question-type, question, target-topics, suggested-golden-sentences, suggested-case-materials, suggested-policy-expressions, answer-hint, mini-reference-answer, use-boundary) = block(fill: white, stroke: 0.6pt + line, inset: 10pt, radius: 7.5pt, width: 100%, breakable: true)[
   #text(size: 12pt, weight: "bold", fill: brand)[#title]
   #if question-type != "" [#linebreak()#badge[#question-type]]
@@ -590,7 +654,7 @@ def render_typst(data: dict[str, Any]) -> str:
 #set page(numbering: "1", header: align(left)[#text(size: 8.5pt, fill: muted-color)[公考晨读 · 周复盘资料包 V1.3]], footer: text(size: 8pt, fill: rgb("#94a3b8"))[周日复盘版 · 速览/考点/素材/表达/训练/回看/索引])
 
 = 01｜本周 3 分钟速览
-#info-strip[复盘顺序][先看本页速览，再看考场素材库和金句表达库，再做本周 3 道考场迁移训练；周内没怎么看邮件的同学，再看每日内容压缩回看。]
+#info-strip[复盘顺序][{typst_text(review_order_text)}]
 #grid(columns: (1fr, 1fr), gutter: 8pt)[
   #panel[高频考点][{overview_exam_points if overview_exam_points else '#muted[暂无高频考点]'}]
 ][
@@ -603,7 +667,7 @@ def render_typst(data: dict[str, Any]) -> str:
 ]
 
 #block-title[本周主题总览]
-#info-strip[复盘方式][这份 PDF 按“重点优先”重新组织：先抓考点、素材、表达和训练题，再回看每日内容。]
+#info-strip[复盘方式][{typst_text(review_method_text)}]
 
 #table(columns: (0.8fr, 2fr, 2.2fr, 1.7fr), inset: 5pt, stroke: 0.45pt + line, fill: (x, y) => if y == 0 {{ table-head }} else if calc.odd(y) {{ rgb("#f8fafc") }} else {{ white }},
   [#text(fill: brand, weight: "bold")[日期]], [#text(fill: brand, weight: "bold")[主题]], [#text(fill: brand, weight: "bold")[精读文章]], [#text(fill: brand, weight: "bold")[训练方向]],
@@ -616,13 +680,10 @@ def render_typst(data: dict[str, Any]) -> str:
 {map_cards}
 ]
 
-#pagebreak()
-= 03｜本周考场素材库
-#info-strip[使用建议][素材卡优先保留有事实锚点或机制做法的内容；没有稳定事实支撑时不强行提炼。]
-{material_cards if material_cards else '#muted[本周暂无稳定可提炼的考场素材卡]'}
+{material_section}
 
 #pagebreak()
-= 04｜本周金句表达库
+= {expression_section_no:02d}｜本周金句表达库
 #info-strip[使用建议][这一部分用于周末集中背诵。优先记能直接放进申论段落或面试表达里的句子。]
 #block-title[可背金句]
 #quote-bank[
@@ -632,17 +693,17 @@ def render_typst(data: dict[str, Any]) -> str:
 {framework_rows if framework_rows else '#muted[暂无可迁移框架]'}
 
 #pagebreak()
-= 05｜本周 3 道考场迁移训练
+= {practice_section_no:02d}｜本周 3 道考场迁移训练
 #info-strip[使用建议][三道题分别用于面试综合分析、对策建议和申论作文分论点展开训练。对策建议题不建议硬塞外部案例。]
 {practice_questions if practice_questions else '#muted[本周暂无稳定可生成的素材运用题]'}
 
 #pagebreak()
-= 06｜每日内容压缩回看
+= {daily_section_no:02d}｜每日内容压缩回看
 #info-strip[说明][这里只保留主题、精读文章、一句话看懂、文章框架、题干、作答框架和 1-2 句表达；完整参考答案、30 秒表达和参考开头不在本章展开。]
 {('#v(10pt)').join(daily_sections)}
 
 #pagebreak()
-= 07｜延伸阅读索引
+= {quick_section_no:02d}｜延伸阅读索引
 #info-strip[说明][本页只做“摘要 + 原文入口”。如需阅读全文，请复制链接打开原文；PDF 不收录延伸阅读全文。]
 #block-title[精读原文入口]
 #table(columns: (0.7fr, 2.3fr, 1.2fr, 2.6fr), inset: 5pt, stroke: 0.45pt + line, fill: (x, y) => if y == 0 {{ table-head }} else if calc.odd(y) {{ rgb("#f8fafc") }} else {{ white }},

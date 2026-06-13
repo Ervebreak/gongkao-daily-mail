@@ -142,6 +142,25 @@ BROAD_USE_CASE_TERMS = {
     "治理现代化",
 }
 
+GENERIC_MATERIAL_THEMES = {
+    "奋斗",
+    "担当",
+    "创新",
+    "坚持",
+    "服务",
+    "治理",
+    "落实",
+    "作风",
+    "能力",
+    "发展",
+    "群众路线",
+    "基层治理",
+    "公共服务",
+    "社会治理",
+    "民生保障",
+    "高质量发展",
+}
+
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
@@ -615,6 +634,62 @@ def _specific_use_cases(values: list[str]) -> list[str]:
     return result[:5]
 
 
+def _is_generic_material_theme(text: str) -> bool:
+    text = _clean(text)
+    compact = re.sub(r"\s+", "", text)
+    if not compact:
+        return True
+    if compact in GENERIC_MATERIAL_THEMES:
+        return True
+    return len(compact) <= 8 and any(term in compact for term in GENERIC_MATERIAL_THEMES)
+
+
+def _normalize_material_summary(item: dict[str, Any], factual_anchor: str, generalizable_logic: str) -> str:
+    summary = _clean(item.get("material_summary") or item.get("summary") or item.get("material_intro"))
+    if summary:
+        return summary
+    parts = [part for part in [factual_anchor, generalizable_logic] if part]
+    return " ".join(parts[:2]).strip()
+
+
+def _normalize_usage_examples(item: dict[str, Any]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    raw_examples = _as_list(item.get("usage_examples") or item.get("theme_examples") or item.get("examples"))
+    for raw in raw_examples:
+        if not isinstance(raw, dict):
+            continue
+        theme = _clean(raw.get("theme") or raw.get("title") or raw.get("topic"))
+        example = _clean(raw.get("example") or raw.get("content") or raw.get("body") or raw.get("sample"))
+        if not theme or not example:
+            continue
+        rows.append({"theme": theme, "example": example})
+    deduped: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for row in rows:
+        key = (row["theme"], row["example"])
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(row)
+    if deduped:
+        return deduped[:3]
+
+    fallback_themes = _specific_use_cases([_clean(x) for x in _as_list(item.get("can_use_for")) if _clean(x)])
+    if not fallback_themes:
+        fallback_themes = [_clean(x) for x in _as_list(item.get("target_topics") or item.get("theme")) if _clean(x)]
+    anchor = _clean(item.get("factual_anchor") or item.get("anchor"))
+    general = _clean(item.get("exam_paragraph_general") or item.get("exam_paragraph") or item.get("exam_value"))
+    specific = _clean(item.get("exam_paragraph_specific"))
+    for theme in fallback_themes[:3]:
+        if not theme or not general:
+            continue
+        example = f"写“{theme}”这类题时，可以先点出{anchor or '这类治理场景'}，再顺势说明{general}"
+        if specific:
+            example = f"{example}。如果需要更贴近材料，还可以补上一句：{specific}"
+        deduped.append({"theme": theme, "example": example})
+    return deduped[:3]
+
+
 def _too_close_to_source_only(general_text: str, *source_texts: str) -> bool:
     general = re.sub(r"\s+", "", _clean(general_text))
     if len(general) < 20:
@@ -657,6 +732,35 @@ def _question_demonstrates_golden(suggested: list[str], answer_hint: str, mini_r
     return False
 
 
+def _validate_usage_examples(
+    usage_examples: list[dict[str, str]],
+    source_name: str,
+    warnings: list[str],
+) -> list[dict[str, str]]:
+    valid_rows: list[dict[str, str]] = []
+    for row in usage_examples:
+        theme = _clean(row.get("theme"))
+        example = _clean(row.get("example"))
+        if not theme or not example:
+            continue
+        if _is_generic_material_theme(theme):
+            warnings.append(f"drop material card with generic theme: {source_name}")
+            return []
+        if len(theme) > 24:
+            warnings.append(f"drop material card with overlong theme: {source_name}")
+            return []
+        if len(example) < 60:
+            warnings.append(f"drop material card with weak usage example: {source_name}")
+            return []
+        if len(example) > 260:
+            example = example[:260].rstrip("，、；： ") + "。"
+        if not _is_complete_sentence(example):
+            warnings.append(f"drop material card with incomplete usage example: {source_name}")
+            return []
+        valid_rows.append({"theme": theme, "example": example})
+    return valid_rows[:3]
+
+
 def _validate_enrichment(payload: dict[str, Any], candidate_evidence: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     warnings = [_clean(item) for item in _as_list(payload.get("warnings")) if _clean(item)]
     evidence_index = _candidate_evidence_index(candidate_evidence)
@@ -695,6 +799,7 @@ def _validate_enrichment(payload: dict[str, Any], candidate_evidence: list[dict[
         exam_paragraph_specific = _clean(item.get("exam_paragraph_specific"))
         exam_paragraph_general = _clean(item.get("exam_paragraph_general"))
         exam_paragraph = _clean(item.get("exam_paragraph") or item.get("exam_value") or exam_paragraph_specific or exam_paragraph_general)
+        material_summary = _normalize_material_summary(item, factual_anchor, _clean(item.get("generalizable_logic")))
         source_title = _clean(item.get("source_title"))
         source_articles = [_clean(x) for x in _as_list(item.get("source_articles") or source_title) if _clean(x)]
         source_urls = [_clean(x) for x in _as_list(item.get("source_urls") or item.get("source_url") or item.get("url")) if _clean(x)]
@@ -705,10 +810,21 @@ def _validate_enrichment(payload: dict[str, Any], candidate_evidence: list[dict[
         can_use_for = _specific_use_cases([_clean(x) for x in _as_list(item.get("can_use_for")) if _clean(x)])
         suggested_question_types = [_clean(x) for x in _as_list(item.get("suggested_question_types")) if _clean(x)]
         not_suitable_for = [_clean(x) for x in _as_list(item.get("not_suitable_for")) if _clean(x)]
+        usage_examples = _validate_usage_examples(_normalize_usage_examples(item), source_articles[0] if source_articles else "unknown", warnings)
+        use_boundary = _clean(item.get("use_boundary"))
         if material_type not in valid_material_types or not factual_anchor or not exam_paragraph or not source_articles:
             continue
-        if not all([core_topic, generalizable_logic, exam_paragraph_general, suggested_question_types, _clean(item.get("use_boundary"))]):
+        if not all([core_topic, generalizable_logic, exam_paragraph_general, suggested_question_types, use_boundary]):
             warnings.append(f"drop material card missing reusable exam fields: {source_articles[0]}")
+            continue
+        if not material_summary:
+            warnings.append(f"drop material card missing summary: {source_articles[0]}")
+            continue
+        if len(material_summary) < 60:
+            warnings.append(f"drop material card with thin summary: {source_articles[0]}")
+            continue
+        if len(usage_examples) < 2:
+            warnings.append(f"drop material card missing reusable usage examples: {source_articles[0]}")
             continue
         if len(can_use_for) < 3:
             warnings.append(f"drop material card with vague can_use_for: {source_articles[0]}")
@@ -727,9 +843,11 @@ def _validate_enrichment(payload: dict[str, Any], candidate_evidence: list[dict[
             generalizable_logic,
             exam_paragraph_specific,
             exam_paragraph_general,
+            material_summary,
             _clean(item.get("memory_sentence")),
             _clean(item.get("use_tip")),
-            _clean(item.get("use_boundary")),
+            use_boundary,
+            *[row["example"] for row in usage_examples],
         ]
         if any(value and len(value) >= 18 and not _is_complete_sentence(value) for value in text_values):
             continue
@@ -744,6 +862,8 @@ def _validate_enrichment(payload: dict[str, Any], candidate_evidence: list[dict[
                 "core_topic": core_topic,
                 "generalizable_logic": generalizable_logic,
                 "factual_anchor": factual_anchor,
+                "material_summary": material_summary,
+                "usage_examples": usage_examples,
                 "exam_paragraph": exam_paragraph,
                 "exam_paragraph_specific": exam_paragraph_specific,
                 "exam_paragraph_general": exam_paragraph_general,
@@ -752,7 +872,7 @@ def _validate_enrichment(payload: dict[str, Any], candidate_evidence: list[dict[
                 "not_suitable_for": not_suitable_for[:5],
                 "memory_sentence": _clean(item.get("memory_sentence")),
                 "use_tip": _clean(item.get("use_tip")),
-                "use_boundary": _clean(item.get("use_boundary")),
+                "use_boundary": use_boundary,
                 # Backward-compatible aliases used by older renderers/tests.
                 "date": "、".join(source_dates),
                 "theme": "、".join(target_topics),
@@ -830,15 +950,13 @@ def _validate_enrichment(payload: dict[str, Any], candidate_evidence: list[dict[
         warnings.append("weekly enrichment returned fewer than 4 exam_map_cards")
     if len(selected_expression_rows) < 8:
         warnings.append("weekly enrichment returned fewer than 8 selected_expression_rows")
-    if len(material_cards) < 3:
-        warnings.append("weekly enrichment returned fewer than 3 material_cards")
     if len(practice_questions) != 3:
         warnings.append("weekly enrichment did not return exactly 3 practice_questions")
 
     return {
         "exam_map_cards": exam_map_cards[:6],
         "selected_expression_rows": selected_expression_rows[:15],
-        "material_cards": material_cards[:6],
+        "material_cards": material_cards[:3],
         "practice_questions": practice_questions[:3],
         "warnings": warnings,
     }

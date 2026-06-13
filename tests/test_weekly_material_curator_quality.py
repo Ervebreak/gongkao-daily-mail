@@ -5,7 +5,7 @@ from copy import deepcopy
 from weekly_material_curator import _validate_enrichment, select_material_candidate_articles
 
 
-GOLDEN_SENTENCE = "把问题解决在基层一线。"
+GOLDEN_SENTENCE = "把问题解决在基层一线，关键是让治理动作能被群众真实感知。"
 
 
 def _expression_rows() -> list[dict[str, str]]:
@@ -24,13 +24,13 @@ def _practice_question(question_type: str, title: str) -> dict[str, object]:
     return {
         "title": title,
         "question_type": question_type,
-        "question": f"请围绕{title}谈谈你的理解。",
+        "question": f"请围绕《{title}》谈谈你的理解。",
         "target_topics": ["治理实践"],
         "suggested_golden_sentences": [GOLDEN_SENTENCE],
         "suggested_case_materials": ["投诉闭环素材卡"],
         "suggested_policy_expressions": ["分类处置、闭环反馈。"],
         "answer_hint": f"作答时可用“{GOLDEN_SENTENCE}”引出治理动作。",
-        "mini_reference_answer": f"{GOLDEN_SENTENCE}要通过分类处置和闭环反馈回应群众诉求。",
+        "mini_reference_answer": f"{GOLDEN_SENTENCE}，要通过分类处置和闭环反馈回应群众诉求。",
         "use_boundary": "适合讨论治理机制优化，不适合替代专业执法依据。",
     }
 
@@ -42,16 +42,25 @@ def _valid_material_card() -> dict[str, object]:
         "source_dates": ["2026-06-01"],
         "source_articles": ["平台投诉治理"],
         "source_urls": ["https://example.com/platform"],
-        "target_topics": ["责任落实"],
-        "core_topic": "平台责任与协同治理。",
+        "target_topics": ["责任落实", "公共服务要从平均供给转向精准抵达"],
+        "core_topic": "平台责任与协同治理",
         "generalizable_logic": "面对跨主体公共问题，应明确责任边界、分类处置诉求、形成反馈闭环。",
         "factual_anchor": "平台设置投诉入口，部门按类别转办并公开处理结果。",
+        "material_summary": "这条素材来自平台投诉治理场景：原文明确写到平台设置统一投诉入口，相关部门按照问题类型分流转办，并向群众公开处理结果。它能说明公共服务不能停留在平均供给，而要把诉求识别、责任分派和反馈闭环落到具体环节，不适合被夸大成所有治理场景的万能模板。",
+        "usage_examples": [
+            {
+                "theme": "基层治理要听见一线声音",
+                "example": "写基层治理时，可以把这条素材放进“先听见问题、再形成闭环”的论述中。比如平台把群众投诉集中收入口，部门按问题类型转办并公开反馈，就说明治理不能只看表面响应速度，更要让群众知道问题交给了谁、什么时候能解决、结果如何回告，真正把一线声音转化为治理动作。",
+            },
+            {
+                "theme": "公共服务要从平均供给转向精准抵达",
+                "example": "论证公共服务精准化时，这条素材可以用来说明“同样是诉求，处理路径不能一刀切”。平台先识别投诉类型，再分流到对应部门处理，最后形成反馈闭环，体现的不是简单多做服务，而是让有限资源按问题性质精准投放，避免群众多头反映、反复等待。",
+            },
+        ],
         "exam_paragraph": "治理复杂问题，关键在于把责任链条和反馈链条同时压实。",
         "exam_paragraph_specific": "针对平台投诉，既要压实平台主体责任，也要通过部门转办形成处置闭环。",
         "exam_paragraph_general": "面对涉及多主体的公共问题，应以责任清单厘清边界，以分类处置提高效率，以闭环反馈回应关切。",
         "can_use_for": [
-            "基层治理",
-            "公共服务",
             "社区老旧小区停车纠纷协商",
             "平台投诉闭环处置",
             "校园食品安全明厨亮灶",
@@ -64,7 +73,7 @@ def _valid_material_card() -> dict[str, object]:
     }
 
 
-def test_weekly_enrichment_guards_question_count_and_extra_practice_fields() -> None:
+def test_weekly_enrichment_keeps_only_three_practice_questions() -> None:
     payload = {
         "exam_map_cards": [],
         "selected_expression_rows": _expression_rows(),
@@ -82,40 +91,40 @@ def test_weekly_enrichment_guards_question_count_and_extra_practice_fields() -> 
 
     assert len(result["practice_questions"]) == 3
     assert "golden_sentence_practice" not in result
-    assert "金句小练习" not in result
+    assert all("material_cards" not in warning for warning in result["warnings"])
 
 
-def test_material_cards_require_general_exam_writing_boundary_and_specific_use_cases() -> None:
+def test_material_cards_require_summary_examples_and_boundary() -> None:
     valid_card = _valid_material_card()
 
-    missing_general = deepcopy(valid_card)
-    missing_general["source_articles"] = ["缺少通用写法"]
-    missing_general["exam_paragraph_general"] = ""
+    missing_summary = deepcopy(valid_card)
+    missing_summary["source_articles"] = ["缺少素材简介"]
+    missing_summary["material_summary"] = ""
 
     missing_boundary = deepcopy(valid_card)
     missing_boundary["source_articles"] = ["缺少使用边界"]
     missing_boundary["use_boundary"] = ""
 
-    vague_use_cases = deepcopy(valid_card)
-    vague_use_cases["source_articles"] = ["空泛适用场景"]
-    vague_use_cases["can_use_for"] = ["基层治理", "公共服务", "民生保障", "社会治理"]
+    generic_theme = deepcopy(valid_card)
+    generic_theme["source_articles"] = ["主题空泛"]
+    generic_theme["usage_examples"] = [
+        {"theme": "担当", "example": valid_card["usage_examples"][0]["example"]},
+        valid_card["usage_examples"][1],
+    ]
 
     payload = {
         "exam_map_cards": [],
         "selected_expression_rows": _expression_rows(),
-        "material_cards": [valid_card, missing_general, missing_boundary, vague_use_cases],
+        "material_cards": [valid_card, missing_summary, missing_boundary, generic_theme],
         "practice_questions": [],
     }
 
     result = _validate_enrichment(payload)
 
     assert [card["source_articles"][0] for card in result["material_cards"]] == ["平台投诉治理"]
-    assert result["material_cards"][0]["can_use_for"] == [
-        "社区老旧小区停车纠纷协商",
-        "平台投诉闭环处置",
-        "校园食品安全明厨亮灶",
-    ]
-    assert all(3 <= len(card["can_use_for"]) <= 5 for card in result["material_cards"])
+    assert len(result["material_cards"][0]["usage_examples"]) == 2
+    assert result["material_cards"][0]["material_summary"]
+    assert all("fewer than 3 material_cards" not in warning for warning in result["warnings"])
 
 
 def test_quick_reads_compete_by_material_usability_score() -> None:
@@ -124,7 +133,7 @@ def test_quick_reads_compete_by_material_usability_score() -> None:
             "date": "2026-06-01",
             "theme": "治理实践",
             "featured": {
-                "title": "一地特色宣传活动",
+                "title": "一场特色宣传活动",
                 "source": "本地媒体",
                 "url": "https://example.com/featured",
                 "one_sentence": "介绍某地特色宣传活动，话题较窄，迁移空间有限。",
