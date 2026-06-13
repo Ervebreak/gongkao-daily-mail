@@ -813,6 +813,7 @@ def send_segmented_email(
     delivery_date: str,
     test_mode: bool = False,
     attachments: list[dict] | None = None,
+    lite_attachments: list[dict] | None = None,
     segments: dict[str, list[dict[str, str]]] | None = None,
     recipient_source: str | None = None,
     enable_trial_reminders: bool = False,
@@ -853,7 +854,7 @@ def send_segmented_email(
             payload["html_body"],
             recipients,
             recipient_source=f"{recipient_source}:{variant}",
-            attachments=attachments if variant in FULL_VARIANTS else None,
+            attachments=attachments if variant in FULL_VARIANTS else lite_attachments,
             send_mode_override="individual",
         )
     full_result = {
