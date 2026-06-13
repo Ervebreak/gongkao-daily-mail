@@ -421,6 +421,18 @@ def render_typst(data: dict[str, Any]) -> str:
             blocks.append(f'#material-example[{typst_text(theme)}][{typst_text(content)}]')
         return "\n#v(6pt)\n".join(blocks)
 
+    def merged_material_boundary(row: dict[str, Any]) -> str:
+        parts: list[str] = []
+        use_boundary = row_value(row, "use_boundary")
+        not_suitable = row_list(row, "not_suitable_for")
+        if use_boundary:
+            parts.append(use_boundary)
+        if not_suitable:
+            extra = "不宜直接用于" + "、".join(not_suitable)
+            if extra not in parts:
+                parts.append(extra)
+        return " ".join(parts)
+
     material_parts: list[str] = []
     for idx, row in enumerate((data.get("material_cards") or [])[:3], start=1):
         if not isinstance(row, dict):
@@ -430,16 +442,14 @@ def render_typst(data: dict[str, Any]) -> str:
         source_dates = row_value(row, "source_dates", "date")
         source_articles = row_value(row, "source_articles", "source_title")
         target_topics = row_value(row, "target_topics", "theme")
-        factual_anchor = row_value(row, "factual_anchor", "anchor")
         material_summary = row_value(row, "material_summary")
         example_blocks = material_example_blocks(row)
         suggested_question_types = row_value(row, "suggested_question_types")
-        not_suitable_for = row_value(row, "not_suitable_for")
-        use_boundary = row_value(row, "use_boundary")
+        use_boundary = merged_material_boundary(row)
         material_parts.append(
             f'#material-card[{typst_text(title)}][{typst_text(material_type)}][{typst_text(source_dates)}][{typst_text(source_articles)}]'
-            f'[{typst_text(material_summary)}][{typst_text(factual_anchor)}][{example_blocks}]'
-            f'[{typst_text(use_boundary)}][{typst_text(target_topics)}][{typst_text(suggested_question_types)}][{typst_text(not_suitable_for)}]'
+            f'[{typst_text(material_summary)}][{example_blocks}]'
+            f'[{typst_text(use_boundary)}][{typst_text(target_topics)}][{typst_text(suggested_question_types)}]'
         )
     material_cards = "\n#v(7pt)\n".join(material_parts)
     has_material_cards = bool(material_parts)
@@ -566,14 +576,13 @@ def render_typst(data: dict[str, Any]) -> str:
   #v(3pt)
   #body
 ]
-#let material-card(title, material-type, source-dates, source-articles, material-summary, factual-anchor, examples, use-boundary, target-topics, suggested-question-types, not-suitable-for) = block(fill: white, stroke: 0.6pt + line, inset: 10pt, radius: 7.5pt, width: 100%, breakable: true)[
+#let material-card(title, material-type, source-dates, source-articles, material-summary, examples, use-boundary, target-topics, suggested-question-types) = block(fill: white, stroke: 0.6pt + line, inset: 10pt, radius: 7.5pt, width: 100%, breakable: true)[
   #text(size: 12pt, weight: "bold", fill: brand)[作文素材积累·#title（一例多用）]
   #if material-type != "" [#linebreak()#badge[#material-type]]
   #v(5pt)
   #if source-dates != "" or source-articles != "" [#info-strip[来源][#source-dates#if source-dates != "" and source-articles != "" [｜#source-articles]]]
   #if target-topics != "" [#info-strip[可用主题方向][#target-topics]]
   #if suggested-question-types != "" [#info-strip[适用题型][#suggested-question-types]]
-  #if factual-anchor != "" [#info-strip[事实锚点][#factual-anchor]]
   #if material-summary != "" [#info-strip[素材简介][#material-summary]]
   #if examples != "" [
     #v(4pt)
@@ -581,7 +590,6 @@ def render_typst(data: dict[str, Any]) -> str:
     #v(4pt)
     #examples
   ]
-  #if not-suitable-for != "" [#info-strip[不适合用于][#not-suitable-for]]
   #if use-boundary != "" [#muted[使用边界：#use-boundary]]
 ]
 #let practice-card(title, question-type, question, target-topics, suggested-golden-sentences, suggested-case-materials, suggested-policy-expressions, answer-hint, mini-reference-answer, use-boundary) = block(fill: white, stroke: 0.6pt + line, inset: 10pt, radius: 7.5pt, width: 100%, breakable: true)[

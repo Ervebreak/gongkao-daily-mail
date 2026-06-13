@@ -587,6 +587,29 @@ def _is_complete_sentence(text: str) -> bool:
     return True
 
 
+def _has_terminal_sentence_end(text: str) -> bool:
+    text = _clean(text)
+    if not text:
+        return False
+    return bool(re.search(r'[。！？!?][”’"）】》」』]*\s*$', text))
+
+
+def _clip_complete_sentence(text: str, limit: int) -> str:
+    text = _clean(text)
+    if not text:
+        return ""
+    upper = min(len(text), limit)
+    if upper == len(text) and _is_complete_sentence(text) and _has_terminal_sentence_end(text):
+        return text
+    window = text[:upper]
+    matches = list(re.finditer(r'[。！？!?][”’"）】》」』]*', window))
+    for match in reversed(matches):
+        candidate = window[: match.end()].strip()
+        if len(candidate) >= max(60, upper // 2) and _is_complete_sentence(candidate) and _has_terminal_sentence_end(candidate):
+            return candidate
+    return ""
+
+
 def _valid_text_map(row: Any, required: list[str]) -> dict[str, str] | None:
     if not isinstance(row, dict):
         return None
@@ -759,9 +782,17 @@ def _validate_usage_examples(
         if len(example) < 60:
             warnings.append(f"drop material card with weak usage example: {source_name}")
             return []
-        if len(example) > 260:
-            example = example[:260].rstrip("，、；： ") + "。"
-        if not _is_complete_sentence(example):
+        if len(example) > 320:
+            example = _clip_complete_sentence(example, 320)
+            if not example:
+                warnings.append(f"drop material card with overlong non-closable usage example: {source_name}")
+                return []
+        elif not _has_terminal_sentence_end(example):
+            example = _clip_complete_sentence(example, len(example))
+            if not example:
+                warnings.append(f"drop material card with incomplete usage example: {source_name}")
+                return []
+        if not _is_complete_sentence(example) or not _has_terminal_sentence_end(example):
             warnings.append(f"drop material card with incomplete usage example: {source_name}")
             return []
         valid_rows.append({"theme": theme, "example": example})

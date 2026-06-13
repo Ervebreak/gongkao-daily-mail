@@ -69,6 +69,8 @@ def test_render_typst_shows_material_cards_as_one_case_many_uses() -> None:
     assert "素材简介" in text
     assert "作文示例" in text
     assert "使用边界" in text
+    assert "事实锚点" not in text
+    assert "不适合用于" not in text
     assert "本周考场素材库" not in text
 
 

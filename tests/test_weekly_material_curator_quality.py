@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from weekly_material_curator import _build_prompt, _validate_enrichment, select_material_candidate_articles
+from weekly_material_curator import _build_prompt, _validate_enrichment, _validate_usage_examples, select_material_candidate_articles
 
 
 GOLDEN_SENTENCE = "把问题解决在基层一线，关键是让治理动作能被群众真实感知。"
@@ -152,6 +152,38 @@ def test_prompt_requires_material_summary_usage_examples_and_no_three_to_six_rul
     assert '"theme": "具体申论/面试主题"' in prompt
     assert '"example": "120到220字的考场表达示例"' in prompt
     assert "material_cards：3到6条" not in prompt
+
+
+def test_overlong_usage_example_is_dropped_when_no_complete_sentence_within_limit() -> None:
+    warnings: list[str] = []
+    long_example = "这是一个很长但一直没有句号的示例" * 30
+
+    result = _validate_usage_examples(
+        [{"theme": "基层治理要听见一线声音", "example": long_example}],
+        "平台投诉治理",
+        warnings,
+    )
+
+    assert result == []
+    assert any("overlong non-closable usage example" in warning for warning in warnings)
+
+
+def test_overlong_usage_example_is_trimmed_to_complete_sentence() -> None:
+    warnings: list[str] = []
+    sentence = "基层治理不能只满足于表态回应，更要把群众诉求分流到具体责任链条中，确保群众知道谁来办、什么时候办、办到什么程度。"
+    long_example = sentence * 4 + "这是未完成的半句"
+
+    result = _validate_usage_examples(
+        [{"theme": "基层治理要听见一线声音", "example": long_example}],
+        "平台投诉治理",
+        warnings,
+    )
+
+    assert len(result) == 1
+    assert result[0]["example"][-1] in "。！？!?"
+    assert len(result[0]["example"]) < len(long_example)
+    assert "这是未完成的半句" not in result[0]["example"]
+    assert warnings == []
 
 
 def test_quick_reads_compete_by_material_usability_score() -> None:
