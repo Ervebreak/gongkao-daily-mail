@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+from html import escape as _html
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
@@ -2373,10 +2374,9 @@ def _read_oss_bytes_from_path(oss_path: str) -> tuple[bytes | None, dict[str, An
     return response.content, meta
 
 
-def weekly_pdf_attachment_from_candidate(candidate: dict[str, Any]) -> tuple[dict[str, Any] | None, dict[str, Any]]:
-    weekly = candidate.get("weekly_pdf") if isinstance(candidate.get("weekly_pdf"), dict) else {}
-    filename = str(weekly.get("attachment_filename") or "gongkao-weekly.pdf")
-    local_pdf_text = str(weekly.get("local_pdf") or "").strip()
+def _weekly_attachment_from_artifact(artifact: dict[str, Any], default_filename: str) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    filename = str(artifact.get("attachment_filename") or default_filename)
+    local_pdf_text = str(artifact.get("local_pdf") or "").strip()
     local_pdf = Path(local_pdf_text) if local_pdf_text else None
     if local_pdf and local_pdf.exists() and local_pdf.is_file():
         content = local_pdf.read_bytes()
@@ -2386,10 +2386,21 @@ def weekly_pdf_attachment_from_candidate(candidate: dict[str, Any]) -> tuple[dic
             "ok": True,
             "bytes": len(content),
         }
-    content, meta = _read_oss_bytes_from_path(str(weekly.get("oss_pdf_path") or ""))
+    content, meta = _read_oss_bytes_from_path(str(artifact.get("oss_pdf_path") or ""))
     if content:
         return {"filename": filename, "content": content, "content_type": "application/pdf"}, meta
     return None, meta
+
+
+def weekly_pdf_attachment_from_candidate(candidate: dict[str, Any]) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    weekly = candidate.get("weekly_pdf") if isinstance(candidate.get("weekly_pdf"), dict) else {}
+    return _weekly_attachment_from_artifact(weekly, "gongkao-weekly.pdf")
+
+
+def weekly_pdf_preview_attachment_from_candidate(candidate: dict[str, Any]) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    weekly = candidate.get("weekly_pdf") if isinstance(candidate.get("weekly_pdf"), dict) else {}
+    preview = weekly.get("lite_preview") if isinstance(weekly.get("lite_preview"), dict) else {}
+    return _weekly_attachment_from_artifact(preview, "gongkao-weekly-lite-preview.pdf")
 
 
 def send_weekly_pdf_candidate(
@@ -2405,9 +2416,13 @@ def send_weekly_pdf_candidate(
 
     segments, recipient_source = split_effective_recipient_records(test_mode=test_invocation, today=delivery_date)
     attachment, attachment_meta = weekly_pdf_attachment_from_candidate(candidate)
+    lite_attachment, lite_attachment_meta = weekly_pdf_preview_attachment_from_candidate(candidate)
     logger.info(
         "weekly pdf candidate attachment status",
         **attachment_meta,
+        lite_preview_ok=bool(lite_attachment),
+        lite_preview_source=lite_attachment_meta.get("source"),
+        lite_preview_error=lite_attachment_meta.get("error"),
         attach_enabled=settings.weekly_pdf_attach,
         valid_recipient_count=len(segments.get("full") or []) + len(segments.get("lite") or []),
         full_count=len(segments.get("full") or []),
@@ -2442,34 +2457,9 @@ def send_weekly_pdf_candidate(
     plain_text = str(candidate.get("plain_text") or "")
     html_body = str(candidate.get("html_body") or "")
     attachments = [attachment] if (settings.weekly_pdf_attach and attachment) else []
+    lite_attachments = [lite_attachment] if (settings.weekly_pdf_attach and lite_attachment) else []
     weekly = candidate.get("weekly_pdf") if isinstance(candidate.get("weekly_pdf"), dict) else {}
-    lite_plain_text = "\n".join(
-        [
-            "本周复盘资料包已生成。",
-            f"汇总范围：{weekly.get('start_date') or ''} 至 {weekly.get('end_date') or ''}",
-            "免费简版不包含 PDF 附件；付费内测用户可收到完整周 PDF 资料包。",
-            f"付费内测入口：{settings.paid_trial_entry_url or settings.feedback_base_url or '#'}",
-        ]
-    )
-    lite_html_body = f"""<!doctype html>
-<html>
-<body style="margin:0;padding:0;background:#f6f8fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif;color:#0f172a;">
-  <div style="max-width:620px;margin:0 auto;padding:18px 12px;">
-    <div style="background:#174a7e;color:#fff;border-radius:16px;padding:18px 18px;margin-bottom:12px;">
-      <div style="font-size:12px;letter-spacing:1.2px;opacity:.86;">WEEKLY REVIEW 免费简版</div>
-      <div style="font-size:22px;font-weight:900;line-height:1.35;margin-top:8px;">本周复盘资料包已生成</div>
-      <div style="font-size:14px;line-height:1.7;margin-top:8px;">汇总范围：{_html(weekly.get('start_date'))} 至 {_html(weekly.get('end_date'))}</div>
-    </div>
-    <div style="background:#fff;border:1px solid #e6eaf0;border-radius:14px;padding:14px 15px;margin-bottom:12px;">
-      <div style="font-size:15px;line-height:1.8;color:#334155;">免费简版不包含 PDF 附件。付费内测用户可收到完整周 PDF 资料包，用于周末集中复盘。</div>
-    </div>
-    <div style="background:#fff8e8;border:1px solid #fed7aa;border-radius:14px;padding:14px 15px;">
-      <div style="font-size:15px;font-weight:900;color:#92400e;margin-bottom:7px;">付费内测</div>
-      <a href="{_html(settings.paid_trial_entry_url or settings.feedback_base_url or '#')}" style="display:inline-block;background:#f59e0b;color:#fff;text-decoration:none;border-radius:999px;padding:9px 15px;font-size:14px;font-weight:900;">了解付费内测</a>
-    </div>
-  </div>
-</body>
-</html>"""
+    lite_plain_text, lite_html_body = build_weekly_pdf_preview_candidate_message(weekly)
     send_result: dict[str, Any] | None = None
     if settings.send_email:
         send_result = send_segmented_email(
@@ -2481,10 +2471,17 @@ def send_weekly_pdf_candidate(
             delivery_date=delivery_date,
             test_mode=test_invocation,
             attachments=attachments,
+            lite_attachments=lite_attachments,
             segments=segments,
             recipient_source=recipient_source,
         )
-        logger.info("weekly pdf candidate email send result", subject=subject, attachment_count=len(attachments), **send_result)
+        logger.info(
+            "weekly pdf candidate email send result",
+            subject=subject,
+            attachment_count=len(attachments),
+            lite_attachment_count=len(lite_attachments),
+            **send_result,
+        )
     else:
         audit_result = save_send_audit(delivery_date, segments, recipient_source)
         send_result = {
@@ -2499,6 +2496,7 @@ def send_weekly_pdf_candidate(
             "weekly pdf candidate email skipped",
             reason="SEND_EMAIL=false",
             attachment_count=len(attachments),
+            lite_attachment_count=len(lite_attachments),
             full_count=audit_result["full_count"],
             lite_count=audit_result["lite_count"],
             skipped_count=audit_result["skipped_count"],
@@ -2536,6 +2534,7 @@ def send_weekly_pdf_candidate(
                 f"delivery_date: {delivery_date}",
                 f"pdf_range: {weekly.get('start_date')} to {weekly.get('end_date')}",
                 f"attachment_count: {len(attachments)}",
+                f"lite_attachment_count: {len(lite_attachments)}",
                 f"full_count: {(send_result or {}).get('full_count', 0)}",
                 f"lite_count: {(send_result or {}).get('lite_count', 0)}",
                 f"skipped_count: {(send_result or {}).get('skipped_count', 0)}",
@@ -3002,6 +3001,73 @@ def build_weekly_pdf_candidate_message(weekly_pdf: dict[str, Any]) -> tuple[str,
     </div>
   </div>
 </body>
+    </html>"""
+    return plain_text, html_body
+
+
+def build_weekly_pdf_preview_candidate_message(weekly_pdf: dict[str, Any]) -> tuple[str, str]:
+    start_date = str(weekly_pdf.get("start_date") or "")
+    end_date = str(weekly_pdf.get("end_date") or "")
+    preview = weekly_pdf.get("lite_preview") if isinstance(weekly_pdf.get("lite_preview"), dict) else {}
+    filename = str(preview.get("attachment_filename") or "公考晨读周复盘预览版.pdf")
+    preview_ready = str(preview.get("status") or "").strip().lower() == "ok"
+    cta_url = settings.paid_trial_entry_url.strip() or settings.feedback_base_url.strip()
+    cta_text = cta_url or "直接回复这封邮件"
+    preview_status_line = "本周已附上免费版周 PDF 预览，你可以先用它快速回看这一周的重点。" if preview_ready else "这周的免费预览附件暂时没有生成成功，我先把周复盘预览重点放在邮件里，避免你错过本周内容。"
+    plain_lines = [
+        "本周周复盘预览已整理完成。",
+        f"汇总范围：{start_date} 至 {end_date}",
+        "这是一份免费预览版，帮你快速了解本周重点，不会替代完整版周 PDF。",
+        preview_status_line,
+        "",
+        "这份预览里会先给你看：",
+        "1. 本周主题速览；",
+        "2. 本周 2-3 个高频考点方向；",
+        "3. 完整版周 PDF 包含哪些模块；",
+        "4. 少量真实内容片段。",
+        "",
+        "完整版用户会收到更完整的周 PDF，包含素材、表达、训练题和每日压缩回看。",
+        f"如果你想看完整周 PDF，可以回复邮件或通过这里了解完整版：{cta_text}",
+        "暂时不参加也没关系，免费简版会继续保留。",
+    ]
+    if preview_ready:
+        plain_lines.extend(["", f"附件：{filename}"])
+    plain_text = "\n".join(plain_lines)
+    cta_button = (
+        f'<a href="{_html(cta_url)}" style="display:inline-block;background:#174a7e;color:#fff;text-decoration:none;border-radius:999px;padding:10px 16px;font-size:14px;font-weight:900;">了解完整版周 PDF</a>'
+        if cta_url
+        else ""
+    )
+    preview_badge = "已附预览版 PDF" if preview_ready else "本次退化为邮件预览"
+    html_body = f"""<!doctype html>
+<html>
+<body style="margin:0;padding:0;background:#f6f8fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif;color:#0f172a;">
+  <div style="max-width:680px;margin:0 auto;padding:20px 12px;">
+    <div style="background:linear-gradient(135deg,#174a7e,#2368a2);color:#fff;border-radius:18px;padding:20px 20px;margin-bottom:14px;">
+      <div style="font-size:12px;letter-spacing:1.2px;opacity:.86;">WEEKLY REVIEW 免费预览版</div>
+      <div style="font-size:24px;font-weight:900;line-height:1.35;margin-top:8px;">本周周复盘预览已整理完成</div>
+      <div style="font-size:14px;line-height:1.7;margin-top:8px;">汇总范围：{_html(start_date)} 至 {_html(end_date)}</div>
+      <div style="display:inline-block;margin-top:10px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.24);border-radius:999px;padding:5px 10px;font-size:12px;font-weight:800;">{_html(preview_badge)}</div>
+    </div>
+    <div style="background:#fff;border:1px solid #dfe7f2;border-radius:14px;padding:15px 16px;margin-bottom:12px;font-size:15px;line-height:1.85;color:#334155;">
+      这是一份免费预览版，帮你快速了解本周重点，不会替代完整版周 PDF。{_html(preview_status_line)}
+    </div>
+    <div style="background:#fff;border:1px solid #dfe7f2;border-radius:14px;padding:15px 16px;margin-bottom:12px;">
+      <div style="font-size:16px;font-weight:900;color:#174a7e;margin-bottom:8px;">这份预览里会先给你看什么</div>
+      <ul style="margin:0;padding-left:20px;font-size:15px;line-height:1.85;color:#334155;">
+        <li>本周主题速览</li>
+        <li>本周 2-3 个高频考点方向</li>
+        <li>完整版周 PDF 包含哪些模块</li>
+        <li>少量真实内容片段</li>
+      </ul>
+    </div>
+    <div style="background:#fff8e8;border:1px solid #fed7aa;border-radius:14px;padding:15px 16px;">
+      <div style="font-size:16px;font-weight:900;color:#92400e;margin-bottom:8px;">如果你想看完整周 PDF</div>
+      <div style="font-size:15px;line-height:1.85;color:#7c2d12;margin-bottom:10px;">完整版用户会收到更完整的素材、表达、训练题和每日压缩回看。你可以直接回复邮件，或通过下面的入口了解完整版。暂时不参加也没关系，免费简版会继续保留。</div>
+      {cta_button}
+    </div>
+  </div>
+</body>
 </html>"""
     return plain_text, html_body
 
@@ -3048,6 +3114,15 @@ def generate_weekly_pdf_candidate(event: Any | None = None) -> dict[str, Any]:
         "attachment_filename": (assets.get("attachment") or {}).get("filename") or "gongkao-weekly.pdf",
         "pdf_engine": assets.get("pdf_engine"),
         "typst_meta": assets.get("typst_meta"),
+        "lite_preview": {
+            "status": ((assets.get("lite_preview") or {}).get("status") or "").strip(),
+            "local_pdf": (assets.get("lite_preview") or {}).get("local_pdf") or "",
+            "oss_pdf_path": (assets.get("lite_preview") or {}).get("oss_pdf_path") or "",
+            "attachment_filename": (assets.get("lite_preview") or {}).get("attachment_filename") or "",
+            "pdf_engine": (assets.get("lite_preview") or {}).get("pdf_engine") or "",
+            "typst_meta": (assets.get("lite_preview") or {}).get("typst_meta"),
+            "error": (assets.get("lite_preview") or {}).get("error") or "",
+        },
     }
     plain_text, html_body = build_weekly_pdf_candidate_message(weekly_pdf)
     candidate_payload = {

@@ -470,6 +470,7 @@ def send_segmented_email(
     delivery_date: str,
     test_mode: bool = False,
     attachments: list[dict] | None = None,
+    lite_attachments: list[dict] | None = None,
     segments: dict[str, list[dict[str, str]]] | None = None,
     recipient_source: str | None = None,
 ) -> dict[str, Any]:
@@ -491,7 +492,7 @@ def send_segmented_email(
         lite_html_body,
         segments.get("lite") or [],
         recipient_source=f"{recipient_source}:lite",
-        attachments=None,
+        attachments=lite_attachments,
     )
     audit = update_send_audit_results(delivery_date, audit, full_result, lite_result)
     return {
