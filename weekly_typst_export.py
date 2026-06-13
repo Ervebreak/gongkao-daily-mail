@@ -8,6 +8,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from config import settings
 import weekly_report as weekly
 from weekly_material_curator import build_weekly_enrichment
 
@@ -246,6 +247,194 @@ def build_data(payloads: list[dict[str, Any]], start_date: str, end_date: str, m
         "selected_expression_rows": enrichment.get("selected_expression_rows") or [],
         "material_cards": enrichment.get("material_cards") or [],
         "practice_questions": enrichment.get("practice_questions") or [],
+    }
+
+
+PREVIEW_FULL_MODULES = [
+    "本周高频考点地图",
+    "作文素材积累·一例多用",
+    "本周金句表达库",
+    "本周 3 道考场迁移训练",
+    "每日内容压缩回看",
+    "精读文章和延伸阅读索引",
+]
+
+PREVIEW_GENERIC_POINTS = {
+    "基层治理",
+    "公共服务",
+    "民生保障",
+    "社会治理",
+    "服务群众",
+    "协同治理",
+    "担当",
+    "奋斗",
+    "创新",
+}
+
+
+def clip_complete_sentence(text: Any, limit: int = 180) -> str:
+    raw = clean(text)
+    if not raw:
+        return ""
+    if len(raw) <= limit:
+        return raw
+    window = raw[:limit]
+    matches = list(re.finditer(r'[。！？!?][”’"）】》」』]*', window))
+    for match in reversed(matches):
+        candidate = window[: match.end()].strip()
+        if len(candidate) >= max(40, limit // 3):
+            return candidate
+    return ""
+
+
+def strip_field_label(text: Any) -> str:
+    value = clean(text)
+    if not value:
+        return ""
+    return re.sub(r"^[\u4e00-\u9fffA-Za-z]{1,12}[：:]\s*", "", value).strip()
+
+
+def unique_non_empty(values: list[str], limit: int) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in values:
+        text = clean(item)
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def is_specific_preview_point(text: str) -> bool:
+    compact = re.sub(r"\s+", "", clean(text))
+    if not compact:
+        return False
+    if compact in PREVIEW_GENERIC_POINTS:
+        return False
+    if len(compact) <= 6 and any(term in compact for term in PREVIEW_GENERIC_POINTS):
+        return False
+    return any(token in compact for token in ("要", "把", "从", "向", "解决", "推动", "形成", "转向", "避免", "落实", "闭环", "协同", "精准"))
+
+
+def preview_focus_points(data: dict[str, Any]) -> list[str]:
+    candidates: list[str] = []
+    for row in data.get("material_cards") or []:
+        if isinstance(row, dict):
+            candidates.extend(clean(item) for item in as_list(row.get("target_topics")) if clean(item))
+    for row in data.get("practice_questions") or []:
+        if isinstance(row, dict):
+            candidates.extend(clean(item) for item in as_list(row.get("target_topics")) if clean(item))
+            candidates.append(clean(row.get("title")))
+    for row in data.get("exam_map_cards") or []:
+        if isinstance(row, dict):
+            candidates.append(clean(row.get("title")))
+            candidates.append(clean(row.get("use_for")))
+    result: list[str] = []
+    for item in candidates:
+        text = strip_field_label(item)
+        if not is_specific_preview_point(text):
+            continue
+        if len(text) > 34:
+            clipped = clip_complete_sentence(text, 34)
+            text = clipped or text[:34].rstrip("，、；：,;: ")
+        if text and text not in result:
+            result.append(text)
+        if len(result) >= 3:
+            break
+    return result[:3]
+
+
+def preview_theme_overview(data: dict[str, Any]) -> str:
+    themes = unique_non_empty([day.get("theme") or day.get("featured", {}).get("theme") for day in data.get("days") or []], 4)
+    featured_count = int((data.get("stats") or {}).get("featured_count") or len(data.get("days") or []))
+    question_count = int((data.get("stats") or {}).get("questions_count") or 0)
+    if themes:
+        joined = "、".join(themes)
+        return f"这份周复盘预览覆盖 {data.get('start_date')} 至 {data.get('end_date')} 的内容，本周主要围绕 {joined} 展开，共整理 {featured_count} 篇精读复盘和 {question_count} 个题干练习方向，帮助你快速知道这一周重点学了什么。"
+    return f"这份周复盘预览覆盖 {data.get('start_date')} 至 {data.get('end_date')} 的内容，重点带你快速回看本周精读、训练题和可迁移表达，先建立一周复盘框架，再决定是否深入看完整版资料包。"
+
+
+def preview_expression_fragment(data: dict[str, Any]) -> str:
+    for row in data.get("selected_expression_rows") or data.get("expression_rows") or []:
+        if isinstance(row, dict):
+            sentence = strip_field_label(row.get("sentence") or row.get("expression") or row.get("text"))
+            if sentence:
+                return sentence
+    for day in data.get("days") or []:
+        featured = day.get("featured") if isinstance(day.get("featured"), dict) else {}
+        sentence = strip_field_label(featured.get("rewritable_expression"))
+        if sentence:
+            return sentence
+    return ""
+
+
+def preview_material_fragment(data: dict[str, Any]) -> dict[str, str]:
+    for row in data.get("material_cards") or []:
+        if not isinstance(row, dict):
+            continue
+        summary = clip_complete_sentence(row.get("material_summary"), 160) or clean(row.get("material_summary"))
+        title = clean(row.get("title") or row.get("source_title") or "本周素材片段")
+        source = "、".join(unique_non_empty(as_list(row.get("source_articles")), 2))
+        if summary:
+            return {"title": title, "source": source, "summary": summary}
+    for day in data.get("days") or []:
+        featured = day.get("featured") if isinstance(day.get("featured"), dict) else {}
+        summary = clip_complete_sentence(featured.get("one_sentence"), 160) or clean(featured.get("one_sentence"))
+        if summary:
+            return {
+                "title": clean(featured.get("title") or "本周精读片段"),
+                "source": clean(featured.get("source")),
+                "summary": summary,
+            }
+    return {}
+
+
+def preview_practice_fragment(data: dict[str, Any]) -> dict[str, str]:
+    for row in data.get("practice_questions") or []:
+        if not isinstance(row, dict):
+            continue
+        question = clean(row.get("question"))
+        direction = clean(row.get("answer_hint") or row.get("use_hint") or row.get("target_topics"))
+        if question:
+            return {
+                "title": clean(row.get("title") or "本周训练题片段"),
+                "question": question,
+                "direction": clip_complete_sentence(direction, 90) or direction,
+            }
+    for day in data.get("days") or []:
+        question = day.get("question") if isinstance(day.get("question"), dict) else {}
+        stem = clean(question.get("question"))
+        framework = [clean(item) for item in as_list(question.get("answer_framework")) if clean(item)]
+        if stem:
+            return {
+                "title": "本周训练题片段",
+                "question": stem,
+                "direction": "；".join(framework[:2]),
+            }
+    return {}
+
+
+def build_preview_data(payloads: list[dict[str, Any]], start_date: str, end_date: str, misses: list[dict[str, str]]) -> dict[str, Any]:
+    data = build_data(payloads, start_date, end_date, misses)
+    return build_preview_data_from_full_data(data)
+
+
+def build_preview_data_from_full_data(data: dict[str, Any]) -> dict[str, Any]:
+    cta_url = settings.paid_trial_entry_url.strip() or settings.feedback_base_url.strip()
+    return {
+        "start_date": data.get("start_date") or "",
+        "end_date": data.get("end_date") or "",
+        "period": data.get("period"),
+        "theme_overview": preview_theme_overview(data),
+        "focus_points": preview_focus_points(data),
+        "full_modules": PREVIEW_FULL_MODULES,
+        "expression_preview": preview_expression_fragment(data),
+        "material_preview": preview_material_fragment(data),
+        "practice_preview": preview_practice_fragment(data),
+        "cta_url": cta_url,
     }
 
 
@@ -707,17 +896,106 @@ def render_typst(data: dict[str, Any]) -> str:
 """
 
 
+def render_preview_typst(data: dict[str, Any]) -> str:
+    focus_rows = "\n".join(f"- {typst_text(item)}" for item in data.get("focus_points") or [])
+    if not focus_rows:
+        focus_rows = "- 本周重点以精读文章主线、题干拆解和可迁移表达为主，先建立复盘框架。"
+    module_rows = "\n".join(f"- {typst_text(item)}" for item in data.get("full_modules") or PREVIEW_FULL_MODULES)
+    expression_preview = typst_text(data.get("expression_preview") or "本周会从精读文章里提炼可直接复用的表达，完整版会给出更完整的金句表达库。")
+    material_preview = data.get("material_preview") if isinstance(data.get("material_preview"), dict) else {}
+    material_title = typst_text(material_preview.get("title") or "本周素材片段")
+    material_source = typst_text(material_preview.get("source") or "")
+    material_summary = typst_text(material_preview.get("summary") or "完整版会把有事实依据、可迁移到申论和面试表达里的素材做成可收藏的复盘卡片。")
+    practice_preview = data.get("practice_preview") if isinstance(data.get("practice_preview"), dict) else {}
+    practice_title = typst_text(practice_preview.get("title") or "本周训练题片段")
+    practice_question = typst_text(practice_preview.get("question") or "完整版资料包会附上本周 3 道考场迁移训练题，帮助你把一周内容转成作答表达。")
+    practice_direction = typst_text(practice_preview.get("direction") or "预览版只保留题干或思考方向，不展示完整参考答案。")
+    cta_url = clean(data.get("cta_url"))
+    cta_line = (
+        f"如果你想看完整周 PDF，可以回复邮件，或通过这个入口了解完整版：{typst_text(cta_url)}"
+        if cta_url
+        else "如果你想看完整周 PDF，可以直接回复邮件了解完整版。"
+    )
+    return f"""
+#set document(title: [公考晨读周复盘预览版])
+#set page(
+  paper: "a4",
+  margin: (x: 15mm, y: 18mm),
+  numbering: "1",
+)
+#set text(font: ("Microsoft YaHei", "SimSun"), size: 10.5pt, lang: "zh")
+#set par(justify: false, leading: 0.72em, spacing: 0.65em)
+
+#let brand = rgb("#0f3b68")
+#let line = rgb("#d7e2ef")
+#let soft = rgb("#f6f8fb")
+#let warm = rgb("#fff8e8")
+#let muted(body) = text(size: 8.8pt, fill: rgb("#64748b"))[#body]
+#let section(title, body) = block(fill: white, stroke: 0.6pt + line, inset: 10pt, radius: 7pt, width: 100%, breakable: true)[#text(size: 12pt, weight: "bold", fill: brand)[#title]#v(5pt)#body]
+#let chip(body) = box(fill: rgb("#e9f3ff"), stroke: 0.5pt + rgb("#cfe3fb"), inset: (x: 6pt, y: 2pt), radius: 7pt)[#text(size: 8.2pt, fill: brand, weight: "bold")[#body]]
+
+#box(fill: soft, stroke: 0.8pt + line, inset: 20pt, radius: 12pt, width: 100%)[
+  #text(fill: brand, size: 10pt, weight: "bold")[WEEKLY REVIEW · 免费预览版]
+  #v(10pt)
+  #text(fill: brand, size: 26pt, weight: "bold")[公考晨读周复盘预览]
+  #v(6pt)
+  #text(size: 11pt)[{typst_text(data.get("period") or "")}]
+  #v(12pt)
+  #text(size: 11pt)[这是一份周复盘预览，帮你快速了解本周重点，也先看看完整版资料包会提供什么。]
+]
+
+#v(10pt)
+#section[本周主题速览][{typst_text(data.get("theme_overview") or "")}]
+
+#v(8pt)
+#section[本周 3 个高频考点方向][{focus_rows}]
+
+#v(8pt)
+#section[完整版 PDF 目录预览][
+  {module_rows}
+]
+
+#v(8pt)
+#section[免费内容片段][
+  #text(weight: "bold", fill: brand)[1 条可背表达]
+  #v(3pt)
+  {expression_preview}
+  #v(8pt)
+  #text(weight: "bold", fill: brand)[1 个素材简介片段]
+  #v(3pt)
+  {material_title}
+  #if "{material_source}" != "" [#linebreak()#muted[来源：{material_source}]]
+  #linebreak(){material_summary}
+  #v(8pt)
+  #text(weight: "bold", fill: brand)[1 道训练题片段]
+  #v(3pt)
+  {practice_title}
+  #linebreak(){practice_question}
+  #if "{practice_direction}" != "" [#linebreak()#muted[思考方向：{practice_direction}]]
+]
+
+#v(8pt)
+#section[获取完整版][
+  完整版周 PDF 会提供更完整的素材、表达、训练题和每日压缩回看。暂时不参加也没关系，这份预览可以先帮你建立本周复盘框架。
+  #v(6pt)
+  {typst_text(cta_line)}
+]
+"""
+
+
 def build_typst_weekly_pdf(
     payloads: list[dict[str, Any]],
     misses: list[dict[str, str]],
     pdf_path: Path,
     start_date: str,
     end_date: str,
+    *,
+    data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not payloads:
         raise RuntimeError("没有可用于 Typst V1 周报的每日归档。")
     pdf_path.parent.mkdir(parents=True, exist_ok=True)
-    data = build_data(payloads, start_date, end_date, misses)
+    data = data or build_data(payloads, start_date, end_date, misses)
     typ_path = pdf_path.with_suffix(".typ")
     data_path = pdf_path.with_suffix(".json")
     data_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -733,4 +1011,35 @@ def build_typst_weekly_pdf(
         "engine": "typst",
         "template": "v1",
         "warnings": data["warnings"],
+    }
+
+
+def build_typst_weekly_preview_pdf(
+    payloads: list[dict[str, Any]],
+    misses: list[dict[str, str]],
+    pdf_path: Path,
+    start_date: str,
+    end_date: str,
+    *,
+    data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if not payloads:
+        raise RuntimeError("没有可用于 Typst 周预览版的每日归档。")
+    pdf_path.parent.mkdir(parents=True, exist_ok=True)
+    data = build_preview_data_from_full_data(data) if data else build_preview_data(payloads, start_date, end_date, misses)
+    typ_path = pdf_path.with_suffix(".typ")
+    data_path = pdf_path.with_suffix(".json")
+    data_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    typ_path.write_text(render_preview_typst(data), encoding="utf-8")
+    typst = find_typst_binary()
+    if not typst:
+        raise RuntimeError(f"未找到 typst 命令，已生成周预览 Typst 源文件：{typ_path}")
+    subprocess.run([typst, "compile", str(typ_path), str(pdf_path)], check=True)
+    return {
+        "pdf_path": str(pdf_path),
+        "typ_path": str(typ_path),
+        "data_path": str(data_path),
+        "engine": "typst",
+        "template": "weekly_preview_v1",
+        "warnings": [],
     }

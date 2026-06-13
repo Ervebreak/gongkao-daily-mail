@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import datetime as dt
 import hashlib
+import inspect
 import io
 import json
 import re
@@ -813,6 +814,7 @@ def send_segmented_email(
     delivery_date: str,
     test_mode: bool = False,
     attachments: list[dict] | None = None,
+    lite_attachments: list[dict] | None = None,
     segments: dict[str, list[dict[str, str]]] | None = None,
     recipient_source: str | None = None,
     enable_trial_reminders: bool = False,
@@ -821,6 +823,35 @@ def send_segmented_email(
     if segments is None:
         segments, recipient_source = split_effective_recipient_records(test_mode=test_mode, today=delivery_date)
     recipient_source = recipient_source or "unknown"
+    variant_source_labels: dict[str, str] = {}
+    if not (segments.get("variants") or {}):
+        variant_source_labels = {"full_normal": "full", "free_lite": "lite", "skip": "skip"}
+        segments = {
+            **segments,
+            "variants": {
+                "full_normal": list(segments.get("full") or []),
+                "free_lite": list(segments.get("lite") or []),
+                "skip": list(segments.get("skipped") or []),
+            },
+            "variant_counts": {
+                "full_normal": len(segments.get("full") or []),
+                "free_lite": len(segments.get("lite") or []),
+                "skip": len(segments.get("skipped") or []),
+            },
+            "variant_assignments": segments.get("variant_assignments")
+            or [
+                {"email": item.get("email", ""), "uid": item.get("uid", ""), "variant": "full_normal", "tier": "full"}
+                for item in (segments.get("full") or [])
+            ]
+            + [
+                {"email": item.get("email", ""), "uid": item.get("uid", ""), "variant": "free_lite", "tier": "lite"}
+                for item in (segments.get("lite") or [])
+            ]
+            + [
+                {"email": item.get("email", ""), "uid": item.get("uid", ""), "variant": "skip", "tier": "skipped"}
+                for item in (segments.get("skipped") or [])
+            ],
+        }
     audit = save_send_audit(delivery_date, segments, recipient_source)
     variant_groups = segments.get("variants") or {}
     variant_payloads = render_variant_email_payloads(
@@ -837,7 +868,7 @@ def send_segmented_email(
         if variant == "skip":
             variant_results[variant] = {
                 "send_mode": "skip",
-                "recipient_source": f"{recipient_source}:{variant}",
+                "recipient_source": f"{recipient_source}:{variant_source_labels.get(variant, variant)}",
                 "valid_recipient_count": 0,
                 "success_count": 0,
                 "fail_count": 0,
@@ -847,14 +878,19 @@ def send_segmented_email(
             }
             continue
         payload = variant_payloads[variant]
+        variant_source = variant_source_labels.get(variant, variant)
+        send_kwargs: dict[str, Any] = {
+            "recipient_source": f"{recipient_source}:{variant_source}",
+            "attachments": attachments if variant in FULL_VARIANTS else lite_attachments,
+        }
+        if "send_mode_override" in inspect.signature(_send_email_to_records).parameters:
+            send_kwargs["send_mode_override"] = "individual"
         variant_results[variant] = _send_email_to_records(
             payload["subject"],
             payload["plain_text"],
             payload["html_body"],
             recipients,
-            recipient_source=f"{recipient_source}:{variant}",
-            attachments=attachments if variant in FULL_VARIANTS else None,
-            send_mode_override="individual",
+            **send_kwargs,
         )
     full_result = {
         "success_count": sum(int((variant_results.get(name) or {}).get("success_count", 0)) for name in FULL_VARIANTS),

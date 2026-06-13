@@ -1065,10 +1065,32 @@ def build_weekly_assets(event: Any | None = None) -> dict[str, Any]:
     html_path.write_text(html_body, encoding="utf-8")
     # Weekly PDF generation has one production path: the V1 review packet
     # implemented in weekly_typst_export.py.
-    from weekly_typst_export import build_typst_weekly_pdf
+    from weekly_typst_export import build_data, build_typst_weekly_pdf, build_typst_weekly_preview_pdf
 
     pdf_engine = "typst"
-    typst_meta: dict[str, Any] | None = build_typst_weekly_pdf(archives, misses, pdf_path, start_date, end_date_text)
+    shared_weekly_data = build_data(archives, start_date, end_date_text, misses)
+    typst_meta: dict[str, Any] | None = build_typst_weekly_pdf(
+        archives,
+        misses,
+        pdf_path,
+        start_date,
+        end_date_text,
+        data=shared_weekly_data,
+    )
+    preview_pdf_path = out_dir / f"{base_name}-lite-preview.pdf"
+    preview_meta: dict[str, Any] | None = None
+    preview_error = ""
+    try:
+        preview_meta = build_typst_weekly_preview_pdf(
+            archives,
+            misses,
+            preview_pdf_path,
+            start_date,
+            end_date_text,
+            data=shared_weekly_data,
+        )
+    except Exception as exc:
+        preview_error = f"{type(exc).__name__}: {exc}"
 
     upload_meta: dict[str, Any] = {}
     if settings.history_storage == "oss":
@@ -1076,12 +1098,21 @@ def build_weekly_assets(event: Any | None = None) -> dict[str, Any]:
         upload_meta["pdf"] = put_oss_object(f"{prefix}/{pdf_path.name}", pdf_path.read_bytes(), "application/pdf")
         upload_meta["md"] = put_oss_object(f"{prefix}/{md_path.name}", md_path.read_bytes(), "text/markdown; charset=utf-8")
         upload_meta["html"] = put_oss_object(f"{prefix}/{html_path.name}", html_path.read_bytes(), "text/html; charset=utf-8")
+        if preview_meta and preview_pdf_path.exists():
+            upload_meta["lite_preview_pdf"] = put_oss_object(f"{prefix}/{preview_pdf_path.name}", preview_pdf_path.read_bytes(), "application/pdf")
 
     attachment = {
         "filename": f"公考晨读本周复盘资料包_{start_date}_至_{end_date_text}.pdf",
         "content": pdf_path.read_bytes(),
         "content_type": "application/pdf",
     }
+    lite_preview_attachment = None
+    if preview_meta and preview_pdf_path.exists():
+        lite_preview_attachment = {
+            "filename": f"公考晨读周复盘预览版_{start_date}_至_{end_date_text}.pdf",
+            "content": preview_pdf_path.read_bytes(),
+            "content_type": "application/pdf",
+        }
     return {
         "status": "ok",
         "mode": "weekly_pdf_assets",
@@ -1098,6 +1129,16 @@ def build_weekly_assets(event: Any | None = None) -> dict[str, Any]:
         "markdown": md,
         "html": html_body,
         "attachment": attachment,
+        "lite_preview": {
+            "status": "ok" if lite_preview_attachment else "failed",
+            "local_pdf": str(preview_pdf_path) if lite_preview_attachment else "",
+            "attachment": lite_preview_attachment,
+            "oss_pdf_path": ((upload_meta.get("lite_preview_pdf") or {}).get("oss_path") if lite_preview_attachment else ""),
+            "attachment_filename": (lite_preview_attachment or {}).get("filename") if lite_preview_attachment else "",
+            "pdf_engine": "typst" if lite_preview_attachment else "",
+            "typst_meta": preview_meta,
+            "error": preview_error,
+        },
         "oss_upload": upload_meta,
     }
 
