@@ -70,3 +70,34 @@ def test_render_typst_shows_material_cards_as_one_case_many_uses() -> None:
     assert "作文示例" in text
     assert "使用边界" in text
     assert "本周考场素材库" not in text
+
+
+def test_render_typst_shows_at_most_three_material_cards() -> None:
+    data = _base_data()
+    data["material_cards"] = []
+    for idx in range(4):
+        data["material_cards"].append(
+            {
+                "title": f"素材{idx + 1}",
+                "material_type": "机制型",
+                "source_dates": ["2026-06-10"],
+                "source_articles": [f"文章{idx + 1}"],
+                "target_topics": ["基层治理要听见一线声音"],
+                "suggested_question_types": ["综合分析题"],
+                "factual_anchor": "平台设置投诉入口，部门按类别转办并公开处理结果。",
+                "material_summary": "这条素材来自平台投诉治理场景，能说明公共服务既要有入口，也要有责任分派和结果回告，不适合被拔高成脱离事实的万能模板。",
+                "usage_examples": [
+                    {"theme": "基层治理要听见一线声音", "example": "写基层治理时，可以用这条素材说明治理不能停留在表面回应，而要让群众看到具体办理链条和结果回告。"},
+                    {"theme": "公共服务要从平均供给转向精准抵达", "example": "论证公共服务精准化时，这条素材可以说明同样是诉求也要分类处置，把资源投到最需要的环节。"},
+                ],
+                "use_boundary": "适合公共问题治理，不适合替代专业执法结论。",
+                "not_suitable_for": ["纯理论阐释题"],
+            }
+        )
+
+    text = render_typst(data)
+
+    assert "素材1" in text
+    assert "素材2" in text
+    assert "素材3" in text
+    assert "素材4" not in text

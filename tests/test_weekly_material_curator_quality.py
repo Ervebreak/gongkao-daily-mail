@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from weekly_material_curator import _validate_enrichment, select_material_candidate_articles
+from weekly_material_curator import _build_prompt, _validate_enrichment, select_material_candidate_articles
 
 
 GOLDEN_SENTENCE = "把问题解决在基层一线，关键是让治理动作能被群众真实感知。"
@@ -105,6 +105,10 @@ def test_material_cards_require_summary_examples_and_boundary() -> None:
     missing_boundary["source_articles"] = ["缺少使用边界"]
     missing_boundary["use_boundary"] = ""
 
+    missing_examples = deepcopy(valid_card)
+    missing_examples["source_articles"] = ["缺少示例"]
+    missing_examples["usage_examples"] = []
+
     generic_theme = deepcopy(valid_card)
     generic_theme["source_articles"] = ["主题空泛"]
     generic_theme["usage_examples"] = [
@@ -115,7 +119,7 @@ def test_material_cards_require_summary_examples_and_boundary() -> None:
     payload = {
         "exam_map_cards": [],
         "selected_expression_rows": _expression_rows(),
-        "material_cards": [valid_card, missing_summary, missing_boundary, generic_theme],
+        "material_cards": [valid_card, missing_summary, missing_boundary, missing_examples, generic_theme],
         "practice_questions": [],
     }
 
@@ -125,6 +129,29 @@ def test_material_cards_require_summary_examples_and_boundary() -> None:
     assert len(result["material_cards"][0]["usage_examples"]) == 2
     assert result["material_cards"][0]["material_summary"]
     assert all("fewer than 3 material_cards" not in warning for warning in result["warnings"])
+
+
+def test_prompt_requires_material_summary_usage_examples_and_no_three_to_six_rule() -> None:
+    days = [
+        {
+            "date": "2026-06-01",
+            "theme": "治理实践",
+            "featured": {"title": "平台投诉治理", "source": "权威媒体", "url": "https://example.com/a"},
+            "question": {"question": "示例题"},
+            "takeaway": {},
+            "steps": [],
+            "tags": [],
+            "quick_reads": [],
+        }
+    ]
+
+    prompt = _build_prompt(days, candidate_evidence=[])
+
+    assert "material_summary" in prompt
+    assert "usage_examples" in prompt
+    assert '"theme": "具体申论/面试主题"' in prompt
+    assert '"example": "120到220字的考场表达示例"' in prompt
+    assert "material_cards：3到6条" not in prompt
 
 
 def test_quick_reads_compete_by_material_usability_score() -> None:

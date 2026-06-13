@@ -536,7 +536,7 @@ def _build_prompt(days: list[dict[str, Any]], candidate_evidence: list[dict[str,
     {{"date": "日期", "theme": "主题", "sentence": "精选金句或可用表达", "scenario": "适用场景"}}
   ],
   "material_cards": [
-    {{"title": "素材卡标题", "material_type": "案例型 / 机制型 / 案例型+机制型", "source_dates": ["日期"], "source_articles": ["来源文章标题"], "source_urls": ["来源文章URL"], "target_topics": ["适用考点"], "core_topic": "抽象母题，如公共服务从有到优", "generalizable_logic": "可迁移治理逻辑", "factual_anchor": "事实锚点或机制做法", "exam_paragraph": "默认考场表达，可与具体写法一致", "exam_paragraph_specific": "保留具体事实的考场写法", "exam_paragraph_general": "脱离具体案例也能迁移使用的通用写法", "can_use_for": ["3到5个具体适用场景"], "suggested_question_types": ["适用题型"], "not_suitable_for": ["不适合使用的场景"], "memory_sentence": "一句话记忆", "use_tip": "用法提示", "use_boundary": "使用边界"}}
+    {{"title": "素材卡标题", "material_type": "案例型 / 机制型 / 案例型+机制型", "source_dates": ["日期"], "source_articles": ["来源文章标题"], "source_urls": ["来源文章URL"], "target_topics": ["适用考点"], "core_topic": "抽象母题，如公共服务从有到优", "generalizable_logic": "可迁移治理逻辑", "factual_anchor": "事实锚点或机制做法", "material_summary": "100到180字的素材简介，要说明来源、基本事实和事实边界", "usage_examples": [{{"theme": "具体申论/面试主题", "example": "120到220字的考场表达示例"}}, {{"theme": "另一具体主题", "example": "120到220字的考场表达示例"}}], "exam_paragraph": "默认考场表达，可与具体写法一致", "exam_paragraph_specific": "保留具体事实的考场写法", "exam_paragraph_general": "脱离具体案例也能迁移使用的通用写法", "can_use_for": ["3到5个具体适用场景"], "suggested_question_types": ["适用题型"], "not_suitable_for": ["不适合使用的场景"], "memory_sentence": "一句话记忆", "use_tip": "用法提示", "use_boundary": "使用边界"}}
   ],
   "practice_questions": [
     {{"title": "题目标题", "question_type": "面试综合分析题", "question": "题目", "target_topics": ["训练主题"], "suggested_golden_sentences": ["建议金句"], "suggested_case_materials": ["至少1条素材卡标题"], "suggested_policy_expressions": ["政策表达"], "answer_hint": "作答提示", "mini_reference_answer": "考生版参考答案", "use_boundary": "使用边界"}},
@@ -549,9 +549,13 @@ def _build_prompt(days: list[dict[str, Any]], candidate_evidence: list[dict[str,
 数量要求：
 - exam_map_cards：4到6个。
 - selected_expression_rows：8到15条。
-- material_cards：3到6条，必须有事实锚点或机制做法。
+- material_cards：目标 2 到 3 条，最多 3 条；如果只有 1 个合格素材就只输出 1 条；如果没有合格素材就输出空数组；不要为了凑数强行补齐。
 - material_cards 每条必须尽量补全 core_topic、generalizable_logic、exam_paragraph_specific、exam_paragraph_general、can_use_for、suggested_question_types、not_suitable_for。
+- material_cards 每条必须明确包含 material_summary 和 usage_examples；usage_examples 每条都必须包含 theme 和 example，每个素材 2 到 3 个 usage_examples。
 - can_use_for 填 3 到 5 个具体适用场景，不能只写“基层治理、公共服务、民生保障”这类大而空标签；exam_paragraph_general 必须能迁移到同类题目，不能依赖原文专属细节。
+- usage_examples[*].theme 不能只写“奋斗、担当、创新、基层治理、公共服务”等空泛词，必须是可用于申论/面试表达的具体主题。
+- usage_examples[*].example 必须像考场表达，不能写成小红书鸡汤文或营销文案。
+- 宁缺毋滥，不允许为了凑数生成硬拼的素材卡或示例。
 - practice_questions：严格3道，题型分别为面试综合分析题、对策建议题、申论作文分论点展开题。
 - practice_questions 每题必须有 answer_hint 和 mini_reference_answer。
 - practice_questions 每题必须绑定至少 1 条 selected_expression_rows 中的原句，且 answer_hint 或 mini_reference_answer 要示范“这句金句如何放进答案里”。
@@ -654,6 +658,7 @@ def _normalize_material_summary(item: dict[str, Any], factual_anchor: str, gener
 
 def _normalize_usage_examples(item: dict[str, Any]) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
+    has_explicit_examples = any(key in item for key in ("usage_examples", "theme_examples", "examples"))
     raw_examples = _as_list(item.get("usage_examples") or item.get("theme_examples") or item.get("examples"))
     for raw in raw_examples:
         if not isinstance(raw, dict):
@@ -673,6 +678,8 @@ def _normalize_usage_examples(item: dict[str, Any]) -> list[dict[str, str]]:
         deduped.append(row)
     if deduped:
         return deduped[:3]
+    if has_explicit_examples:
+        return []
 
     fallback_themes = _specific_use_cases([_clean(x) for x in _as_list(item.get("can_use_for")) if _clean(x)])
     if not fallback_themes:

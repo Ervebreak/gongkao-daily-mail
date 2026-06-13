@@ -422,7 +422,7 @@ def render_typst(data: dict[str, Any]) -> str:
         return "\n#v(6pt)\n".join(blocks)
 
     material_parts: list[str] = []
-    for idx, row in enumerate(data.get("material_cards") or [], start=1):
+    for idx, row in enumerate((data.get("material_cards") or [])[:3], start=1):
         if not isinstance(row, dict):
             continue
         title = row_value(row, "title", "source_title", "theme") or f"素材卡 {idx:02d}"
@@ -561,25 +561,6 @@ def render_typst(data: dict[str, Any]) -> str:
 #let expr-row(no, sentence, meta) = grid(columns: (28pt, 1fr), gutter: 9pt, box(fill: num-fill, stroke: 0.5pt + rgb("#cfe3fb"), inset: 6pt, radius: 5pt)[#text(fill: blue, weight: "bold", size: 8.5pt)[#no]], [#text(weight: "bold")[#sentence]#linebreak()#muted[#meta]])
 #let frame-row(title, body) = box(fill: rgb("#f8fbff"), stroke: 0.55pt + line, inset: 9pt, radius: 6.5pt, width: 100%)[#text(weight: "bold", fill: brand)[#title]#v(4pt)#body]
 #let quote-bank(body) = block(fill: white, stroke: 0.6pt + line, inset: 10pt, radius: 7.5pt, width: 100%, breakable: true)[#body]
-#let material-card(title, material-type, source-dates, source-articles, target-topics, core-topic, generalizable-logic, factual-anchor, exam-paragraph, exam-paragraph-specific, exam-paragraph-general, can-use-for, suggested-question-types, not-suitable-for, memory-sentence, use-tip, use-boundary) = block(fill: white, stroke: 0.6pt + line, inset: 10pt, radius: 7.5pt, width: 100%, breakable: true)[
-  #text(size: 12pt, weight: "bold", fill: brand)[#title]
-  #if material-type != "" [#linebreak()#badge[#material-type]]
-  #v(5pt)
-  #if source-dates != "" or source-articles != "" [#info-strip[来源][#source-dates#if source-dates != "" and source-articles != "" [｜]#source-articles]]
-  #if target-topics != "" [#info-strip[适用考点][#target-topics]]
-  #if core-topic != "" [#info-strip[可迁移母题][#core-topic]]
-  #if generalizable-logic != "" [#info-strip[通用治理逻辑][#generalizable-logic]]
-  #if factual-anchor != "" [#info-strip[事实锚点][#factual-anchor]]
-  #if exam-paragraph-specific != "" [#info-strip[具体事实写法][#exam-paragraph-specific]]
-  #if exam-paragraph-general != "" [#info-strip[通用考场写法][#exam-paragraph-general]]
-  #if exam-paragraph-specific == "" and exam-paragraph-general == "" and exam-paragraph != "" [#info-strip[考场表达][#exam-paragraph]]
-  #if can-use-for != "" [#info-strip[可用于][#can-use-for]]
-  #if suggested-question-types != "" [#info-strip[适用题型][#suggested-question-types]]
-  #if not-suitable-for != "" [#info-strip[不适合][#not-suitable-for]]
-  #if memory-sentence != "" [#answer-box[记忆句][#memory-sentence]]
-  #if use-tip != "" [#info-strip[用法提示][#use-tip]]
-  #if use-boundary != "" [#muted[使用边界：#use-boundary]]
-]
 #let material-example(theme, body) = block(fill: rgb("#f8fbff"), stroke: 0.45pt + line, inset: 8pt, radius: 6pt, width: 100%, breakable: true)[
   #text(weight: "bold", fill: brand)[#theme]
   #v(3pt)
