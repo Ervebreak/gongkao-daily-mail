@@ -1065,15 +1065,30 @@ def build_weekly_assets(event: Any | None = None) -> dict[str, Any]:
     html_path.write_text(html_body, encoding="utf-8")
     # Weekly PDF generation has one production path: the V1 review packet
     # implemented in weekly_typst_export.py.
-    from weekly_typst_export import build_typst_weekly_pdf, build_typst_weekly_preview_pdf
+    from weekly_typst_export import build_data, build_typst_weekly_pdf, build_typst_weekly_preview_pdf
 
     pdf_engine = "typst"
-    typst_meta: dict[str, Any] | None = build_typst_weekly_pdf(archives, misses, pdf_path, start_date, end_date_text)
+    shared_weekly_data = build_data(archives, start_date, end_date_text, misses)
+    typst_meta: dict[str, Any] | None = build_typst_weekly_pdf(
+        archives,
+        misses,
+        pdf_path,
+        start_date,
+        end_date_text,
+        data=shared_weekly_data,
+    )
     preview_pdf_path = out_dir / f"{base_name}-lite-preview.pdf"
     preview_meta: dict[str, Any] | None = None
     preview_error = ""
     try:
-        preview_meta = build_typst_weekly_preview_pdf(archives, misses, preview_pdf_path, start_date, end_date_text)
+        preview_meta = build_typst_weekly_preview_pdf(
+            archives,
+            misses,
+            preview_pdf_path,
+            start_date,
+            end_date_text,
+            data=shared_weekly_data,
+        )
     except Exception as exc:
         preview_error = f"{type(exc).__name__}: {exc}"
 

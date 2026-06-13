@@ -419,10 +419,14 @@ def preview_practice_fragment(data: dict[str, Any]) -> dict[str, str]:
 
 def build_preview_data(payloads: list[dict[str, Any]], start_date: str, end_date: str, misses: list[dict[str, str]]) -> dict[str, Any]:
     data = build_data(payloads, start_date, end_date, misses)
+    return build_preview_data_from_full_data(data)
+
+
+def build_preview_data_from_full_data(data: dict[str, Any]) -> dict[str, Any]:
     cta_url = settings.paid_trial_entry_url.strip() or settings.feedback_base_url.strip()
     return {
-        "start_date": start_date,
-        "end_date": end_date,
+        "start_date": data.get("start_date") or "",
+        "end_date": data.get("end_date") or "",
         "period": data.get("period"),
         "theme_overview": preview_theme_overview(data),
         "focus_points": preview_focus_points(data),
@@ -985,11 +989,13 @@ def build_typst_weekly_pdf(
     pdf_path: Path,
     start_date: str,
     end_date: str,
+    *,
+    data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not payloads:
         raise RuntimeError("没有可用于 Typst V1 周报的每日归档。")
     pdf_path.parent.mkdir(parents=True, exist_ok=True)
-    data = build_data(payloads, start_date, end_date, misses)
+    data = data or build_data(payloads, start_date, end_date, misses)
     typ_path = pdf_path.with_suffix(".typ")
     data_path = pdf_path.with_suffix(".json")
     data_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1014,11 +1020,13 @@ def build_typst_weekly_preview_pdf(
     pdf_path: Path,
     start_date: str,
     end_date: str,
+    *,
+    data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not payloads:
         raise RuntimeError("没有可用于 Typst 周预览版的每日归档。")
     pdf_path.parent.mkdir(parents=True, exist_ok=True)
-    data = build_preview_data(payloads, start_date, end_date, misses)
+    data = build_preview_data_from_full_data(data) if data else build_preview_data(payloads, start_date, end_date, misses)
     typ_path = pdf_path.with_suffix(".typ")
     data_path = pdf_path.with_suffix(".json")
     data_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")

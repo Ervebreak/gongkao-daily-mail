@@ -73,6 +73,50 @@ def _candidate(tmp_path: Path, *, full_ok: bool = True, lite_ok: bool = True) ->
     }
 
 
+def _weekly_archive_payload() -> dict:
+    return {
+        "delivery_date": "2026-06-14",
+        "brief": {
+            "today_theme": "基层治理闭环办理",
+            "today_focus": "把群众诉求转成闭环办理机制",
+            "featured_article": {
+                "title": "把诉求办到底",
+                "source": "人民日报",
+                "published_at": "2026-06-14",
+                "theme": "基层治理",
+                "url": "https://example.com/a",
+                "one_sentence": "把群众诉求接住、办实、反馈清楚。",
+                "original_reading_focus": "围绕闭环办理机制展开。",
+                "three_useful_points": ["统一入口", "分类流转", "结果反馈"],
+                "exam_use": ["基层治理要形成闭环办理"],
+                "rewritable_expression": "把群众诉求接住、办实、反馈清楚。",
+                "article_framework_map": {
+                    "steps": [
+                        {"label": "发现问题", "content": "先摸清诉求来源。"},
+                        {"label": "分类处置", "content": "按问题类型分流。"},
+                        {"label": "结果反馈", "content": "及时回告群众。"},
+                    ]
+                },
+            },
+            "daily_question": {
+                "question_type": "综合分析",
+                "question": "请谈谈基层治理如何形成闭环办理机制。",
+                "answer_framework": ["统一入口：先接住诉求", "分类流转：明确责任链条", "结果反馈：公开回应群众"],
+                "candidate_answer": "要先接住诉求，再分类流转，最后反馈结果。",
+            },
+            "today_takeaway": {
+                "keywords": ["基层治理", "闭环办理"],
+                "golden_sentences": [{"sentence": "把群众诉求接住、办实、反馈清楚。", "scenario": "基层治理"}],
+                "framework": "统一入口-分类流转-结果反馈",
+            },
+            "quick_reads": [
+                {"title": "精准服务", "source": "光明日报", "theme": "公共服务", "one_sentence": "公共服务要从平均供给转向精准抵达。"},
+                {"title": "协同治理", "source": "求是", "theme": "协同治理", "one_sentence": "协同治理要解决多主体责任分散问题。"},
+            ],
+        },
+    }
+
+
 def test_render_preview_typst_contains_preview_sections() -> None:
     text = render_preview_typst(_preview_data())
 
@@ -324,6 +368,57 @@ def test_send_weekly_pdf_candidate_lite_only_can_send_without_full_pdf(monkeypat
     assert result["status"] == "ok"
     assert captured["attachments"] == []
     assert captured["lite_attachments"] == ["lite-weekly-preview.pdf"]
+
+
+def test_build_weekly_assets_reuses_shared_enrichment_for_full_and_preview(monkeypatch, tmp_path) -> None:
+    import weekly_report
+    import weekly_typst_export
+
+    original_output_dir = settings.output_dir
+    original_history_storage = settings.history_storage
+    object.__setattr__(settings, "output_dir", tmp_path)
+    object.__setattr__(settings, "history_storage", "local")
+
+    enrichment_calls = {"count": 0}
+
+    def fake_enrichment(days):
+        enrichment_calls["count"] += 1
+        return {
+            "exam_map_cards": [{"title": "基层治理闭环办理"}],
+            "selected_expression_rows": [{"sentence": "把群众诉求接住、办实、反馈清楚。"}],
+            "material_cards": [{
+                "title": "闭环办理素材",
+                "source_articles": ["把诉求办到底"],
+                "material_summary": "从统一入口到结果反馈，形成群众诉求闭环办理。",
+                "usage_examples": [{"theme": "基层治理要形成闭环办理", "example": "可用于说明治理不能止于受理，还要形成责任链条和反馈机制。"}],
+                "use_boundary": "适合基层治理场景，不替代专业执法结论。",
+            }],
+            "practice_questions": [{"title": "本周训练题", "question": "如何形成闭环办理？", "use_boundary": "仅作思路训练。"}],
+            "warnings": [],
+        }
+
+    def fake_compile(cmd, check=True):
+        Path(cmd[-1]).write_bytes(b"%PDF-test")
+        return None
+
+    monkeypatch.setattr(weekly_report, "load_daily_archives", lambda **kwargs: ([_weekly_archive_payload()], []))
+    monkeypatch.setattr(weekly_report, "build_weekly_markdown", lambda *args, **kwargs: "weekly markdown")
+    monkeypatch.setattr(weekly_report, "build_weekly_html", lambda *args, **kwargs: "<html><body>weekly html</body></html>")
+    monkeypatch.setattr(weekly_typst_export, "build_weekly_enrichment", fake_enrichment)
+    monkeypatch.setattr(weekly_typst_export, "find_typst_binary", lambda: "typst")
+    monkeypatch.setattr(weekly_typst_export.subprocess, "run", fake_compile)
+
+    try:
+        assets = weekly_report.build_weekly_assets({"end_date": "2026-06-14", "days": 7})
+    finally:
+        object.__setattr__(settings, "output_dir", original_output_dir)
+        object.__setattr__(settings, "history_storage", original_history_storage)
+
+    assert enrichment_calls["count"] == 1
+    assert assets["status"] == "ok"
+    assert assets["attachment"]["filename"]
+    assert assets["lite_preview"]["status"] == "ok"
+    assert assets["lite_preview"]["attachment_filename"]
 
 
 def test_build_weekly_pdf_preview_candidate_message_marks_preview_as_free_preview() -> None:
