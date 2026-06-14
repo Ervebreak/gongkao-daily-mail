@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+﻿from__future__import annotations
 
 import json
 import sys
