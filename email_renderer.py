@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import html
 import re
@@ -676,6 +676,159 @@ def _lite_paid_plan_list() -> list[str]:
     ]
 
 
+def _lite_paid_feature_summary() -> str:
+    return "参考答案、框架图、考场转化、金句拆解、周末 PDF。"
+
+
+def _lite_paid_highlight_topic(brief: dict[str, Any]) -> str:
+    question = ensure_dict(brief.get("daily_question"))
+    featured = ensure_dict(brief.get("featured_article"))
+    value = (
+        question.get("exam_focus")
+        or question.get("breaking_hint")
+        or question.get("breaking_direction")
+        or featured.get("theme")
+        or brief.get("today_theme")
+        or "基层治理与公共服务"
+    )
+    return clip_text(strip_display_prefix(value, "审题关键", "作答主线", "换成考场话"), 24)
+
+
+def _lite_paid_highlight_chain(brief: dict[str, Any]) -> str:
+    labels: list[str] = []
+    for item in _lite_answer_angles(brief):
+        text = str(item or "").strip()
+        if "：" in text:
+            label = text.split("：", 1)[0]
+        elif ":" in text:
+            label = text.split(":", 1)[0]
+        else:
+            label = text
+        label = re.sub(r"^\s*\d+[\.、\)]\s*", "", label).strip("，。、：:； ")
+        if label and label not in labels:
+            labels.append(label)
+        if len(labels) >= 4:
+            break
+    return "—".join(labels[:4])
+
+
+def _lite_paid_highlight_scenarios(brief: dict[str, Any]) -> str:
+    coordinate = ensure_dict(brief.get("policy_coordinate"))
+    featured = ensure_dict(brief.get("featured_article"))
+    question = ensure_dict(brief.get("daily_question"))
+    scenario = (
+        coordinate.get("exam_transfer")
+        or question.get("breaking_direction")
+        or question.get("exam_focus")
+        or featured.get("theme")
+        or brief.get("today_theme")
+        or "基层治理、公共服务、作风建设类题"
+    )
+    return clip_text(strip_display_prefix(scenario, "考场迁移", "审题关键", "作答主线"), 40)
+
+
+def _lite_paid_highlight_fallback(brief: dict[str, Any]) -> str:
+    coordinate = ensure_dict(brief.get("policy_coordinate"))
+    quote_text = coordinate_quote_text(coordinate.get("authoritative_quote") or coordinate.get("policy_quote"))
+    topic = _lite_paid_highlight_topic(brief)
+    chain = _lite_paid_highlight_chain(brief)
+    scenarios = _lite_paid_highlight_scenarios(brief)
+    if quote_text and should_render_policy_coordinate(brief):
+        return clip_text(
+            f"今天的政策坐标引用了“{quote_text}”这句适合记忆的权威表达，完整版会进一步讲清它怎么迁移到{scenarios}，适合作为开头立意或结尾升华。",
+            118,
+        )
+    if chain:
+        return clip_text(
+            f"今天这道题适合练“{topic}”类场景，完整版会把思路拆成“{chain}”，可迁移到{scenarios}。",
+            118,
+        )
+    three_step_line = _lite_three_step_line(brief)
+    if three_step_line:
+        return clip_text(
+            f"今天这篇文章虽然讲的是具体案例，但完整版会把它转成“{three_step_line}”这条考场表达主线，适合迁移到{scenarios}。",
+            118,
+        )
+    return "今天的完整版会继续把文章判断和题目框架往考场表达上推进，帮助你更快抓到可迁移的作答主线。"
+
+
+def _lite_paid_highlight_prompt(brief: dict[str, Any]) -> str:
+    featured = ensure_dict(brief.get("featured_article"))
+    question = ensure_dict(brief.get("daily_question"))
+    coordinate = ensure_dict(brief.get("policy_coordinate"))
+    angles = "；".join(_lite_answer_angles(brief)[:4])
+    quote_text = coordinate_quote_text(coordinate.get("authoritative_quote") or coordinate.get("policy_quote"))
+    exam_transfer = str(coordinate.get("exam_transfer") or "").strip()
+    return "\n".join(
+        [
+            "你是公考晨读邮件编辑，请为免费简版邮件尾部写 1 句“今日完整版亮点”。",
+            "目标：让用户知道今天完整版里最值得看的具体内容，并清楚它适合哪类题、可迁移到什么考场场景。",
+            "硬约束：",
+            "1. 只输出 JSON：{\"highlight\":\"...\"}。",
+            "2. highlight 用 1 句中文，45-110 字，必须完整成句。",
+            "3. 只能点出价值，不要泄露完整参考答案，不要照抄 candidate_answer。",
+            "4. 不要写押题、必考、保过、上岸、提分神器、内部资料。",
+            "5. 不要泛泛重复“完整版包含什么”，要说清今天具体亮点。",
+            "优先级：今日一题框架 > 政策坐标/权威表达 > 文章框架转化。",
+            "",
+            f"今日主题：{brief.get('today_theme') or ''}",
+            f"精读标题：{featured.get('title') or ''}",
+            f"精读一句话：{featured.get('one_sentence') or ''}",
+            f"三步看懂：{_lite_three_step_line(brief)}",
+            f"今日一题：{question.get('question') or today_question_text(brief)}",
+            f"作答角度：{angles}",
+            f"政策坐标引用：{quote_text}",
+            f"政策坐标迁移：{exam_transfer}",
+            f"candidate_answer（禁止照抄）：{question.get('candidate_answer') or ''}",
+        ]
+    )
+
+
+def _call_lite_paid_highlight_llm(prompt: str) -> str:
+    from llm_client import chat_completion
+
+    response = chat_completion(
+        settings.writing_llm_model or settings.llm_model,
+        prompt,
+        timeout=settings.llm_writing_timeout,
+        trace={"stage": "lite_paid_cta", "module": "lite_email_cta"},
+    )
+    return str(response.get("highlight") or response.get("cta_highlight") or "").strip()
+
+
+def _normalize_lite_paid_highlight(value: Any) -> str:
+    text = str(value or "").strip()
+    text = re.sub(r"^\s*今日完整版亮点[：:]\s*", "", text)
+    return clip_text(text, 118)
+
+
+def _lite_paid_highlight(latest_json: dict[str, Any], brief: dict[str, Any]) -> str:
+    cached = str(latest_json.get("_lite_paid_highlight") or "").strip() if isinstance(latest_json, dict) else ""
+    if cached:
+        return cached
+
+    fallback = _lite_paid_highlight_fallback(brief)
+    highlight = ""
+    try:
+        highlight = _normalize_lite_paid_highlight(_call_lite_paid_highlight_llm(_lite_paid_highlight_prompt(brief)))
+    except Exception:
+        highlight = ""
+
+    candidate_answer = str(ensure_dict(brief.get("daily_question")).get("candidate_answer") or "").strip()
+    banned = ("押题", "必考", "保过", "上岸", "提分神器", "内部资料")
+    if (
+        not highlight
+        or len(highlight) < 18
+        or any(word in highlight for word in banned)
+        or (candidate_answer and candidate_answer in highlight)
+    ):
+        highlight = fallback
+
+    if isinstance(latest_json, dict):
+        latest_json["_lite_paid_highlight"] = highlight
+    return highlight
+
+
 def _lite_theme(brief: dict[str, Any], latest_json: dict[str, Any]) -> str:
     return str(brief.get("today_theme") or brief.get("email_subject") or latest_json.get("subject") or "").strip()
 
@@ -835,6 +988,7 @@ def render_lite_plain_text(latest_json: dict[str, Any]) -> str:
     quick_reads = _lite_quick_reads(brief)
     paid_url = _lite_paid_entry_url()
     paid_mailto_url = _lite_paid_mailto_url() or paid_url
+    paid_highlight = _lite_paid_highlight(latest_json, brief)
     meta = " / ".join(
         part
         for part in (
@@ -845,7 +999,7 @@ def render_lite_plain_text(latest_json: dict[str, Any]) -> str:
         if part
     )
     lines = [
-        "公考晨读 免费简版",
+        "公考晨读·免费简版",
         f"今日主题：{_lite_theme(brief, latest_json)}",
         "",
         "今日精读文章",
@@ -880,11 +1034,13 @@ def render_lite_plain_text(latest_json: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
-            "付费内测",
-            "完整版今天多什么：",
-            *[f"- {item}" for item in _lite_paid_feature_list()],
+            "想看今天的完整版？",
+            "今日完整版亮点：",
+            paid_highlight,
             "",
-            "早鸟方案：",
+            f"完整版还包含：{_lite_paid_feature_summary()}",
+            "",
+            "早鸟内测：",
             *[f"- {item}" for item in _lite_paid_plan_list()],
             "",
             f"主入口（回复“体验”）：{paid_mailto_url}" if paid_mailto_url else "",
@@ -905,11 +1061,8 @@ def render_lite_email(latest_json: dict[str, Any]) -> str:
     question_text = today_question_text(brief)
     paid_url = _lite_paid_entry_url()
     paid_mailto_url = _lite_paid_mailto_url() or paid_url
+    paid_highlight = _lite_paid_highlight(latest_json, brief)
     three_step_line = _lite_three_step_line(brief)
-    paid_feature_items = "".join(
-        f'<li style="margin:0 0 6px;color:#78350f;line-height:1.72;">{h(item)}</li>'
-        for item in _lite_paid_feature_list()
-    )
     paid_plan_badges = "".join(
         f'<span style="display:inline-block;background:#fff;border:1px solid #fdba74;border-radius:999px;padding:7px 11px;margin:0 8px 8px 0;font-size:13px;font-weight:900;color:#9a3412;">{h(item)}</span>'
         for item in _lite_paid_plan_list()
@@ -987,10 +1140,11 @@ def render_lite_email(latest_json: dict[str, Any]) -> str:
     {quick_reads_block}
 
     <div style="background:#fff8e8;border:1px solid #fed7aa;border-radius:16px;padding:15px 16px;">
-      <div style="font-size:15px;font-weight:900;color:#92400e;margin-bottom:7px;">付费内测</div>
-      <div style="font-size:14px;line-height:1.8;color:#78350f;margin-bottom:8px;">完整版今天多什么</div>
-      <ul style="margin:0 0 12px;padding-left:18px;">{paid_feature_items}</ul>
-      <div style="font-size:14px;line-height:1.8;color:#78350f;margin-bottom:8px;">早鸟方案</div>
+      <div style="font-size:18px;font-weight:900;color:#92400e;margin-bottom:8px;">想看今天的完整版？</div>
+      <div style="font-size:13px;color:#b45309;font-weight:900;margin-bottom:6px;">今日完整版亮点</div>
+      <div style="font-size:14px;line-height:1.82;color:#78350f;margin-bottom:10px;">{h(paid_highlight)}</div>
+      <div style="font-size:14px;line-height:1.8;color:#78350f;margin-bottom:8px;">完整版还包含：{h(_lite_paid_feature_summary())}</div>
+      <div style="font-size:14px;line-height:1.8;color:#78350f;margin-bottom:8px;">早鸟内测</div>
       <div style="margin:0 0 12px;">{paid_plan_badges}</div>
       <div style="margin-bottom:10px;">
         <a href="{h(paid_mailto_url)}" target="_blank" style="display:inline-block;background:#f59e0b;color:#fff;text-decoration:none;border-radius:999px;padding:10px 16px;font-size:14px;font-weight:900;margin:0 8px 8px 0;">回复“体验”领取说明</a>
@@ -1221,3 +1375,4 @@ def render_email_html(brief: dict[str, Any]) -> str:
   </div>
 </body>
 </html>"""
+
