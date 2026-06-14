@@ -6,6 +6,7 @@ from typing import Any
 from urllib.parse import quote, urlencode
 
 from config import settings
+from lite_paid_cta import resolve_lite_paid_cta_payload
 
 
 def h(value: Any) -> str:
@@ -752,90 +753,29 @@ def _lite_paid_highlight_fallback(brief: dict[str, Any]) -> str:
     return "今天的完整版会继续把文章判断和题目框架往考场表达上推进，帮助你更快抓到可迁移的作答主线。"
 
 
-def _lite_paid_highlight_prompt(brief: dict[str, Any]) -> str:
-    featured = ensure_dict(brief.get("featured_article"))
-    question = ensure_dict(brief.get("daily_question"))
-    coordinate = ensure_dict(brief.get("policy_coordinate"))
-    angles = "；".join(_lite_answer_angles(brief)[:4])
-    quote_text = coordinate_quote_text(coordinate.get("authoritative_quote") or coordinate.get("policy_quote"))
-    exam_transfer = str(coordinate.get("exam_transfer") or "").strip()
-    return "\n".join(
-        [
-            "你是公考晨读邮件编辑，请为免费简版邮件尾部写 1 句“今日完整版亮点”。",
-            "目标：让用户知道今天完整版里最值得看的具体内容，并清楚它适合哪类题、可迁移到什么考场场景。",
-            "硬约束：",
-            "1. 只输出 JSON：{\"highlight\":\"...\"}。",
-            "2. highlight 用 1 句中文，45-110 字，必须完整成句。",
-            "3. 只能点出价值，不要泄露完整参考答案，不要照抄 candidate_answer。",
-            "4. 不要写押题、必考、保过、上岸、提分神器、内部资料。",
-            "5. 不要泛泛重复“完整版包含什么”，要说清今天具体亮点。",
-            "优先级：今日一题框架 > 政策坐标/权威表达 > 文章框架转化。",
-            "",
-            f"今日主题：{brief.get('today_theme') or ''}",
-            f"精读标题：{featured.get('title') or ''}",
-            f"精读一句话：{featured.get('one_sentence') or ''}",
-            f"三步看懂：{_lite_three_step_line(brief)}",
-            f"今日一题：{question.get('question') or today_question_text(brief)}",
-            f"作答角度：{angles}",
-            f"政策坐标引用：{quote_text}",
-            f"政策坐标迁移：{exam_transfer}",
-            f"candidate_answer（禁止照抄）：{question.get('candidate_answer') or ''}",
-        ]
-    )
-
-
-def _call_lite_paid_highlight_llm(prompt: str) -> str:
-    from llm_client import chat_completion
-
-    response = chat_completion(
-        settings.writing_llm_model or settings.llm_model,
-        prompt,
-        timeout=settings.llm_writing_timeout,
-        trace={"stage": "lite_paid_cta", "module": "lite_email_cta"},
-    )
-    return str(response.get("highlight") or response.get("cta_highlight") or "").strip()
-
-
-def _normalize_lite_paid_highlight(value: Any) -> str:
-    text = str(value or "").strip()
-    text = re.sub(r"^\s*今日完整版亮点[：:]\s*", "", text)
-    return clip_text(text, 118)
-
-
 def _lite_paid_highlight(latest_json: dict[str, Any], brief: dict[str, Any]) -> str:
     cached = str(latest_json.get("_lite_paid_highlight") or "").strip() if isinstance(latest_json, dict) else ""
     if cached:
         return cached
 
-    lite_email = ensure_dict(brief.get("lite_email"))
-    persisted = str(lite_email.get("paid_highlight") or latest_json.get("lite_paid_highlight") or "").strip()
-    if persisted:
-        if isinstance(latest_json, dict):
-            latest_json["_lite_paid_highlight"] = persisted
-        return persisted
-
-    fallback = _lite_paid_highlight_fallback(brief)
-    highlight = ""
-    try:
-        highlight = _normalize_lite_paid_highlight(_call_lite_paid_highlight_llm(_lite_paid_highlight_prompt(brief)))
-    except Exception:
-        highlight = ""
-
-    candidate_answer = str(ensure_dict(brief.get("daily_question")).get("candidate_answer") or "").strip()
-    banned = ("押题", "必考", "保过", "上岸", "提分神器", "内部资料")
-    if (
-        not highlight
-        or len(highlight) < 18
-        or any(word in highlight for word in banned)
-        or (candidate_answer and candidate_answer in highlight)
-    ):
-        highlight = fallback
-
+    payload = resolve_lite_paid_cta_payload(latest_json, brief)
+    highlight = str(payload.get("hook") or _lite_paid_highlight_fallback(brief)).strip()
     if isinstance(latest_json, dict):
         latest_json["_lite_paid_highlight"] = highlight
         latest_json["lite_paid_highlight"] = highlight
-    lite_email["paid_highlight"] = highlight
-    brief["lite_email"] = lite_email
+        latest_json["lite_paid_cta"] = {
+            "hook_type": str(payload.get("hook_type") or "").strip(),
+            "hook": highlight,
+            "source_module": str(payload.get("source_module") or "").strip(),
+            "fallback_used": bool(payload.get("fallback_used")),
+        }
+    brief["lite_paid_highlight"] = highlight
+    brief["lite_paid_cta"] = {
+        "hook_type": str(payload.get("hook_type") or "").strip(),
+        "hook": highlight,
+        "source_module": str(payload.get("source_module") or "").strip(),
+        "fallback_used": bool(payload.get("fallback_used")),
+    }
     return highlight
 
 

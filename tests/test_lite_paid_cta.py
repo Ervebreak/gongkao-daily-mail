@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import email_renderer
 from config import settings
@@ -47,22 +47,13 @@ def _sample_latest_json() -> dict:
     }
 
 
-def test_lite_paid_cta_contains_dynamic_highlight_and_entries(monkeypatch) -> None:
+def _render_with_cta_settings(payload: dict) -> dict[str, str]:
     original_paid_trial_entry_url = settings.paid_trial_entry_url
     original_admin_report_emails_raw = settings.admin_report_emails_raw
     original_smtp_user = settings.smtp_user
     original_unsubscribe_email_raw = settings.unsubscribe_email_raw
     original_unsubscribe_mode = settings.unsubscribe_mode
     original_feedback_base_url = settings.feedback_base_url
-
-    calls: list[str] = []
-
-    def fake_highlight(prompt: str) -> str:
-        calls.append(prompt)
-        return "今天这道题适合练群众诉求复杂、推进受阻类场景，完整版会把思路拆成先稳情绪—摸清诉求—公开协商—闭环反馈，可迁移到基层治理和公共工程推进类题。"
-
-    monkeypatch.setattr(email_renderer, "_call_lite_paid_highlight_llm", fake_highlight)
-
     try:
         object.__setattr__(settings, "paid_trial_entry_url", "https://paid.example.com/entry")
         object.__setattr__(settings, "admin_report_emails_raw", "ops@example.com")
@@ -70,9 +61,7 @@ def test_lite_paid_cta_contains_dynamic_highlight_and_entries(monkeypatch) -> No
         object.__setattr__(settings, "unsubscribe_email_raw", "")
         object.__setattr__(settings, "unsubscribe_mode", "mailto")
         object.__setattr__(settings, "feedback_base_url", "")
-
-        payload = _sample_latest_json()
-        rendered = render_lite_email(payload)
+        return render_lite_email(payload)
     finally:
         object.__setattr__(settings, "paid_trial_entry_url", original_paid_trial_entry_url)
         object.__setattr__(settings, "admin_report_emails_raw", original_admin_report_emails_raw)
@@ -81,78 +70,71 @@ def test_lite_paid_cta_contains_dynamic_highlight_and_entries(monkeypatch) -> No
         object.__setattr__(settings, "unsubscribe_mode", original_unsubscribe_mode)
         object.__setattr__(settings, "feedback_base_url", original_feedback_base_url)
 
+
+def test_lite_paid_cta_uses_brief_hook_and_keeps_entries() -> None:
+    payload = _sample_latest_json()
+    payload["brief"]["lite_paid_cta"] = {
+        "hook_type": "daily_question",
+        "hook": "今天这道题适合练“群众诉求复杂、推进受阻”类场景，完整版会补充闭环推进思路，适合迁移到基层治理和公共工程推进题。",
+        "source_module": "daily_question",
+        "fallback_used": False,
+    }
+
+    rendered = _render_with_cta_settings(payload)
     body = rendered["plain_text"] + rendered["html_body"]
 
-    assert len(calls) == 1
+    assert not hasattr(email_renderer, "_call_lite_paid_highlight_llm")
     assert "想看今天的完整版？" in body
     assert "今日完整版亮点" in body
-    assert "群众诉求复杂、推进受阻类场景" in body
+    assert "群众诉求复杂、推进受阻" in body
     assert "完整版还包含：参考答案、框架图、考场转化、金句拆解、周末 PDF。" in body
     assert "4.9 元 / 7 天" in body
     assert "9.9 元 / 30 天" in body
     assert "回复“体验”领取说明" in body
     assert "填写报名表" in body
     assert "mailto:ops@example.com?" in body
-    assert "subject=%E4%BD%93%E9%AA%8C%E5%AE%8C%E6%95%B4%E7%89%88%E6%99%A8%E8%AF%BB%E9%82%AE%E4%BB%B6" in body
     assert "https://paid.example.com/entry" in body
-    assert "暂时不参加也没关系，免费简版会继续保留。" in body
     assert "点击这里发送退订邮件" in body
     assert "这是完整版参考答案，不应出现在 lite 邮件里。" not in body
 
 
-def test_lite_paid_cta_reuses_persisted_highlight_without_second_llm_call(monkeypatch) -> None:
-    calls: list[str] = []
-
-    def fake_highlight(prompt: str) -> str:
-        calls.append(prompt)
-        return "今天的完整版会把治理难点拆成先稳情绪、再摸诉求、再做协商、最后闭环反馈，适合迁移到基层协调和工程推进类题。"
-
-    monkeypatch.setattr(email_renderer, "_call_lite_paid_highlight_llm", fake_highlight)
-
+def test_lite_paid_cta_uses_latest_json_hook_when_brief_hook_missing() -> None:
     payload = _sample_latest_json()
-    first_rendered = render_lite_email(payload)
-    second_payload = {"brief": payload["brief"], "subject": "测试主题"}
-    second_rendered = render_lite_email(second_payload)
+    payload["lite_paid_cta"] = {
+        "hook_type": "policy_coordinate",
+        "hook": "今天的政策坐标点出了一句适合记忆的权威表达，完整版会继续讲清它怎样迁移到基层治理和民生服务类题。",
+        "source_module": "policy_coordinate",
+        "fallback_used": False,
+    }
 
-    assert len(calls) == 1
-    assert payload["brief"]["lite_email"]["paid_highlight"].startswith("今天的完整版会把治理难点拆成")
-    assert payload["lite_paid_highlight"].startswith("今天的完整版会把治理难点拆成")
-    assert second_payload["_lite_paid_highlight"].startswith("今天的完整版会把治理难点拆成")
-    assert "今天的完整版会把治理难点拆成" in (first_rendered["plain_text"] + first_rendered["html_body"])
-    assert "今天的完整版会把治理难点拆成" in (second_rendered["plain_text"] + second_rendered["html_body"])
-
-
-def test_lite_paid_cta_falls_back_safely_when_llm_output_is_invalid(monkeypatch) -> None:
-    original_paid_trial_entry_url = settings.paid_trial_entry_url
-    original_admin_report_emails_raw = settings.admin_report_emails_raw
-    original_smtp_user = settings.smtp_user
-    original_unsubscribe_email_raw = settings.unsubscribe_email_raw
-    original_unsubscribe_mode = settings.unsubscribe_mode
-    original_feedback_base_url = settings.feedback_base_url
-
-    def fake_highlight(_: str) -> str:
-        return "这是完整版参考答案，不应出现在 lite 邮件里。"
-
-    monkeypatch.setattr(email_renderer, "_call_lite_paid_highlight_llm", fake_highlight)
-
-    try:
-        object.__setattr__(settings, "paid_trial_entry_url", "https://paid.example.com/entry")
-        object.__setattr__(settings, "admin_report_emails_raw", "ops@example.com")
-        object.__setattr__(settings, "smtp_user", "smtp@example.com")
-        object.__setattr__(settings, "unsubscribe_email_raw", "")
-        object.__setattr__(settings, "unsubscribe_mode", "mailto")
-        object.__setattr__(settings, "feedback_base_url", "")
-
-        rendered = render_lite_email(_sample_latest_json())
-    finally:
-        object.__setattr__(settings, "paid_trial_entry_url", original_paid_trial_entry_url)
-        object.__setattr__(settings, "admin_report_emails_raw", original_admin_report_emails_raw)
-        object.__setattr__(settings, "smtp_user", original_smtp_user)
-        object.__setattr__(settings, "unsubscribe_email_raw", original_unsubscribe_email_raw)
-        object.__setattr__(settings, "unsubscribe_mode", original_unsubscribe_mode)
-        object.__setattr__(settings, "feedback_base_url", original_feedback_base_url)
-
+    rendered = _render_with_cta_settings(payload)
     body = rendered["plain_text"] + rendered["html_body"]
+
+    assert "今天的政策坐标点出了一句适合记忆的权威表达" in body
     assert "今日完整版亮点" in body
-    assert "完整版会把思路拆成" in body
-    assert "这是完整版参考答案，不应出现在 lite 邮件里。" not in body
+
+
+def test_lite_paid_cta_falls_back_when_hook_missing() -> None:
+    payload = _sample_latest_json()
+
+    rendered = _render_with_cta_settings(payload)
+    body = rendered["plain_text"] + rendered["html_body"]
+
+    assert "今日完整版亮点" in body
+    assert "今天完整版会补充参考答案、文章框架图、考场转化和金句拆解" in body
+
+
+def test_lite_paid_cta_falls_back_when_hook_contains_banned_words() -> None:
+    payload = _sample_latest_json()
+    payload["brief"]["lite_paid_cta"] = {
+        "hook_type": "daily_question",
+        "hook": "今天这条内容是内部资料，几乎必考，不看就亏。",
+        "source_module": "daily_question",
+        "fallback_used": False,
+    }
+
+    rendered = _render_with_cta_settings(payload)
+    body = rendered["plain_text"] + rendered["html_body"]
+
+    assert "今天这条内容是内部资料，几乎必考，不看就亏。" not in body
+    assert "今天完整版会补充参考答案、文章框架图、考场转化和金句拆解" in body

@@ -14,6 +14,7 @@ import requests
 
 from article_filter import Article
 from config import settings
+from lite_paid_cta import build_lite_paid_cta_prompt, fallback_lite_paid_cta_payload, finalize_lite_paid_cta_payload
 from quick_reads_quality import evaluate_quick_reads
 from question_quality import evaluate_daily_question
 from takeaway_quality import evaluate_takeaway
@@ -378,6 +379,47 @@ def _call_with_fallback(prompt: str, test_mode: bool, stage: str = "writing", *,
                 fallback_remaining=attempt < len(candidates),
             )
     raise RuntimeError(f"LLM call failed for stage={stage}. " + " | ".join(errors))
+
+
+def generate_lite_paid_cta(brief: dict[str, Any], test_mode: bool = False) -> dict[str, Any]:
+    fallback = fallback_lite_paid_cta_payload(brief)
+    model_candidates = _stage_model_candidates("writing", test_mode)
+    if test_mode and any((model or "").lower() == "mock" for model in model_candidates):
+        return fallback
+    if not settings.dashscope_api_key and (settings.run_mode == "test" or test_mode):
+        return fallback
+
+    prompt = build_lite_paid_cta_prompt(brief)
+    errors: list[str] = []
+    for attempt, model in enumerate(model_candidates, start=1):
+        trace = {
+            "stage": "lite_paid_cta",
+            "attempt": attempt,
+            "candidate_count": len(model_candidates),
+            "fallback_used": attempt > 1,
+            "test_mode": test_mode,
+        }
+        try:
+            response = chat_completion(model, prompt, timeout=settings.llm_writing_timeout, trace=trace)
+            payload = finalize_lite_paid_cta_payload(response, brief)
+            payload["fallback_used"] = bool(payload.get("fallback_used"))
+            payload["llm_model"] = model
+            return payload
+        except Exception as exc:
+            errors.append(f"{model}: {exc}")
+            _emit_llm_trace(
+                "llm_stage_attempt_failed",
+                **trace,
+                model=model,
+                error_type=type(exc).__name__,
+                error=str(exc),
+                fallback_remaining=attempt < len(model_candidates),
+            )
+
+    result = dict(fallback)
+    if errors:
+        result["error"] = " | ".join(errors)
+    return result
 
 
 def _raise_for_generation_contract(payload: dict[str, Any], stage: str = "writing") -> None:
