@@ -106,7 +106,7 @@ def build_lite_paid_cta_prompt(brief: dict[str, Any]) -> str:
         f"作答角度：{answer_labels}",
         f"政策坐标：{quote_text}",
         f"考场迁移：{coordinate.get('exam_transfer') or ''}",
-        f"candidate_answer（禁止照抄）：{question.get('candidate_answer') or ''}",
+        f"审题关键：{question.get('exam_focus') or question.get('breaking_hint') or question.get('breaking_direction') or ''}",
     ]
     return "\n".join(prompt_parts)
 
