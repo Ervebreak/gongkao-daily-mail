@@ -142,12 +142,20 @@ def build_candidate_payload(
     article_stats: dict[str, Any],
     final_selection: dict[str, Any],
 ) -> dict[str, Any]:
+    lite_paid_cta = brief.get("lite_paid_cta") if isinstance(brief.get("lite_paid_cta"), dict) else {}
+    lite_paid_highlight = str(
+        brief.get("lite_paid_highlight")
+        or lite_paid_cta.get("hook")
+        or ""
+    ).strip()
     payload = {
         "schema_version": 1,
         "generated_at": dt.datetime.now(TZ).isoformat(),
         "delivery_date": delivery_date,
         "subject": subject,
         "brief": brief,
+        "lite_paid_cta": lite_paid_cta,
+        "lite_paid_highlight": lite_paid_highlight,
         "plain_text": plain_text,
         "html_body": html_body,
         "quality": quality,

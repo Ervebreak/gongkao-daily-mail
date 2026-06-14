@@ -2914,6 +2914,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
     from llm_client import (
         clear_llm_trace_hook,
         generate_brief,
+        generate_lite_paid_cta,
         get_stage_model_plan,
         rewrite_failed_modules_once,
         set_llm_trace_hook,
@@ -3410,6 +3411,21 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
     quality_blocked = (not test_invocation) and quality_gate.get("overall") == "fail"
     llm_trace_summary = summarize_llm_trace(llm_trace_events)
     logger.info("llm trace summary", summary=llm_trace_summary)
+    lite_paid_cta = generate_lite_paid_cta(brief, test_mode=test_invocation)
+    brief["lite_paid_cta"] = {
+        "hook_type": str(lite_paid_cta.get("hook_type") or "").strip(),
+        "hook": str(lite_paid_cta.get("hook") or "").strip(),
+        "source_module": str(lite_paid_cta.get("source_module") or "").strip(),
+        "fallback_used": bool(lite_paid_cta.get("fallback_used")),
+    }
+    brief["lite_paid_highlight"] = brief["lite_paid_cta"]["hook"]
+    logger.info(
+        "lite paid cta prepared",
+        source_module=brief["lite_paid_cta"]["source_module"],
+        hook_type=brief["lite_paid_cta"]["hook_type"],
+        fallback_used=brief["lite_paid_cta"]["fallback_used"],
+        hook_chars=len(brief["lite_paid_cta"]["hook"]),
+    )
     subscribers_table, recipient_source = load_subscriber_table_for_segmentation(test_mode=test_invocation)
     segments = split_recipient_records(subscribers_table.get("records") or [], today=today)
     logger.info(
