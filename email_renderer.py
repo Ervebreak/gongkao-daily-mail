@@ -807,6 +807,13 @@ def _lite_paid_highlight(latest_json: dict[str, Any], brief: dict[str, Any]) -> 
     if cached:
         return cached
 
+    lite_email = ensure_dict(brief.get("lite_email"))
+    persisted = str(lite_email.get("paid_highlight") or latest_json.get("lite_paid_highlight") or "").strip()
+    if persisted:
+        if isinstance(latest_json, dict):
+            latest_json["_lite_paid_highlight"] = persisted
+        return persisted
+
     fallback = _lite_paid_highlight_fallback(brief)
     highlight = ""
     try:
@@ -826,6 +833,9 @@ def _lite_paid_highlight(latest_json: dict[str, Any], brief: dict[str, Any]) -> 
 
     if isinstance(latest_json, dict):
         latest_json["_lite_paid_highlight"] = highlight
+        latest_json["lite_paid_highlight"] = highlight
+    lite_email["paid_highlight"] = highlight
+    brief["lite_email"] = lite_email
     return highlight
 
 

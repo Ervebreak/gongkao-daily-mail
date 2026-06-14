@@ -100,6 +100,28 @@ def test_lite_paid_cta_contains_dynamic_highlight_and_entries(monkeypatch) -> No
     assert "这是完整版参考答案，不应出现在 lite 邮件里。" not in body
 
 
+def test_lite_paid_cta_reuses_persisted_highlight_without_second_llm_call(monkeypatch) -> None:
+    calls: list[str] = []
+
+    def fake_highlight(prompt: str) -> str:
+        calls.append(prompt)
+        return "今天的完整版会把治理难点拆成先稳情绪、再摸诉求、再做协商、最后闭环反馈，适合迁移到基层协调和工程推进类题。"
+
+    monkeypatch.setattr(email_renderer, "_call_lite_paid_highlight_llm", fake_highlight)
+
+    payload = _sample_latest_json()
+    first_rendered = render_lite_email(payload)
+    second_payload = {"brief": payload["brief"], "subject": "测试主题"}
+    second_rendered = render_lite_email(second_payload)
+
+    assert len(calls) == 1
+    assert payload["brief"]["lite_email"]["paid_highlight"].startswith("今天的完整版会把治理难点拆成")
+    assert payload["lite_paid_highlight"].startswith("今天的完整版会把治理难点拆成")
+    assert second_payload["_lite_paid_highlight"].startswith("今天的完整版会把治理难点拆成")
+    assert "今天的完整版会把治理难点拆成" in (first_rendered["plain_text"] + first_rendered["html_body"])
+    assert "今天的完整版会把治理难点拆成" in (second_rendered["plain_text"] + second_rendered["html_body"])
+
+
 def test_lite_paid_cta_falls_back_safely_when_llm_output_is_invalid(monkeypatch) -> None:
     original_paid_trial_entry_url = settings.paid_trial_entry_url
     original_admin_report_emails_raw = settings.admin_report_emails_raw
