@@ -28,6 +28,7 @@ EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
 FEEDBACK_UID_PLACEHOLDER = "__FEEDBACK_UID__"
 FEEDBACK_EMAIL_HASH_PLACEHOLDER = "__FEEDBACK_EMAIL_HASH__"
 PAID_PLANS = {"paid_trial", "paid_monthly"}
+TRY_PLAN = "try"
 SUBSCRIBER_BASE_FIELDS = [
     "uid",
     "email",
@@ -380,6 +381,18 @@ def _append_reminder_token(value: str, token: str) -> str:
     return "|".join(tokens)
 
 
+def _append_note_token(value: str, token: str) -> str:
+    current = str(value or "").strip()
+    cleaned_token = str(token or "").strip()
+    if not cleaned_token:
+        return current
+    if cleaned_token in current:
+        return current
+    if not current:
+        return cleaned_token
+    return f"{current} | {cleaned_token}"
+
+
 def recipient_variant(record: dict[str, str], today: str | dt.date | None = None) -> str:
     status = str(record.get("status") or "active").strip().lower() or "active"
     if status != "active":
@@ -393,6 +406,13 @@ def recipient_variant(record: dict[str, str], today: str | dt.date | None = None
     today_date = _today_date(today)
     paid_until = _parse_date(str(record.get("paid_until") or ""))
     reminder_sent = _reminder_tokens(record.get("reminder_sent", ""))
+    if plan == TRY_PLAN:
+        if not paid_until:
+            return "free_lite"
+        remaining_days = (paid_until - today_date).days
+        if remaining_days < 0:
+            return "expired_lite"
+        return "full_normal"
     if send_mode == "full":
         if plan == "paid_trial":
             if not paid_until:
@@ -628,6 +648,32 @@ def apply_successful_reminder_updates(
         "subscribers_reminder_updates": len(updated_emails),
         "subscribers_reminder_update_emails": updated_emails,
         "subscribers_reminder_update_variants": updated_variants,
+    }
+
+
+def apply_try_expiration_updates(
+    table: dict[str, Any],
+    today: str | dt.date | None = None,
+) -> dict[str, Any]:
+    records = table.get("records") if isinstance(table.get("records"), list) else []
+    today_date = _today_date(today)
+    updated_emails: list[str] = []
+    for item in records:
+        if not isinstance(item, dict):
+            continue
+        status = str(item.get("status") or "active").strip().lower() or "active"
+        plan = str(item.get("plan") or "free").strip().lower() or "free"
+        paid_until = _parse_date(str(item.get("paid_until") or ""))
+        if status != "active" or plan != TRY_PLAN or not paid_until or paid_until >= today_date:
+            continue
+        item["plan"] = "free"
+        item["send_mode"] = "lite"
+        item["paid_until"] = ""
+        item["note"] = _append_note_token(item.get("note", ""), f"auto_downgraded_from_try_{today_date.isoformat()}")
+        updated_emails.append(str(item.get("email") or "").strip().lower())
+    return {
+        "subscribers_try_expiration_updates": len(updated_emails),
+        "subscribers_try_expiration_update_emails": updated_emails,
     }
 
 
@@ -915,10 +961,20 @@ def send_segmented_email(
         "subscribers_reminder_update_emails": [],
         "subscribers_reminder_update_variants": {},
     }
+    try_expiration_update_meta: dict[str, Any] = {
+        "subscribers_try_expiration_updates": 0,
+        "subscribers_try_expiration_update_emails": [],
+    }
     needs_reminder_field_backfill = subscribers_table_needs_reminder_field_backfill(subscribers_table)
-    if enable_trial_reminders and subscribers_table and not test_mode and str(subscribers_table.get("storage") or "").lower() == "oss":
-        reminder_update_meta = apply_successful_reminder_updates(subscribers_table, variant_results)
-        if reminder_update_meta["subscribers_reminder_updates"] > 0 or needs_reminder_field_backfill:
+    if subscribers_table and not test_mode and str(subscribers_table.get("storage") or "").lower() == "oss":
+        if enable_trial_reminders:
+            reminder_update_meta = apply_successful_reminder_updates(subscribers_table, variant_results)
+        try_expiration_update_meta = apply_try_expiration_updates(subscribers_table, today=delivery_date)
+        if (
+            reminder_update_meta["subscribers_reminder_updates"] > 0
+            or try_expiration_update_meta["subscribers_try_expiration_updates"] > 0
+            or needs_reminder_field_backfill
+        ):
             subscribers_write_meta = backup_and_save_subscribers_table_to_oss(subscribers_table)
             subscribers_write_meta["subscribers_write_skipped"] = False
             subscribers_write_meta["subscribers_write_skip_reason"] = ""
@@ -943,6 +999,7 @@ def send_segmented_email(
         "variant_results": variant_results,
         "variant_counts": audit.get("variant_counts") or {},
         **reminder_update_meta,
+        **try_expiration_update_meta,
         **subscribers_write_meta,
         "send_audit": audit,
     }
