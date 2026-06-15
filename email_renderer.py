@@ -6,6 +6,7 @@ from typing import Any
 from urllib.parse import quote, urlencode
 
 from config import settings
+from exam_transfer_card import build_exam_transfer_card
 from lite_paid_cta import resolve_lite_paid_cta_payload
 
 
@@ -531,6 +532,78 @@ def render_policy_coordinate_html(brief: dict[str, Any]) -> str:
       {article_block}
       {exam_block}
     </div>
+    """
+
+
+def exam_transfer_card_payload(brief: dict[str, Any]) -> dict[str, Any]:
+    card = ensure_dict(brief.get("exam_transfer_card"))
+    if card.get("surface_issue") and card.get("deep_logic") and card.get("exam_expression"):
+        return card
+    return build_exam_transfer_card(brief)
+
+
+def render_exam_transfer_card_plain(brief: dict[str, Any]) -> list[str]:
+    card = exam_transfer_card_payload(brief)
+    transfer_angles = [clip_text(item, 42) for item in as_list(card.get("transfer_angles"))[:5] if str(item).strip()]
+    lines = [
+        "",
+        "考场转化卡｜这篇文章到底考什么",
+        "表面在讲：" + clip_text(card.get("surface_issue"), 100),
+        "真正考点：" + clip_text(card.get("deep_logic"), 140),
+    ]
+    evidence_type = str(card.get("evidence_type") or "none").strip().lower()
+    if evidence_type in {"policy", "both"} and card.get("policy_quote") and card.get("policy_source"):
+        lines.append(f"政策原文：{card.get('policy_source')}——{card.get('policy_quote')}")
+    if evidence_type in {"qiushi", "both"} and card.get("authoritative_quote") and card.get("authoritative_source"):
+        lines.append(f"权威论述：{card.get('authoritative_source')}——{card.get('authoritative_quote')}")
+    if card.get("exam_transfer"):
+        lines.append("适合迁移到：" + clip_text(card.get("exam_transfer"), 150))
+    if transfer_angles:
+        lines.append("作答角度：")
+        lines.extend(f"- {item}" for item in transfer_angles[:5])
+    lines.append("一句能直接用：" + clip_text(card.get("exam_expression"), 80))
+    return lines
+
+
+def render_exam_transfer_card_html(brief: dict[str, Any]) -> str:
+    card = exam_transfer_card_payload(brief)
+    transfer_angles = [clip_text(item, 42) for item in as_list(card.get("transfer_angles"))[:5] if str(item).strip()]
+    evidence_type = str(card.get("evidence_type") or "none").strip().lower()
+    evidence_blocks: list[str] = []
+    if evidence_type in {"policy", "both"} and card.get("policy_quote") and card.get("policy_source"):
+        evidence_blocks.append(
+            f'<div style="font-size:14px;line-height:1.72;color:#334155;margin-top:8px;"><b>政策原文：</b>{h(card.get("policy_source"))}——{h(card.get("policy_quote"))}</div>'
+        )
+    if evidence_type in {"qiushi", "both"} and card.get("authoritative_quote") and card.get("authoritative_source"):
+        evidence_blocks.append(
+            f'<div style="font-size:14px;line-height:1.72;color:#334155;margin-top:8px;"><b>权威论述：</b>{h(card.get("authoritative_source"))}——{h(card.get("authoritative_quote"))}</div>'
+        )
+    angle_block = ""
+    if transfer_angles:
+        angle_block = f"""
+      <div style="margin-top:10px;">
+        <div style="font-size:14px;font-weight:900;color:#165dff;margin-bottom:6px;">可迁移作答角度</div>
+        <ul style="padding-left:19px;line-height:1.72;font-size:14px;margin:0;">{list_items(transfer_angles, 5)}</ul>
+      </div>
+        """
+    transfer_summary = (
+        f'<div style="font-size:14px;line-height:1.72;color:#334155;margin-top:10px;"><b>适合迁移到：</b>{h(clip_text(card.get("exam_transfer"), 150))}</div>'
+        if card.get("exam_transfer")
+        else ""
+    )
+    return f"""
+      <div style="margin-top:12px;background:#f8fafc;border:1px solid #dbeafe;border-radius:14px;padding:12px;">
+        <div style="font-size:14px;font-weight:900;color:#165dff;margin-bottom:8px;">考场转化卡｜这篇文章到底考什么</div>
+        <div style="font-size:14px;line-height:1.72;color:#334155;"><b>表面在讲：</b>{h(clip_text(card.get("surface_issue"), 100))}</div>
+        <div style="font-size:14px;line-height:1.72;color:#334155;margin-top:8px;"><b>真正考点：</b>{h(clip_text(card.get("deep_logic"), 140))}</div>
+        {''.join(evidence_blocks)}
+        {transfer_summary}
+        {angle_block}
+        <div style="margin-top:10px;background:#fff;border:1px solid #e6eaf0;border-radius:10px;padding:9px 10px;">
+          <div style="font-size:13px;font-weight:900;color:#0f172a;margin-bottom:5px;">一句能直接写进答案里</div>
+          <div style="font-size:14px;line-height:1.72;color:#334155;">{h(clip_text(card.get("exam_expression"), 80))}</div>
+        </div>
+      </div>
     """
 
 
@@ -1113,7 +1186,6 @@ def render_plain_text(brief: dict[str, Any]) -> str:
     steps = normalize_framework_steps(as_list(framework_map.get("steps") or featured.get("article_framework") or []), 5)
     golden = as_list(takeaway.get("golden_sentences"))[:2]
     original_focus = strip_display_prefix(featured.get("original_reading_focus"), "如果点原文，重点看")
-    rewritable_expression = strip_display_prefix(featured.get("rewritable_expression"), "可用表达")
     exam_focus = strip_display_prefix(
         question.get("exam_focus") or question.get("review_key") or question.get("breaking_direction"),
         "审题关键",
@@ -1134,15 +1206,6 @@ def render_plain_text(brief: dict[str, Any]) -> str:
         f"备用搜索：{fallback_search_text(featured)}",
         ("如果点原文，重点看：" + original_focus) if original_focus else "",
         "一句话看懂：" + str(featured.get("one_sentence", "")),
-        "记住3个点：",
-        *[f"- {clip_text(item, 90)}" for item in as_list(featured.get("three_useful_points"))[:3]],
-        "换成考场话：",
-        *[
-            f"- {clip_text(strip_exam_use_prefix(item), 120)}"
-            for item in as_list(featured.get("exam_use") or featured.get("usable_for_exam"))
-            if is_exam_use_display_item(item)
-        ][:2],
-        "可用表达：" + clip_text(rewritable_expression, 80),
         "",
         "文章框架图｜一眼看懂文章怎么展开",
         f"文章类型：{framework_map.get('type') or framework_map.get('article_type', '')}",
@@ -1151,7 +1214,7 @@ def render_plain_text(brief: dict[str, Any]) -> str:
             f"{idx}. {step.get('label', '')}：{step.get('content', '')}"
             for idx, step in enumerate(steps, start=1)
         ],
-        *render_policy_coordinate_plain(brief),
+        *render_exam_transfer_card_plain(brief),
         "",
         "今日一题｜考场转化训练",
         "题型：" + str(question.get("question_type", "")),
@@ -1192,10 +1255,6 @@ def render_email_html(brief: dict[str, Any]) -> str:
     three_sentence = three.get("must_remember_sentence") or featured.get("core_viewpoint") or brief.get("today_focus")
     three_question = today_question_text(brief)
     framework_map = ensure_dict(featured.get("article_framework_map"))
-    original_overview = as_list(featured.get("original_overview"))[:2]
-    useful_points = [clip_text(item, 90) for item in as_list(featured.get("three_useful_points"))[:3]]
-    exam_use_source = as_list(featured.get("exam_use") or featured.get("usable_for_exam"))
-    exam_use = [clip_text(strip_exam_use_prefix(item), 120) for item in exam_use_source if is_exam_use_display_item(item)][:2]
     quick_cards = render_quick_reads(brief)
     takeaway_gold = as_list(takeaway.get("golden_sentences"))[:2]
     common_points = as_list(takeaway.get("common_knowledge_points"))[:1]
@@ -1207,7 +1266,6 @@ def render_email_html(brief: dict[str, Any]) -> str:
         question.get("breaking_hint") or question.get("breaking_direction") or question.get("review_key") or "",
         "作答主线",
     )
-    rewritable_expression = strip_display_prefix(featured.get("rewritable_expression"), "可用表达")
     exam_focus = strip_display_prefix(
         question.get("exam_focus") or question.get("review_key") or question.get("breaking_direction"),
         "审题关键",
@@ -1253,25 +1311,9 @@ def render_email_html(brief: dict[str, Any]) -> str:
         {render_framework_map(framework_map, 5)}
       </div>
 
-      <div style="margin-top:12px;background:#eef6ff;border-left:4px solid #165dff;border-radius:10px;padding:11px;">
-        <div style="font-size:14px;font-weight:900;color:#165dff;margin-bottom:6px;">记住3个点</div>
-        <ol style="padding-left:21px;line-height:1.72;font-size:14px;margin:0;">{numbered_items(useful_points, 3)}</ol>
-      </div>
-
-      <div style="margin-top:12px;background:#fffdf6;border:1px solid #fde7b7;border-radius:12px;padding:11px;">
-        <div style="font-size:14px;font-weight:900;color:#b45309;margin-bottom:6px;">换成考场话</div>
-        <ul style="padding-left:19px;line-height:1.72;font-size:14px;margin:0;">{list_items(exam_use, 2)}</ul>
-      </div>
-
-      <div style="margin-top:12px;background:#f8fafc;border-radius:12px;padding:10px 11px;">
-        <div style="font-size:14px;font-weight:900;color:#0f172a;margin-bottom:6px;">可用表达</div>
-        <div style="font-size:14px;line-height:1.72;color:#334155;">{h(clip_text(rewritable_expression, 80))}</div>
-      </div>
+      {render_exam_transfer_card_html(brief)}
 
     </div>
-
-
-    {render_policy_coordinate_html(brief)}
 
     <h2 style="font-size:21px;margin:20px 0 10px;">今日一题｜考场转化训练</h2>
     <div style="background:#fff;border:1px solid #e6eaf0;border-radius:16px;padding:16px;margin-bottom:15px;">
@@ -1307,7 +1349,6 @@ def render_email_html(brief: dict[str, Any]) -> str:
         <div style="font-size:14px;font-weight:900;color:#6d28d9;margin-bottom:6px;">必备金句</div>
         <ul style="padding-left:19px;line-height:1.68;font-size:14px;margin:0;">{render_golden_sentences(takeaway_gold, 2)}</ul>
       </div>
-      {f'<div style="font-size:14px;font-weight:900;color:#165dff;margin-bottom:6px;">拓展联想</div><div style="font-size:13px;line-height:1.65;color:#475569;background:#f8fafc;border-radius:10px;padding:8px 10px;">{h(takeaway.get("extension"))}</div>' if takeaway.get("extension") else ''}
     </div>
 
     <h2 style="font-size:21px;margin:20px 0 8px;">今日速读｜申论素材补充</h2>
