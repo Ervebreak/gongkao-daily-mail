@@ -187,6 +187,18 @@ JSON_SCHEMA_HINT = {
         "output_prompt": "给用户的30秒输出任务，优先固定为：请用一句话写出这道题的开头表态。不得写成复述框架/重点练习等教研指令",
         "output_sentence_template": "60-120字参考句式，必须是一句考生可直接模仿的开头表态或核心判断",
     },
+    "exam_transfer_card": {
+        "surface_issue": "文章表面在讲什么，50-90字，具体到现实场景",
+        "deep_logic": "这篇文章真正考什么，必须落到申论/面试考点，60-120字",
+        "evidence_type": "policy / qiushi / both / none",
+        "policy_quote": "最贴切的一条政策原文，没有则留空",
+        "policy_source": "政策原文来源，没有则留空",
+        "authoritative_quote": "最贴切的一条权威论述，没有则留空",
+        "authoritative_source": "权威论述来源，没有则留空",
+        "transfer_angles": ["3-5个具体作答角度，每条18-40字"],
+        "exam_transfer": "1句说明适合迁移到哪类题、适合作为哪类作答环节，60-120字",
+        "exam_expression": "1句能直接写进申论或面试答案里的表达，25-55字"
+    },
     "today_takeaway": {
         "keywords": ["关键词1", "关键词2", "关键词3"],
         "common_knowledge_points": ["1条时政常识；如需高亮，只能把具体关键词放进【】中；原文没有明确出现具体文件名、部门名、数字或制度名称时，不得编造具体政策事实，可以输出通用考点表述；没有合适常识点可留空"],
@@ -549,6 +561,8 @@ def build_user_prompt(articles: list[Article], today: str, question_bank_context
 5. featured_article.rewritable_expression：只给 1 句自然好背的可用表达；目标25-55字，必须短而完整；定位是“以后同类题也能复用的话”，必须像高水平考生能写出来、说出来、背下来，不要写成教研点评、公文套话或大白话。
 6. featured_article.original_reading_focus：如果点原文，提醒重点看什么；这个字段将在原文链接下方前置展示，必须具体指出看开头/案例/结尾/治理落点中的哪几处。
 7. 今日精读允许比极简版更充实，但必须避免重复、抽象堆叠和空话。
+8. exam_transfer_card：这是完整版里“考场转化卡｜这篇文章到底考什么”的数据源。surface_issue 只说明文章表面讲什么；deep_logic 必须落到申论/面试考点；transfer_angles 给 3-5 个具体作答角度；exam_transfer 要说明适合迁移到什么题、可作为开头立意/分点展开/结尾升华/素材论证中的哪一类；exam_expression 只给 1 句能直接写进答案的话。
+9. exam_transfer_card.evidence_type 只允许写 policy / qiushi / both / none。只有政策原文和权威论述都高度贴切、且不重复时才写 both；如果拿不准，就写最贴切的一条或 none。
 
 文章框架图要求：
 1. 先判断文章类型：政策解读类、数字治理类、政策评论类、现象分析类、案例经验类、精神价值类、产业发展类、生态治理类、基层治理类、公共服务类、其他。

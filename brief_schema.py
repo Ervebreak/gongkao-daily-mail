@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from exam_transfer_card import apply_exam_transfer_card
 from subject_line import normalize_email_subject
 
 
@@ -679,6 +680,7 @@ def ensure_brief_schema(data: dict[str, Any], today: str) -> tuple[dict[str, Any
     takeaway["extension"] = clip_text(first_text(takeaway.get("extension"), takeaway.get("拓展联想")), 80)
     takeaway["use_scenarios"] = as_list(takeaway.get("use_scenarios"))[:4] or ["申论", "面试", "公基", "事业单位综合应用"]
     brief["today_takeaway"] = takeaway
+    brief = apply_exam_transfer_card(brief)
     brief["reading_guide"] = build_reading_guide(brief)
     brief, subject_warnings = normalize_email_subject(brief)
     warnings.extend(subject_warnings)

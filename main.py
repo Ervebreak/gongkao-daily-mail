@@ -15,6 +15,7 @@ except Exception:
     pass
 
 from config import settings
+from exam_transfer_card import apply_exam_transfer_card
 from feedback import handle_feedback, is_feedback_invocation
 from history import normalize_title
 from lite_email_renderer import render_lite_email
@@ -1607,9 +1608,9 @@ def ensure_policy_coordinate_for_render(
     source_articles: list[Any] | None = None,
 ) -> dict[str, Any]:
     coordinate = brief.get("policy_coordinate") if isinstance(brief.get("policy_coordinate"), dict) else {}
-    if coordinate and _policy_text(coordinate.get("display_evidence_type")) not in {"", "none"}:
-        return brief
-    brief["policy_coordinate"] = build_policy_coordinate(brief, logger=logger, source_articles=source_articles)
+    if not coordinate or _policy_text(coordinate.get("display_evidence_type")) in {"", "none"}:
+        brief["policy_coordinate"] = build_policy_coordinate(brief, logger=logger, source_articles=source_articles)
+    brief = apply_exam_transfer_card(brief)
     return brief
 
 
@@ -1636,10 +1637,12 @@ def enforce_policy_coordinate_quality(
             coordinate["matched_qiushi_article_id"] = ""
             coordinate["qiushi_match_score"] = 0.0
             _refresh_policy_coordinate_display_fields(coordinate)
+            brief = apply_exam_transfer_card(brief)
             changed = True
             repaired_actions.append("drop_authoritative_quote")
 
     if changed:
+        brief = apply_exam_transfer_card(brief)
         plain_text = render_plain_text(brief)
         html_body = render_email_html(brief)
         quality = evaluate_policy_coordinate_quality(brief, plain_text, html_body)
@@ -1650,6 +1653,7 @@ def enforce_policy_coordinate_quality(
         brief["policy_coordinate"] = {}
         rebuilt = build_policy_coordinate(brief, logger=logger)
         brief["policy_coordinate"] = rebuilt
+        brief = apply_exam_transfer_card(brief)
         plain_text = render_plain_text(brief)
         html_body = render_email_html(brief)
         rebuilt_quality = evaluate_policy_coordinate_quality(brief, plain_text, html_body)
@@ -1661,6 +1665,7 @@ def enforce_policy_coordinate_quality(
             repaired_actions.append("rematch_policy_quote")
         else:
             brief["policy_coordinate"] = {}
+            brief = apply_exam_transfer_card(brief)
             brief["_policy_coordinate_disabled_reason"] = "policy_coordinate 已隐藏：政策原文或来源未通过展示前质检。"
             quality = evaluate_policy_coordinate_quality(brief, render_plain_text(brief), render_email_html(brief))
             changed = True
