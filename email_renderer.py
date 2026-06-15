@@ -677,6 +677,10 @@ def _lite_paid_plan_list() -> list[str]:
     ]
 
 
+def _lite_paid_plan_summary() -> str:
+    return "｜".join(_lite_paid_plan_list())
+
+
 def _lite_paid_feature_summary() -> str:
     return "参考答案、框架图、考场转化、金句拆解、周末 PDF。"
 
@@ -984,14 +988,13 @@ def render_lite_plain_text(latest_json: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
-            "想看今天的完整版？",
+            "今天完整版多讲了什么",
             "今日完整版亮点：",
             paid_highlight,
             "",
             f"完整版还包含：{_lite_paid_feature_summary()}",
             "",
-            "早鸟内测：",
-            *[f"- {item}" for item in _lite_paid_plan_list()],
+            f"体验说明：{_lite_paid_plan_summary()}",
             "",
             f"主入口（回复“体验”）：{paid_mailto_url}" if paid_mailto_url else "",
             f"次入口（报名表）：{paid_url}" if paid_url else "",
@@ -1013,10 +1016,6 @@ def render_lite_email(latest_json: dict[str, Any]) -> str:
     paid_mailto_url = _lite_paid_mailto_url() or paid_url
     paid_highlight = _lite_paid_highlight(latest_json, brief)
     three_step_line = _lite_three_step_line(brief)
-    paid_plan_badges = "".join(
-        f'<span style="display:inline-block;background:#fff;border:1px solid #fdba74;border-radius:999px;padding:7px 11px;margin:0 8px 8px 0;font-size:13px;font-weight:900;color:#9a3412;">{h(item)}</span>'
-        for item in _lite_paid_plan_list()
-    )
     angle_items = "".join(
         f'<li style="margin:0 0 8px;color:#334155;line-height:1.72;">{h(item)}</li>'
         for item in _lite_answer_angles(brief)
@@ -1090,15 +1089,14 @@ def render_lite_email(latest_json: dict[str, Any]) -> str:
     {quick_reads_block}
 
     <div style="background:#fff8e8;border:1px solid #fed7aa;border-radius:16px;padding:15px 16px;">
-      <div style="font-size:18px;font-weight:900;color:#92400e;margin-bottom:8px;">想看今天的完整版？</div>
+      <div style="font-size:17px;font-weight:900;color:#92400e;margin-bottom:8px;">今天完整版多讲了什么</div>
       <div style="font-size:13px;color:#b45309;font-weight:900;margin-bottom:6px;">今日完整版亮点</div>
       <div style="font-size:14px;line-height:1.82;color:#78350f;margin-bottom:10px;">{h(paid_highlight)}</div>
       <div style="font-size:14px;line-height:1.8;color:#78350f;margin-bottom:8px;">完整版还包含：{h(_lite_paid_feature_summary())}</div>
-      <div style="font-size:14px;line-height:1.8;color:#78350f;margin-bottom:8px;">早鸟内测</div>
-      <div style="margin:0 0 12px;">{paid_plan_badges}</div>
+      <div style="font-size:12px;line-height:1.7;color:#92400e;margin-bottom:12px;">体验说明：{h(_lite_paid_plan_summary())}</div>
       <div style="margin-bottom:10px;">
-        <a href="{h(paid_mailto_url)}" target="_blank" style="display:inline-block;background:#f59e0b;color:#fff;text-decoration:none;border-radius:999px;padding:10px 16px;font-size:14px;font-weight:900;margin:0 8px 8px 0;">回复“体验”领取说明</a>
-        <a href="{h(paid_url)}" target="_blank" style="display:inline-block;background:#fff;color:#b45309;text-decoration:none;border:1px solid #fdba74;border-radius:999px;padding:10px 16px;font-size:14px;font-weight:900;margin:0 8px 8px 0;">填写报名表</a>
+        <a href="{h(paid_mailto_url)}" target="_blank" style="display:inline-block;background:#fffbeb;color:#92400e;text-decoration:none;border:1px solid #fcd34d;border-radius:999px;padding:9px 14px;font-size:13px;font-weight:700;margin:0 8px 8px 0;">回复“体验”领取说明</a>
+        <a href="{h(paid_url)}" target="_blank" style="display:inline-block;background:transparent;color:#92400e;text-decoration:none;border:1px solid #fdba74;border-radius:999px;padding:9px 14px;font-size:13px;font-weight:700;margin:0 8px 8px 0;">填写报名表</a>
       </div>
       <div style="font-size:13px;line-height:1.8;color:#92400e;">暂时不参加也没关系，免费简版会继续保留。</div>
     </div>

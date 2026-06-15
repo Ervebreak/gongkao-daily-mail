@@ -84,14 +84,16 @@ def test_lite_paid_cta_uses_brief_hook_and_keeps_entries() -> None:
     body = rendered["plain_text"] + rendered["html_body"]
 
     assert not hasattr(email_renderer, "_call_lite_paid_highlight_llm")
-    assert "想看今天的完整版？" in body
+    assert "今天完整版多讲了什么" in body
     assert "今日完整版亮点" in body
     assert "群众诉求复杂、推进受阻" in body
     assert "完整版还包含：参考答案、框架图、考场转化、金句拆解、周末 PDF。" in body
+    assert "体验说明：4.9 元 / 7 天｜9.9 元 / 30 天" in body
     assert "4.9 元 / 7 天" in body
     assert "9.9 元 / 30 天" in body
     assert "回复“体验”领取说明" in body
     assert "填写报名表" in body
+    assert "早鸟内测" not in body
     assert "mailto:ops@example.com?" in body
     assert "https://paid.example.com/entry" in body
     assert "点击这里发送退订邮件" in body
