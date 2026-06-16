@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import datetime as dt
+import html
 import hashlib
 import inspect
 import io
@@ -55,9 +56,9 @@ VARIANT_BUCKET = {
     "skip": "skipped",
 }
 TRIAL_REMINDER_COPY = {
-    "full_trial_d3": "【内测提醒】你的完整版体验还有 3 天到期。续费后可以继续收到每日精读、今日一题参考答案、政策坐标和周 PDF 汇编。想继续使用的话，可以直接回复本邮件。如果你已经回复或沟通过续费，可以忽略这条提醒。",
-    "full_trial_d1": "【内测提醒】你的完整版体验明天到期。续费后可以继续收到完整版晨读邮件；如果暂时不续费，后续将停止发送完整版内容。想继续使用的话，可以直接回复本邮件。如果你已经回复或沟通过续费，可以忽略这条提醒。",
-    "full_trial_d0": "【内测提醒】你的完整版体验今天到期。今天之后，如未续费，将不再继续发送完整版内容。想继续使用的话，可以直接回复本邮件，我会帮你处理开通。如果你已经回复或沟通过续费，可以忽略这条提醒。",
+    "full_trial_d3": "【到期提醒】你的完整版体验还有 3 天到期。续费后可以继续收到每日精读、今日一题参考答案、政策坐标和周 PDF 汇编。继续使用的话，可以直接【点击续订】。如果你已经回复或沟通过续费，可以忽略这条提醒。",
+    "full_trial_d1": "【到期提醒】你的完整版体验明天到期。续费后可以继续收到完整版晨读邮件；如果暂时不续费，后续将停止发送完整版内容。继续使用的话，可以直接【点击续订】。如果你已经回复或沟通过续费，可以忽略这条提醒。",
+    "full_trial_d0": "【到期提醒】你的完整版体验今天到期。今天之后，如未续费，将不再继续发送完整版内容。继续使用的话，可以直接【点击续订】。如果你已经回复或沟通过续费，可以忽略这条提醒。",
 }
 TRIAL_REMINDER_KEYS = {
     "full_trial_d3": "d3",
@@ -490,6 +491,32 @@ def split_effective_recipient_records(test_mode: bool = False, today: str | dt.d
     return split_recipient_records(table.get("records") or [], today=today), source
 
 
+def _trial_reminder_renew_url() -> str:
+    return settings.paid_trial_entry_url.strip()
+
+
+def _render_trial_reminder_plain_text(variant: str) -> str:
+    text = TRIAL_REMINDER_COPY[variant]
+    renew_url = _trial_reminder_renew_url()
+    if renew_url:
+        return text.replace("【点击续订】", f"【点击续订】 {renew_url}")
+    return text
+
+
+def _render_trial_reminder_html(variant: str) -> str:
+    text = html.escape(TRIAL_REMINDER_COPY[variant])
+    renew_url = _trial_reminder_renew_url()
+    if not renew_url:
+        return text
+    renew_link = (
+        f'<a href="{html.escape(renew_url, quote=True)}" '
+        'style="color:#9a3412;text-decoration:underline;font-weight:800;">'
+        "【点击续订】"
+        "</a>"
+    )
+    return text.replace("【点击续订】", renew_link)
+
+
 def _inject_html_banner(html_body: str, text: str) -> str:
     banner = (
         '<div style="max-width:680px;margin:0 auto;padding:14px 12px 0;">'
@@ -526,9 +553,8 @@ def render_variant_email_payloads(
         plain_variant = full_plain_text
         html_variant = full_html_body
         if enable_trial_reminders and variant in TRIAL_REMINDER_COPY:
-            reminder_text = TRIAL_REMINDER_COPY[variant]
-            plain_variant = _inject_plain_banner(plain_variant, reminder_text)
-            html_variant = _inject_html_banner(html_variant, reminder_text)
+            plain_variant = _inject_plain_banner(plain_variant, _render_trial_reminder_plain_text(variant))
+            html_variant = _inject_html_banner(html_variant, _render_trial_reminder_html(variant))
         payloads[variant] = {"subject": subject, "plain_text": plain_variant, "html_body": html_variant}
     return payloads
 
