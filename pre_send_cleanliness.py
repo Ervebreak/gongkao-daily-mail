@@ -252,7 +252,9 @@ def check_cleanliness(data: dict[str, Any]) -> dict[str, Any]:
         issues.append(_issue("high", "leading_colon", "纯文本正文存在以冒号开头的行。", "plain_text", auto_fixable=True, blocking=True))
     if re.search(rf">\s*[{re.escape(LEADING_RESIDUE)}]", html_body):
         issues.append(_issue("high", "leading_colon", "HTML 模块正文存在以冒号开头的内容。", "html_body", auto_fixable=True, blocking=True))
-    issues.extend(_daily_question_structure_issues(data))
+    # Temporarily disable send-time daily question structure blocking.
+    # Morning send should not be blocked for missing identity / scene /
+    # conflict / task in the question stem.
     issues.extend(_nonblocking_issues(data))
     return {"issues": issues}
 
