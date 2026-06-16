@@ -86,20 +86,29 @@ def test_recipient_variant_skips_repeat_trial_reminder_when_already_sent() -> No
 
 
 def test_render_variant_email_payloads_inserts_trial_banner_once_per_variant() -> None:
-    payloads = render_variant_email_payloads(
-        subject="测试主题",
-        full_plain_text="FULL BODY",
-        full_html_body="<html><body><div>FULL BODY</div></body></html>",
-        lite_plain_text="LITE BODY",
-        lite_html_body="<html><body><div>LITE BODY</div></body></html>",
-        variants=["full_normal", "full_trial_d3", "free_lite"],
-        enable_trial_reminders=True,
-    )
+    original_paid_trial_entry_url = email_sender.settings.paid_trial_entry_url
+    try:
+        object.__setattr__(email_sender.settings, "paid_trial_entry_url", "https://paid.example.com/renew")
+        payloads = render_variant_email_payloads(
+            subject="测试主题",
+            full_plain_text="FULL BODY",
+            full_html_body="<html><body><div>FULL BODY</div></body></html>",
+            lite_plain_text="LITE BODY",
+            lite_html_body="<html><body><div>LITE BODY</div></body></html>",
+            variants=["full_normal", "full_trial_d3", "free_lite"],
+            enable_trial_reminders=True,
+        )
+    finally:
+        object.__setattr__(email_sender.settings, "paid_trial_entry_url", original_paid_trial_entry_url)
 
     assert payloads["full_normal"]["plain_text"] == "FULL BODY"
     assert "FULL BODY" in payloads["full_trial_d3"]["plain_text"]
+    assert "【到期提醒】" in payloads["full_trial_d3"]["plain_text"]
     assert "还有 3 天到期" in payloads["full_trial_d3"]["plain_text"]
-    assert "还有 3 天到期" in payloads["full_trial_d3"]["html_body"]
+    assert "【点击续订】 https://paid.example.com/renew" in payloads["full_trial_d3"]["plain_text"]
+    assert "【到期提醒】" in payloads["full_trial_d3"]["html_body"]
+    assert 'href="https://paid.example.com/renew"' in payloads["full_trial_d3"]["html_body"]
+    assert "【点击续订】" in payloads["full_trial_d3"]["html_body"]
     assert payloads["free_lite"]["plain_text"] == "LITE BODY"
     assert "还有 3 天到期" not in payloads["free_lite"]["html_body"]
 
