@@ -124,7 +124,10 @@ def fallback_lite_paid_cta_payload(brief: dict[str, Any]) -> dict[str, Any]:
 def normalize_lite_paid_cta_payload(value: Any, brief: dict[str, Any]) -> dict[str, Any]:
     fallback = fallback_lite_paid_cta_payload(brief)
     payload = _ensure_dict(value)
-    hook = _strip_prefixes(payload.get("hook") or payload.get("highlight") or payload.get("lite_paid_highlight") or value)
+    raw_hook = payload.get("hook") or payload.get("highlight") or payload.get("lite_paid_highlight")
+    if not raw_hook and isinstance(value, str):
+        raw_hook = value
+    hook = _strip_prefixes(raw_hook or "")
     normalized = {
         "hook_type": str(payload.get("hook_type") or payload.get("type") or _infer_source_module(brief)).strip() or fallback["hook_type"],
         "hook": hook,

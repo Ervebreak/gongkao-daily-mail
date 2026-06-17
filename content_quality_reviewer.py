@@ -236,7 +236,48 @@ def _issue_to_rewrite_target(issue: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _semantic_truncation_targets(raw: dict[str, Any], issues: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return []
+    truncation_codes = {"text_truncation", "truncation_error", "suspected_truncated_sentence"}
+    joined_issues = " ".join(str(item.get("message") or "") for item in issues if isinstance(item, dict))
+    raw_review = raw.get("raw_review") if isinstance(raw.get("raw_review"), dict) else {}
+    joined_notes = " ".join(str(value or "") for value in raw_review.values())
+    evidence = " ".join(
+        filter(
+            None,
+            [
+                joined_issues,
+                joined_notes,
+                str(raw.get("one_sentence_judgment") or ""),
+            ],
+        )
+    )
+    if not any(str(item.get("code") or "") in truncation_codes for item in issues if isinstance(item, dict)):
+        return []
+    if not evidence:
+        return []
+
+    targets: list[dict[str, Any]] = []
+    field_specs = [
+        ("original_reading_focus", "brief.featured_article.original_reading_focus", "featured_article"),
+        ("quick_reads[0]", "brief.quick_reads[0].one_sentence", "quick_reads"),
+        ("quick_reads[1]", "brief.quick_reads[1].one_sentence", "quick_reads"),
+        ("today_takeaway.framework", "brief.today_takeaway.framework", "today_takeaway"),
+        ("daily_question.question", "brief.daily_question.question", "daily_question"),
+    ]
+    for marker, field, module in field_specs:
+        if marker not in evidence:
+            continue
+        targets.append(
+            {
+                "field": field,
+                "module": module,
+                "issue_code": "text_truncation",
+                "reason": "This field looks semantically truncated or ends with a half-sentence.",
+                "action": "Rewrite this field into one complete sentence while preserving the original meaning and without leaking labels.",
+                "severity": "high" if field == "brief.daily_question.question" else "medium",
+                "auto_fixable": True,
+            }
+        )
+    return targets
 def _normalize_rewrite_targets(raw: dict[str, Any], issues: list[dict[str, Any]]) -> list[dict[str, Any]]:
     targets: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()

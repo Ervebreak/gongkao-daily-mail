@@ -53,3 +53,19 @@ def test_authoritative_quote_can_pass_with_specific_rerank_connection():
     }
 
     assert should_display_policy_match(article_anchors, coordinate) is True
+
+
+def test_generic_article_connection_and_weak_status_are_hidden():
+    article_anchors = {
+        "query_text": "cover-up face project inspection-oriented response",
+        "fine_grained_tags": ["cover-up", "face project", "inspection-oriented response"],
+    }
+    coordinate = {
+        "source_type": "policy_only",
+        "semantic_fit_status": "weak_match",
+        "policy_match_score": 49,
+        "policy_quote": "完善基层治理服务机制，推动工作落实。",
+        "article_connection": "适合基层治理、服务群众和完善机制类题目。",
+    }
+
+    assert should_display_policy_match(article_anchors, coordinate) is False

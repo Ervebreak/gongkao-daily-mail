@@ -89,12 +89,29 @@ def _evidence_text(policy_coordinate: dict[str, Any]) -> str:
     )
 
 
+def _to_float(value: Any) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _article_connection_too_generic(policy_coordinate: dict[str, Any]) -> bool:
+    article_connection = _compact(policy_coordinate.get("article_connection"))
+    if not article_connection:
+        return False
+    generic_hits = _hits(article_connection, GENERIC_OVERLAP_TERMS)
+    return len(generic_hits) >= 2 and len(article_connection) <= 24
+
+
 def _rerank_authoritative_override(policy_coordinate: dict[str, Any], generic_hits: list[str]) -> bool:
     display_type = _text(policy_coordinate.get("display_evidence_type")).lower()
     if display_type != "qiushi":
         return False
     article_connection = _compact(policy_coordinate.get("article_connection"))
     if len(article_connection) < 18:
+        return False
+    if _article_connection_too_generic(policy_coordinate):
         return False
     if generic_hits and len(article_connection) < 30:
         return False
@@ -109,6 +126,19 @@ def policy_match_semantic_fit(article_anchors: Any, policy_coordinate: dict[str,
     generic_hits = _hits(evidence_text, GENERIC_OVERLAP_TERMS)
     specific_anchor_hits = _hits(evidence_text, _anchor_specific_terms(article_anchors))
     source_type = _text(policy_coordinate.get("source_type")).lower()
+    semantic_fit_status = _text(policy_coordinate.get("semantic_fit_status")).lower()
+    policy_score = _to_float(policy_coordinate.get("policy_match_score"))
+
+    if semantic_fit_status.startswith("weak"):
+        return {
+            "display": False,
+            "status": "weak_match",
+            "reason": "weak_match: semantic_fit_status already marked this policy coordinate as weak.",
+            "anchor_hits": anchor_hits,
+            "evidence_hits": evidence_hits,
+            "generic_hits": generic_hits,
+            "specific_anchor_hits": specific_anchor_hits,
+        }
 
     if not anchor_hits:
         return {
@@ -143,7 +173,18 @@ def policy_match_semantic_fit(article_anchors: Any, policy_coordinate: dict[str,
             "specific_anchor_hits": specific_anchor_hits,
         }
 
-    if source_type == "policy_only" or generic_hits:
+    if _article_connection_too_generic(policy_coordinate) and not specific_anchor_hits and not evidence_hits:
+        return {
+            "display": False,
+            "status": "weak_match",
+            "reason": "weak_match: article_connection is too generic to justify display.",
+            "anchor_hits": anchor_hits,
+            "evidence_hits": [],
+            "generic_hits": generic_hits,
+            "specific_anchor_hits": specific_anchor_hits,
+        }
+
+    if (source_type == "policy_only" and policy_score and policy_score < 65) or source_type == "policy_only" or generic_hits:
         return {
             "display": False,
             "status": "weak_match",

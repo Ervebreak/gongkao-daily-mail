@@ -81,3 +81,25 @@ def test_daily_question_blocks_trailing_semicolon_answer() -> None:
     codes = {item["code"] for item in report["issues"]}
     assert "truncated_answer" in codes
     assert not report["ok"]
+
+
+def test_shenlun_policy_question_without_identity_does_not_raise_missing_identity() -> None:
+    brief = _base_brief()
+    brief["daily_question"] = {
+        "question_type": "申论对策题",
+        "question": "近期部分研学活动存在内容注水、中途加价、带队老师无资质等问题。请结合实际提出整治措施。",
+        "exam_focus": "本题重点不在身份代入，而在把家长投诉转成可执行的治理举措。",
+        "breaking_hint": "先找准乱象集中点，再把规则、责任和执行抓手接起来。",
+        "answer_framework": [
+            "先摸清投诉集中在哪些环节。",
+            "再把准入、收费和安全规则立起来。",
+            "最后把责任追究和结果反馈压实。",
+        ],
+        "candidate_answer": "我认为，整治这类乱象，关键是把群众最集中的投诉转成可执行的治理规则。先摸清问题，再完善规则，最后压实责任和反馈。",
+        "thirty_second_answer": "整治不能只停留在表态，关键是把问题摸清、把规则立住、把责任压实。",
+    }
+
+    report = evaluate_daily_question(brief)
+    codes = {item["code"] for item in report["issues"]}
+
+    assert "missing_identity" not in codes

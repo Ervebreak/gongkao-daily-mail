@@ -299,10 +299,9 @@ def build_quality_gate(
         "leading_colon",
         "rewritable_expression_label_prefix",
         "duplicate_subject_prefix",
-        "daily_question_missing_identity",
-        "daily_question_missing_scene",
-        "daily_question_missing_conflict",
-        "daily_question_missing_task",
+        "text_truncation",
+        "visible_text_truncation",
+        "original_reading_focus_incomplete",
         "policy_quote_missing",
         "policy_quote_too_long",
         "policy_source_missing",
@@ -3413,6 +3412,10 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
     rewrite_result = merge_rewrite_results(rewrite_result, content_issue_rewrite_result)
     rewrite_result = merge_rewrite_results(rewrite_result, p0_repair_result)
     rewrite_result = merge_minor_fixes_into_rewrite(rewrite_result, minor_fix_result)
+    if isinstance(minor_fix_result, dict):
+        minor_fix_result["brief"] = clone_jsonable(brief)
+        minor_fix_result["plain_text"] = plain_text
+        minor_fix_result["html_body"] = html_body
     quality_blocked = (not test_invocation) and quality_gate.get("overall") == "fail"
     llm_trace_summary = summarize_llm_trace(llm_trace_events)
     logger.info("llm trace summary", summary=llm_trace_summary)

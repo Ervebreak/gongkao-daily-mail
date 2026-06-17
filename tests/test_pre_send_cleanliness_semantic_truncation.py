@@ -9,7 +9,7 @@ def _payload() -> dict:
     return {
         "brief": {
             "featured_article": {
-                "original_reading_focus": "从追问责任边界入手，避免答",
+                "original_reading_focus": "如果点原文，重点看：从追问责任边界入手，避免答",
             },
             "today_takeaway": {
                 "framework": "把平台治理、部门协同和群",
@@ -52,3 +52,14 @@ def test_semantic_truncation_repairs_are_complete(path: str, expected: str) -> N
 
     assert current == expected
     assert report["unresolved_issues"] == []
+
+
+def test_truncated_phrase_is_completed_before_render_or_blocked() -> None:
+    payload = _payload()
+    payload["brief"]["today_takeaway"]["framework"] = "这些细节是申论对策题拿高"
+
+    fixed, report = pre_send_cleanliness_guard(payload)
+
+    assert "这些细节是申论对策题拿高" not in fixed["brief"]["today_takeaway"]["framework"]
+    assert "这些细节是申论对策题拿高" not in fixed.get("plain_text", "")
+    assert not any(issue["code"] == "visible_text_truncation" for issue in report["unresolved_issues"])

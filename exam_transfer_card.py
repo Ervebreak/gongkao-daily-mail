@@ -3,6 +3,9 @@ from __future__ import annotations
 from typing import Any
 
 
+REPEATED_ROUTE_TERMS = ("准入", "执法", "平台", "闭环")
+
+
 def _text(value: Any) -> str:
     if isinstance(value, list):
         return " ".join(_text(item) for item in value if _text(item))
@@ -32,6 +35,10 @@ def _clip_text(value: Any, limit: int) -> str:
     if cut >= max(12, int(limit * 0.55)):
         return head[: cut + 1].strip()
     return head.rstrip("，、：:和与及并但通过")
+
+
+def _compact_overlap_key(value: Any) -> str:
+    return "".join(ch for ch in _text(value) if not ch.isspace() and ch not in "，。；：:、,.!?！？“”\"'（）()《》<>【】[]-")
 
 
 def _strip_display_prefix(value: Any, *prefixes: str) -> str:
@@ -121,6 +128,31 @@ def _quotes_distinct(left: str, right: str) -> bool:
     return shorter not in longer
 
 
+def _route_term_overlap_count(left: Any, right: Any) -> int:
+    left_text = _text(left)
+    right_text = _text(right)
+    return sum(1 for term in REPEATED_ROUTE_TERMS if term in left_text and term in right_text)
+
+
+def _angle_too_close_to_candidate(angle: str, candidate_answer: str) -> bool:
+    if not angle or not candidate_answer:
+        return False
+    angle_key = _compact_overlap_key(angle)
+    candidate_key = _compact_overlap_key(candidate_answer)
+    if len(angle_key) >= 10 and angle_key in candidate_key:
+        return True
+    return _route_term_overlap_count(angle, candidate_answer) >= 3
+
+
+def _soften_transfer_text(value: str) -> str:
+    return (
+        value.replace("准入", "边界")
+        .replace("执法", "落实")
+        .replace("平台", "治理对象")
+        .replace("闭环", "结果反馈")
+    )
+
+
 def _fallback_transfer_summary(featured: dict[str, Any], question: dict[str, Any], angles: list[str]) -> str:
     scenarios = _dedupe_keep_order(
         [
@@ -165,6 +197,7 @@ def build_exam_transfer_card(brief: dict[str, Any]) -> dict[str, Any]:
     takeaway = _ensure_dict(brief.get("today_takeaway"))
     coordinate = _ensure_dict(brief.get("policy_coordinate"))
     existing = _ensure_dict(brief.get("exam_transfer_card"))
+    candidate_answer = _text(question.get("candidate_answer"))
 
     policy_quote = _clip_text(coordinate.get("policy_quote"), 120)
     policy_source = _clip_text(coordinate.get("policy_source"), 60)
@@ -210,13 +243,14 @@ def build_exam_transfer_card(brief: dict[str, Any]) -> dict[str, Any]:
         [*existing_angles, *coordinate_angles, *question_angles, *featured_angles],
         limit=5,
     )
+    transfer_angles = [item for item in transfer_angles if not _angle_too_close_to_candidate(item, candidate_answer)]
     if len(transfer_angles) < 3:
         transfer_angles = _dedupe_keep_order(
             [
                 *transfer_angles,
                 "先把表面矛盾说清：明确题目谈的到底是哪类现实堵点。",
                 "再把深层逻辑讲透：说明问题为什么会卡在执行、协同或反馈环节。",
-                "最后落到治理闭环：把回应诉求、部门协同和结果跟踪接起来。",
+                "最后落到结果反馈：把回应诉求、部门协同和后续跟踪接起来。",
             ],
             limit=5,
         )
@@ -255,9 +289,13 @@ def build_exam_transfer_card(brief: dict[str, Any]) -> dict[str, Any]:
         ),
         150,
     )
+    if _route_term_overlap_count(exam_transfer, candidate_answer) >= 3:
+        exam_transfer = _clip_text(_soften_transfer_text(_fallback_transfer_summary(featured, question, transfer_angles)), 150)
     exam_expression = _fallback_expression(featured, question, takeaway)
     if _text(existing.get("exam_expression")):
         exam_expression = _clip_text(_strip_display_prefix(existing.get("exam_expression"), "可用表达"), 80)
+    if _route_term_overlap_count(exam_expression, candidate_answer) >= 3:
+        exam_expression = _clip_text("不能只停留在原则表态，关键是把现实堵点找准、把责任链条接上、把结果反馈落到群众感受里。", 80)
 
     return {
         "surface_issue": surface_issue,

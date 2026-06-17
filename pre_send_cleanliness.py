@@ -18,6 +18,37 @@ DISPLAY_PREFIX_RULES = {
     "brief.daily_question.exam_focus": ("审题关键",),
     "brief.today_takeaway.framework": ("可迁移框架",),
 }
+TRUNCATION_MARKERS = ("……", "...", "…", "..", "这些细节是申论对策题拿高")
+DANGLING_ENDINGS = (
+    "避免答",
+    "供需矛",
+    "过错责任",
+    "和群",
+    "拿高",
+    "闭环落",
+    "问题推",
+    "推进受",
+    "转成考",
+    "机制做",
+)
+KNOWN_TRUNCATION_REPAIRS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"避免答$"), "帮助作答避免空泛。"),
+    (re.compile(r"供需矛$"), "供需矛盾。"),
+    (re.compile(r"过错责任$"), "过错责任认定。"),
+    (re.compile(r"和群$"), "和群众监督结合起来。"),
+    (re.compile(r"这些细节是申论对策题拿高$"), "这些细节是申论对策题拿高分时真正拉开差距的关键。"),
+)
+VISIBLE_TRUNCATION_SCAN_PATHS = {
+    "brief.featured_article.original_reading_focus",
+    "brief.featured_article.rewritable_expression",
+    "brief.today_takeaway.framework",
+    "brief.daily_question.question",
+    "brief.daily_question.exam_focus",
+    "brief.daily_question.breaking_hint",
+    "brief.daily_question.candidate_answer",
+    "brief.daily_question.thirty_second_answer",
+    "brief.quick_reads[*].one_sentence",
+}
 
 
 def _text(value: Any) -> str:
@@ -115,6 +146,85 @@ def _strip_labels(text: str, labels: tuple[str, ...]) -> str:
     return _strip_leading_colon(fixed)
 
 
+def _last_clause(text: str) -> str:
+    parts = [part.strip() for part in re.split(r"[，,；;。！？!?]", text or "") if part.strip()]
+    return parts[-1] if parts else _text(text)
+
+
+def _looks_incomplete_text(text: str) -> bool:
+    value = _text(text)
+    if not value:
+        return False
+    if any(marker in value for marker in TRUNCATION_MARKERS):
+        return True
+    if value.endswith(DANGLING_ENDINGS):
+        return True
+    clause = _last_clause(value)
+    if clause.startswith(("让", "把")) and len(clause) <= 10:
+        return True
+    if clause.startswith(("通过", "依靠", "围绕", "立足")) and len(clause) <= 14:
+        return True
+    if value.endswith(("，", "、", "：", "；", ",", ":", ";")):
+        return True
+    return False
+
+
+def _complete_known_truncation(text: str) -> str:
+    fixed = _text(text)
+    for pattern, replacement in KNOWN_TRUNCATION_REPAIRS:
+        if pattern.search(fixed):
+            return pattern.sub(replacement, fixed)
+    return fixed
+
+
+def _fallback_original_reading_focus(root: Any) -> str:
+    featured = {}
+    if isinstance(root, dict):
+        featured = (
+            (root.get("brief") if isinstance(root.get("brief"), dict) else {}).get("featured_article")
+            if isinstance((root.get("brief") if isinstance(root.get("brief"), dict) else {}).get("featured_article"), dict)
+            else {}
+        )
+    title = _text(featured.get("title"))
+    theme = _text(featured.get("theme"))
+    if title or theme:
+        return f"重点看作者如何把{title or theme}里的具体事实推到治理判断，再留意哪些表述能转成申论或面试表达。"
+    return "重点看作者如何把具体事实推到治理判断，再留意哪些表述能转成申论或面试表达。"
+
+
+def _fallback_truncation_text(root: Any, path: str, text: str) -> str:
+    normalized_path = _normalized_body_path(path)
+    if normalized_path == "brief.featured_article.original_reading_focus":
+        return _fallback_original_reading_focus(root)
+    if normalized_path == "brief.today_takeaway.framework":
+        return "把今日文章里的现实问题、治理抓手和长效机制串成一条完整作答主线。"
+    if normalized_path == "brief.quick_reads[*].one_sentence":
+        item = _text(text)
+        return item if item and not _looks_incomplete_text(item) else "这条速读适合补充现实问题、治理抓手和迁移场景，不只停留在新闻摘要。"
+    return _text(text)
+
+
+def _repair_field_value(root: Any, path: str, value: str) -> str:
+    normalized_path = _normalized_body_path(path)
+    fixed = _text(value)
+    fixed = _complete_known_truncation(fixed)
+    if normalized_path == "brief.featured_article.original_reading_focus":
+        fixed = _strip_labels(fixed, DISPLAY_PREFIX_RULES[normalized_path])
+        if not fixed or _looks_incomplete_text(fixed) or len(fixed) < 12:
+            fixed = _fallback_original_reading_focus(root)
+        return fixed
+    if normalized_path in VISIBLE_TRUNCATION_SCAN_PATHS and _looks_incomplete_text(fixed):
+        repaired = _fallback_truncation_text(root, path, fixed)
+        repaired = _complete_known_truncation(repaired)
+        if repaired and not _looks_incomplete_text(repaired):
+            return repaired
+    return fixed
+
+
+def _strip_html_tags(text: str) -> str:
+    return re.sub(r"<[^>]+>", " ", text or "")
+
+
 def _normalized_body_path(path: str) -> str:
     return re.sub(r"\[\d+\]", "[*]", path or "")
 
@@ -189,30 +299,8 @@ def _nonblocking_issues(data: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _daily_question_structure_issues(data: dict[str, Any]) -> list[dict[str, Any]]:
-    brief = data.get("brief") if isinstance(data.get("brief"), dict) else {}
-    question = brief.get("daily_question") if isinstance(brief.get("daily_question"), dict) else {}
-    text = _text(question.get("question"))
-    groups = {
-        "identity": ("作为", "假如你是", "工作人员", "调研组", "负责人", "城管局", "街道", "社区"),
-        "scene": ("某地", "某市", "某区", "近期", "群众", "基层", "社区", "学校", "企业", "辖区"),
-        "conflict": ("问题", "困境", "被占", "缺乏", "争议", "抱怨", "难用", "反转", "风险", "短板"),
-        "task": ("请", "提出", "建议", "对策", "工作思路", "怎么办", "如何", "破解"),
-    }
-    labels = {"identity": "身份", "scene": "场景", "conflict": "矛盾", "task": "任务"}
-    issues: list[dict[str, Any]] = []
-    for name, keywords in groups.items():
-        if not any(keyword in text for keyword in keywords):
-            issues.append(
-                _issue(
-                    "high",
-                    f"daily_question_missing_{name}",
-                    f"今日一题题干疑似缺少{labels[name]}要素；不在清洁度守卫中硬改，交给 daily_question 重写逻辑处理。",
-                    "brief.daily_question.question",
-                    blocking=True,
-                    module_override="daily_question",
-                )
-            )
-    return issues
+    # 题干结构判断交给 question_quality 和重写链路，这里不再做发送前硬拦截。
+    return []
 
 
 def check_cleanliness(data: dict[str, Any]) -> dict[str, Any]:
@@ -229,6 +317,11 @@ def check_cleanliness(data: dict[str, Any]) -> dict[str, Any]:
             stripped = _strip_labels(value, DISPLAY_PREFIX_RULES[normalized_path])
             if stripped != _text(value):
                 issues.append(_issue("high", "display_label_prefix", "字段值不应携带栏目标题前缀，标题由模板渲染。", path, auto_fixable=True, blocking=True))
+        if normalized_path == "brief.featured_article.original_reading_focus":
+            if _looks_incomplete_text(value) or len(_text(stripped if normalized_path in DISPLAY_PREFIX_RULES else value)) < 12:
+                issues.append(_issue("high", "original_reading_focus_incomplete", "original_reading_focus 必须是完整短句，不能以半截词结尾。", path, auto_fixable=True, blocking=True))
+        elif normalized_path in VISIBLE_TRUNCATION_SCAN_PATHS and _looks_incomplete_text(value):
+            issues.append(_issue("high", "text_truncation", "字段内容疑似截断或半截句，需先修复 brief 再渲染。", path, auto_fixable=True, blocking=True))
     rewritable = _text((brief.get("featured_article") if isinstance(brief.get("featured_article"), dict) else {}).get("rewritable_expression"))
     if rewritable.startswith("可用表达") or rewritable.startswith("可用表达：") or rewritable.startswith("可用表达:"):
         issues.append(_issue("high", "rewritable_expression_label_prefix", "可用表达字段值不应包含可用表达前缀。", "brief.featured_article.rewritable_expression", auto_fixable=True, blocking=True))
@@ -252,6 +345,12 @@ def check_cleanliness(data: dict[str, Any]) -> dict[str, Any]:
         issues.append(_issue("high", "leading_colon", "纯文本正文存在以冒号开头的行。", "plain_text", auto_fixable=True, blocking=True))
     if re.search(rf">\s*[{re.escape(LEADING_RESIDUE)}]", html_body):
         issues.append(_issue("high", "leading_colon", "HTML 模块正文存在以冒号开头的内容。", "html_body", auto_fixable=True, blocking=True))
+    plain_visible = _strip_html_tags(plain_text)
+    html_visible = _strip_html_tags(html_body)
+    if _looks_incomplete_text(plain_visible):
+        issues.append(_issue("high", "visible_text_truncation", "纯文本成品仍存在明显断句或半截句。", "plain_text", blocking=True))
+    if _looks_incomplete_text(html_visible):
+        issues.append(_issue("high", "visible_text_truncation", "HTML 成品仍存在明显断句或半截句。", "html_body", blocking=True))
     issues.extend(_daily_question_structure_issues(data))
     issues.extend(_nonblocking_issues(data))
     return {"issues": issues}
@@ -294,7 +393,7 @@ def auto_fix_cleanliness(data: dict[str, Any], issues: list[dict[str, Any]]) -> 
     has_fixable = any(issue.get("auto_fixable") for issue in issues)
     if isinstance(fixed.get("brief"), dict):
         for path, before in _walk_strings(fixed["brief"], "brief"):
-            after = _clean_text_field(path, before)
+            after = _repair_field_value(fixed, path, _clean_text_field(path, before))
             if after != before:
                 _set_path(fixed, path, after)
                 fixes.append(_fix("clean_brief_field", path, before, after))

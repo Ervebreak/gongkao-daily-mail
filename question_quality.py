@@ -320,7 +320,11 @@ def evaluate_daily_question(brief: dict[str, Any]) -> dict[str, Any]:
         issues.append({"severity": "medium", "code": "too_short", "message": "题干偏短，可能不够具体"})
     if length > 260:
         issues.append({"severity": "low", "code": "too_long", "message": "题干偏长，手机阅读和考场复述成本较高"})
-    if not has_identity:
+    is_shenlun_policy_question = "申论对策" in question_type or ("申论" in question_type and "对策" in question_type)
+    identity_required = "机关实务" in question_type
+    if identity_required and not has_identity:
+        issues.append({"severity": "medium", "code": "missing_identity", "message": "机关实务题应有明确身份，如街道工作人员、调研组成员、窗口负责人等"})
+    elif not has_identity and not is_shenlun_policy_question:
         issues.append({"severity": "medium", "code": "missing_identity", "message": "缺少明确身份，如街道工作人员、调研组成员、窗口负责人等"})
     if not has_scene:
         issues.append({"severity": "medium", "code": "missing_scene", "message": "缺少具体场景，如社区、县域、窗口、项目推进、群众工作等"})

@@ -137,3 +137,20 @@ def test_full_render_uses_exam_transfer_card_and_hides_old_sections() -> None:
     assert "考场转化卡｜这篇文章到底考什么" in plain
     assert "作答角度：" in plain
     assert "这是完整参考答案，不应该在考场转化卡里泄露。" in html
+
+
+def test_exam_transfer_card_avoids_repeating_candidate_answer_route_words() -> None:
+    brief = _sample_brief()
+    brief["daily_question"]["candidate_answer"] = (
+        "我认为，关键是围绕平台准入、平台执法、平台协同和闭环反馈四个环节逐项推进，"
+        "把平台规则、执法检查和闭环机制全部接起来。"
+    )
+    brief["policy_coordinate"]["exam_transfer"] = "适合从平台准入、平台执法、平台协同和闭环反馈四步展开。"
+    brief["exam_transfer_card"] = {
+        "exam_expression": "答题时就按平台准入、平台执法、平台协同和闭环反馈四步展开。"
+    }
+
+    card = build_exam_transfer_card(brief)
+
+    assert "平台准入、平台执法、平台协同和闭环反馈四步展开" not in card["exam_transfer"]
+    assert "平台准入、平台执法、平台协同和闭环反馈四步展开" not in card["exam_expression"]

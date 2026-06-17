@@ -463,11 +463,29 @@ def remove_ellipsis(value: Any) -> str:
     return clean_text(value).replace("...", "").replace("……", "").replace("…", "")
 
 
+def _compact_overlap_key(value: Any) -> str:
+    return re.sub(r"[\W_]+", "", clean_text(value), flags=re.UNICODE)
+
+
+def _reading_guide_repeats_framework(text: Any, framework_items: list[str]) -> bool:
+    guide_key = _compact_overlap_key(text)
+    if not guide_key:
+        return False
+    if "先" in str(text) and "再" in str(text) and framework_items:
+        return True
+    for item in framework_items:
+        item_key = _compact_overlap_key(item)
+        if len(item_key) >= 8 and item_key in guide_key:
+            return True
+    return False
+
+
 def build_reading_guide(brief: dict[str, Any]) -> dict[str, str]:
     featured = ensure_dict(brief.get("featured_article"))
     question = ensure_dict(brief.get("daily_question"))
     framework_map = ensure_dict(featured.get("article_framework_map"))
     guide = ensure_dict(brief.get("reading_guide"))
+    answer_framework = [clean_text(item) for item in as_list(question.get("answer_framework")) if clean_text(item)]
 
     core_value = clip_text(
         first_text(
@@ -488,6 +506,8 @@ def build_reading_guide(brief: dict[str, Any]) -> dict[str, str]:
     elif exam_tags:
         focus_default = f"先看今日精读里和{exam_tags[0]}相关的主线，再看今日一题怎么转成作答。"
     focus_path = clip_text(first_text(remove_ellipsis(guide.get("focus_path")), default=focus_default), 55)
+    if _reading_guide_repeats_framework(focus_path, answer_framework):
+        focus_path = clip_text(focus_default, 55)
 
     learning_outcome = clip_text(
         first_text(
@@ -496,6 +516,8 @@ def build_reading_guide(brief: dict[str, Any]) -> dict[str, str]:
         ),
         55,
     )
+    if _reading_guide_repeats_framework(learning_outcome, answer_framework):
+        learning_outcome = "带走一个高频考点、一条治理主线和一句可复用表达。"
 
     anchor_module = first_text(remove_ellipsis(guide.get("anchor_module")), default="今日一题")
     if anchor_module not in READING_GUIDE_ALLOWED_MODULES:
@@ -569,8 +591,8 @@ def ensure_brief_schema(data: dict[str, Any], today: str) -> tuple[dict[str, Any
     ), 80)
     featured["original_reading_focus"] = clip_text(first_text(
         featured.get("original_reading_focus"),
-        default="点开原文时，重点看作者如何从具体事实推导出治理判断，以及哪些表述可以改写进申论或面试。",
-    ), 70)
+        default="重点看作者如何从具体事实推到治理判断，再留意哪些表述能改写进申论或面试。",
+    ), 90)
     featured["usable_for_exam"] = [clip_text(strip_exam_use_prefix(item), 120) for item in as_list(featured.get("usable_for_exam"))[:2] if not is_rewritable_expression_item(item)] or featured["exam_use"][:2]
     featured["exam_conversion"] = [clip_text(strip_exam_use_prefix(item), 120) for item in as_list(featured.get("exam_conversion"))[:2] if not is_rewritable_expression_item(item)] or featured["exam_use"][:2]
     featured_gold = normalize_golden_sentences(featured.get("golden_sentences"), as_list(featured.get("copyable_expression")), limit=3)
