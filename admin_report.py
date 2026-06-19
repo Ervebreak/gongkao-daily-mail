@@ -7,7 +7,7 @@ from typing import Any
 from config import settings
 from email_sender import normalize_recipients, send_email_to_recipients
 from lite_email_renderer import render_lite_email
-from quality_issue_schema import issue_counts
+from quality_issue_schema import severity_counts
 
 
 def _e(value: Any) -> str:
@@ -339,7 +339,8 @@ def _remaining_risk_lines(quality: dict[str, Any], gate: dict[str, Any]) -> list
     blocking_codes = {str(item.get("code") or "") for item in gate.get("p0_issues") or [] if isinstance(item, dict)}
     lines = []
     for item in rows:
-        impact = "影响发送" if item["code"] in blocking_codes or str(item["level"]).lower() in {"high", "p0"} else "不影响发送，建议关注"
+        severity = str(item.get("severity") or item.get("level") or "").lower()
+        impact = "影响发送" if item["code"] in blocking_codes else ("高风险，建议修复" if severity in {"high", "p0"} else "建议修复")
         lines.append(f"- {item['module']} / {item['level']} / {item['code']}：{item['message']}（{impact}）")
     return lines
 
@@ -384,7 +385,7 @@ def _build_quality_card_markdown_legacy(candidate: dict[str, Any]) -> str:
     quality = candidate.get("quality") if isinstance(candidate.get("quality"), dict) else {}
     gate = candidate.get("quality_gate") if isinstance(candidate.get("quality_gate"), dict) else {}
     final = quality.get("final") if isinstance(quality.get("final"), dict) else {}
-    counts = issue_counts(quality)
+    counts = severity_counts(quality)
     status = str(gate.get("overall") or "unknown")
     send_decision = "可发" if status == "ok" else "阻断"
     content_quality = final.get("content_quality") if isinstance(final.get("content_quality"), dict) else {}
@@ -397,7 +398,8 @@ def _build_quality_card_markdown_legacy(candidate: dict[str, Any]) -> str:
         f"- 标题：{subject}",
         f"- 最终结论：{send_decision}",
         f"- quality_gate：{status}",
-        f"- P0/P1/P2：{counts['P0']} / {counts['P1']} / {counts['P2']}",
+        f"- 门禁P0：{gate.get('p0_count', 0)}",
+        f"- 剩余风险：高 {counts['high']} / 中 {counts['medium']} / 低 {counts['low']}",
         "",
         "## 一、门禁结果",
         "",
@@ -427,7 +429,7 @@ def build_quality_card_markdown(candidate: dict[str, Any]) -> str:
     quality = candidate.get("quality") if isinstance(candidate.get("quality"), dict) else {}
     gate = candidate.get("quality_gate") if isinstance(candidate.get("quality_gate"), dict) else {}
     final = quality.get("final") if isinstance(quality.get("final"), dict) else {}
-    counts = issue_counts(quality)
+    counts = severity_counts(quality)
     status = str(gate.get("overall") or "unknown")
     content_quality = final.get("content_quality") if isinstance(final.get("content_quality"), dict) else {}
     content_risk = final.get("content_risk") if isinstance(final.get("content_risk"), dict) else {}
@@ -440,7 +442,8 @@ def build_quality_card_markdown(candidate: dict[str, Any]) -> str:
         f"- 日期：{delivery_date}",
         f"- 标题：{subject}",
         f"- quality_gate：{status}",
-        f"- P0/P1/P2：{counts['P0']} / {counts['P1']} / {counts['P2']}",
+        f"- 门禁P0：{gate.get('p0_count', 0)}",
+        f"- 剩余风险：高 {counts['high']} / 中 {counts['medium']} / 低 {counts['low']}",
         f"- 是否需要人工通读全文：{manual_review}",
         f"- 只需关注：{review_scope}",
         "",

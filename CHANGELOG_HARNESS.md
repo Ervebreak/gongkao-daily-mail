@@ -1,5 +1,31 @@
 # Harness Change Log
 
+## 2026-06-19 - Clarify quality card gate vs residual risk counts
+
+Reason:
+
+- The admin quality card previously displayed `P0/P1/P2` by reusing severity-to-priority mapping, which made ordinary `severity=high` review issues look like blocking P0s even when `quality_gate.p0_count` was 0.
+- Recent truncation regressions also needed a stricter distinction between "high risk" and "actually still visible in the final rendered email".
+
+Files changed:
+
+- `admin_report.py`
+- `quality_issue_schema.py`
+- `main.py`
+- `content_quality_reviewer.py`
+- `takeaway_quality.py`
+- `expression_quality.py`
+- `tests/test_quality_card_final_state.py`
+- `tests/test_quality_gate_content_quality_sync.py`
+- `CHANGELOG_HARNESS.md`
+
+Latest behavior:
+
+- Quality cards now show `门禁P0` from `quality_gate.p0_count` and separate `剩余风险` high/medium/low counts from final issues instead of the old `P0/P1/P2` summary.
+- Remaining-risk lines only say `影响发送` when the issue code is actually present in `quality_gate.p0_issues`; other high issues are labeled `高风险，建议修复`.
+- Visible truncation issues such as `text_truncation`, `truncated_takeaway`, and `expression_truncated` are escalated into gate P0 only when their `bad_text` still appears in the final rendered `plain_text` or `html_body`.
+- Truncation findings now preserve `field` and `bad_text` metadata more consistently so existing rewrite/repair stages can target them before the final gate decision.
+
 ## 2026-06-12 - Policy coordinate stage 4 reranker
 
 Reason:

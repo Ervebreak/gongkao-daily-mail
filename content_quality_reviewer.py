@@ -152,7 +152,12 @@ def _issue_from_raw(raw: Any, *, severity: str, fallback_code: str) -> dict[str,
         code = str(raw.get("code") or fallback_code).strip() or fallback_code
         message = str(raw.get("message") or raw.get("reason") or raw.get("detail") or code).strip()
         raw_severity = str(raw.get("severity") or severity).strip().lower()
-        return {"severity": raw_severity or severity, "code": code, "message": message or code}
+        issue = {"severity": raw_severity or severity, "code": code, "message": message or code}
+        if raw.get("bad_text"):
+            issue["bad_text"] = str(raw.get("bad_text")).strip()
+        if raw.get("field"):
+            issue["field"] = str(raw.get("field")).strip()
+        return issue
     text = str(raw or "").strip()
     return {"severity": severity, "code": fallback_code, "message": text or fallback_code}
 
@@ -236,7 +241,31 @@ def _issue_to_rewrite_target(issue: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _semantic_truncation_targets(raw: dict[str, Any], issues: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return []
+    targets: list[dict[str, Any]] = []
+    for issue in issues:
+        if not isinstance(issue, dict):
+            continue
+        code = str(issue.get("code") or "").strip()
+        if code not in {"text_truncation", "truncated_takeaway", "expression_truncated"}:
+            continue
+        field = str(issue.get("field") or "").strip()
+        if field and not field.startswith("brief."):
+            field = f"brief.{field}"
+        if field not in REWRITE_TARGET_FIELDS:
+            continue
+        targets.append(
+            {
+                "field": field,
+                "module": field.split(".")[1] if "." in field else "brief",
+                "issue_code": code,
+                "reason": str(issue.get("message") or code).strip() or code,
+                "action": "Rewrite this field into a complete, natural sentence and remove any truncated tail while preserving the original meaning.",
+                "severity": "high",
+                "auto_fixable": True,
+                **({"bad_text": str(issue.get("bad_text")).strip()} if issue.get("bad_text") else {}),
+            }
+        )
+    return targets
 def _normalize_rewrite_targets(raw: dict[str, Any], issues: list[dict[str, Any]]) -> list[dict[str, Any]]:
     targets: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
