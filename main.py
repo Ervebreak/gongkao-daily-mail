@@ -232,6 +232,49 @@ def apply_manual_quality_override(previous_gate: dict[str, Any], current_gate: d
     return current_gate
 
 
+VISIBLE_TRUNCATION_GATE_CODES = {"text_truncation", "truncated_takeaway", "expression_truncated"}
+
+
+def _compact_visible_text(value: Any) -> str:
+    return "".join(str(value or "").split())
+
+
+def _collect_visible_truncation_gate_issues(
+    quality_map: dict[str, Any],
+    plain_text: str = "",
+    html_body: str = "",
+) -> list[dict[str, str]]:
+    haystack = _compact_visible_text(f"{plain_text}\n{html_body}")
+    if not haystack:
+        return []
+    seen: set[tuple[str, str, str]] = set()
+    p0_issues: list[dict[str, str]] = []
+    for module, quality in quality_map.items():
+        if not isinstance(quality, dict):
+            continue
+        for issue in quality.get("issues") or []:
+            if not isinstance(issue, dict):
+                continue
+            code = str(issue.get("code") or "")
+            severity = str(issue.get("severity") or "").lower()
+            bad_text = str(issue.get("bad_text") or "").strip()
+            if severity != "high" or code not in VISIBLE_TRUNCATION_GATE_CODES or not bad_text:
+                continue
+            if _compact_visible_text(bad_text) not in haystack:
+                continue
+            candidate = {
+                "module": str(issue.get("module_override") or module),
+                "code": code,
+                "message": str(issue.get("message") or code),
+            }
+            signature = _quality_issue_signature(candidate)
+            if signature in seen:
+                continue
+            seen.add(signature)
+            p0_issues.append(candidate)
+    return p0_issues
+
+
 def build_quality_gate(
     question_quality: dict[str, Any],
     framework_quality: dict[str, Any],
@@ -1866,8 +1909,8 @@ def evaluate_all_quality(
     }
 
 
-def build_gate_from_quality_map(quality: dict[str, Any]) -> dict[str, Any]:
-    return build_quality_gate(
+def build_gate_from_quality_map(quality: dict[str, Any], plain_text: str = "", html_body: str = "") -> dict[str, Any]:
+    gate = build_quality_gate(
         quality.get("daily_question", {}),
         quality.get("framework_map", {}),
         quality.get("today_takeaway", {}),
@@ -1884,6 +1927,13 @@ def build_gate_from_quality_map(quality: dict[str, Any]) -> dict[str, Any]:
         quality.get("subject_quality", {}),
         quality.get("reading_guide", {}),
     )
+    for issue in _collect_visible_truncation_gate_issues(quality, plain_text=plain_text, html_body=html_body):
+        if issue not in gate["p0_issues"]:
+            gate["p0_issues"].append(issue)
+    gate["p0_count"] = len(gate["p0_issues"])
+    gate["p0_issues"] = gate["p0_issues"][:8]
+    gate["overall"] = "fail" if gate["p0_issues"] else "ok"
+    return gate
 
 
 def _log_quality_map(logger: RunLogger, quality: dict[str, Any], suffix: str) -> None:
@@ -2318,7 +2368,7 @@ def evaluate_candidate_with_current_quality(
         selection_quality=selection_quality,
         cleanliness_quality=cleanliness_quality,
     )
-    quality_gate = build_gate_from_quality_map(quality_map)
+    quality_gate = build_gate_from_quality_map(quality_map, plain_text=plain_text, html_body=html_body)
     return {
         "brief": brief,
         "plain_text": plain_text,
@@ -3315,7 +3365,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
     content_risk_quality = quality_map["content_risk"]
     content_quality = quality_map["content_quality"]
     logger.info("content quality after pre-send cleanliness guard", **content_quality)
-    quality_gate = build_gate_from_quality_map(quality_map)
+    quality_gate = build_gate_from_quality_map(quality_map, plain_text=plain_text, html_body=html_body)
     logger.info("quality gate", **quality_gate, blocked=(not test_invocation) and quality_gate.get("overall") == "fail")
     if settings.quality_rewrite_enabled and quality_gate.get("overall") == "fail":
         try:
@@ -3405,7 +3455,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                 content_risk_quality = quality_map["content_risk"]
                 content_quality = quality_map["content_quality"]
                 logger.info("content quality after pre-send cleanliness guard after p0 repair", **content_quality)
-                quality_gate = build_gate_from_quality_map(quality_map)
+                quality_gate = build_gate_from_quality_map(quality_map, plain_text=plain_text, html_body=html_body)
                 logger.info("quality gate after p0 repair", **quality_gate, blocked=(not test_invocation) and quality_gate.get("overall") == "fail")
         except Exception as exc:
             logger.info("p0 repair failed", error=str(exc))

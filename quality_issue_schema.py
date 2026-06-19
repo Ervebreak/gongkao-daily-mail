@@ -57,3 +57,18 @@ def issue_counts(quality_payload: dict[str, Any]) -> dict[str, int]:
                 counts[level] += 1
     return {"P0": counts["P0"], "P1": counts["P1"], "P2": counts["P2"]}
 
+
+def severity_counts(quality_payload: dict[str, Any]) -> dict[str, int]:
+    final = quality_payload.get("final") if isinstance(quality_payload.get("final"), dict) else {}
+    counts: Counter[str] = Counter()
+    for result in final.values():
+        if not isinstance(result, dict):
+            continue
+        for issue in result.get("issues") or []:
+            if not isinstance(issue, dict):
+                continue
+            severity = str(issue.get("severity") or "").strip().lower()
+            if severity in {"high", "medium", "low"}:
+                counts[severity] += 1
+    return {"high": counts["high"], "medium": counts["medium"], "low": counts["low"]}
+

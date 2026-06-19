@@ -194,7 +194,7 @@ def evaluate_expression_quality(brief: dict[str, Any]) -> dict[str, Any]:
             issues.append({"severity": "high", "code": "expression_dev_marker", "message": f"{name} 出现开发态占位或异常字段"})
             continue
         if _looks_incomplete(text):
-            issues.append({"severity": "high", "code": "expression_truncated", "message": f"{name} 存在省略号或疑似截断"})
+            issues.append({"severity": "high", "code": "expression_truncated", "message": f"{name} 存在省略号或疑似截断", "field": name, "bad_text": text})
 
         leaked_labels = [marker for marker in LABEL_LEAK_MARKERS if marker in text]
         if leaked_labels:
