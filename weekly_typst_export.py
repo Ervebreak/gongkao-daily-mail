@@ -751,7 +751,7 @@ def render_typst(data: dict[str, Any]) -> str:
 #let framework-box(body) = block(fill: white, stroke: 0.6pt + line, inset: 13pt, radius: 9pt, width: 100%, breakable: false)[#body]
 #let question-card(body) = block(fill: rgb("#fbfcff"), stroke: 0.6pt + line, inset: 13pt, radius: 9pt, width: 100%, breakable: true)[#body]
 #let takeaway-card(body) = block(fill: white, stroke: 0.6pt + line, inset: 13pt, radius: 9pt, width: 100%, breakable: false)[#body]
-#let candidate-answer(body) = block(fill: white, stroke: (left: 3pt + brand, rest: 0.55pt + line), inset: 11pt, radius: 6.5pt, width: 100%, breakable: true)[#text(weight: "bold", fill: brand)[考生版参考答案]#v(6pt)#body]
+#let reference-answer-card(body) = block(fill: white, stroke: (left: 3pt + brand, rest: 0.55pt + line), inset: 11pt, radius: 6.5pt, width: 100%, breakable: true)[#text(weight: "bold", fill: brand)[考生版参考答案]#v(6pt)#body]
 #let answer-box(label, body) = block(fill: rgb("#fff8e8"), stroke: 0.55pt + rgb("#f0d9aa"), inset: 10pt, radius: 6.5pt, width: 100%, breakable: true)[#text(weight: "bold", fill: brand)[#label：] #body]
 #let quote-card(sentence, scenario) = block(fill: rgb("#f8fafc"), stroke: (left: 3pt + blue, rest: 0pt), inset: 10pt, radius: 6.5pt, width: 100%, breakable: true)[#text(weight: "bold")[#sentence]#if scenario != "" [#linebreak()#muted[适用：#scenario]]]
 #let step-item(no, label, body) = grid(columns: (28pt, 1fr), gutter: 9pt, box(fill: num-fill, stroke: 0.5pt + rgb("#cfe3fb"), inset: (x: 5pt, y: 3pt), radius: 10pt)[#text(size: 8.4pt, fill: blue, weight: "bold")[#no]], [#if label != "" [#text(weight: "bold", fill: brand)[#label]#linebreak()]#body])
@@ -762,7 +762,7 @@ def render_typst(data: dict[str, Any]) -> str:
 #let quote-bank(body) = block(fill: white, stroke: 0.6pt + line, inset: 13pt, radius: 9pt, width: 100%, breakable: true)[#body]
 #let material-example(theme, body) = block(fill: rgb("#f8fbff"), stroke: 0.45pt + line, inset: 10pt, radius: 7pt, width: 100%, breakable: true)[
   #text(weight: "bold", fill: brand)[#theme]
-  #v(5pt)
+  #v(3pt)
   #body
 ]
 #let material-card(title, material-type, source-dates, source-articles, material-summary, examples, use-boundary, target-topics, suggested-question-types) = block(fill: white, stroke: 0.6pt + line, inset: 13pt, radius: 9pt, width: 100%, breakable: true)[
@@ -791,7 +791,7 @@ def render_typst(data: dict[str, Any]) -> str:
   #if suggested-case-materials != "" [#info-strip[建议素材][#suggested-case-materials]]
   #if suggested-policy-expressions != "" [#info-strip[政策表达][#suggested-policy-expressions]]
   #if answer-hint != "" [#info-strip[作答提示][#answer-hint]]
-  #if mini-reference-answer != "" [#candidate-answer[#mini-reference-answer]]
+  #if mini-reference-answer != "" [#reference-answer-card[#mini-reference-answer]]
   #if use-boundary != "" [#muted[使用边界：#use-boundary]]
 ]
 
