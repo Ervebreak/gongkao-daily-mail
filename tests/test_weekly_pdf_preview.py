@@ -8,7 +8,7 @@ sys.modules.setdefault("requests", types.SimpleNamespace())
 
 from config import settings
 from email_sender import send_segmented_email
-from main import build_weekly_pdf_preview_candidate_message, send_weekly_pdf_candidate
+from main import build_weekly_pdf_preview_candidate_message, generate_weekly_pdf_candidate, send_weekly_pdf_candidate
 from weekly_typst_export import render_preview_typst
 
 
@@ -421,6 +421,113 @@ def test_build_weekly_assets_reuses_shared_enrichment_for_full_and_preview(monke
     assert assets["lite_preview"]["attachment_filename"]
 
 
+def test_build_weekly_assets_populates_stable_oss_paths_for_full_and_preview(monkeypatch, tmp_path) -> None:
+    import weekly_report
+    import weekly_typst_export
+
+    original_output_dir = settings.output_dir
+    object.__setattr__(settings, "output_dir", tmp_path)
+
+    def fake_enrichment(days):
+        return {
+            "exam_map_cards": [{"title": "基层治理闭环办理"}],
+            "selected_expression_rows": [{"sentence": "把群众诉求接住、办实、反馈清楚。"}],
+            "material_cards": [],
+            "practice_questions": [],
+            "warnings": [],
+        }
+
+    def fake_compile(cmd, check=True):
+        Path(cmd[-1]).write_bytes(b"%PDF-test")
+        return None
+
+    def fake_put_oss_object(object_key, data, content_type):
+        return {"ok": True, "path": f"oss://test-bucket/{object_key}"}
+
+    monkeypatch.setattr(weekly_report, "load_daily_archives", lambda **kwargs: ([_weekly_archive_payload()], []))
+    monkeypatch.setattr(weekly_report, "build_weekly_markdown", lambda *args, **kwargs: "weekly markdown")
+    monkeypatch.setattr(weekly_report, "build_weekly_html", lambda *args, **kwargs: "<html><body>weekly html</body></html>")
+    monkeypatch.setattr(weekly_typst_export, "build_weekly_enrichment", fake_enrichment)
+    monkeypatch.setattr(weekly_typst_export, "find_typst_binary", lambda: "typst")
+    monkeypatch.setattr(weekly_typst_export.subprocess, "run", fake_compile)
+    monkeypatch.setattr(weekly_report, "oss_ready", lambda: True)
+    monkeypatch.setattr(weekly_report, "put_oss_object", fake_put_oss_object)
+
+    try:
+        assets = weekly_report.build_weekly_assets({"end_date": "2026-06-14", "days": 7})
+    finally:
+        object.__setattr__(settings, "output_dir", original_output_dir)
+
+    assert assets["oss_pdf_path"].endswith("gongkao-weekly-2026-06-08_to_2026-06-14.pdf")
+    assert "lite-preview" not in assets["oss_pdf_path"]
+    assert assets["lite_preview"]["oss_pdf_path"].endswith("gongkao-weekly-2026-06-08_to_2026-06-14-lite-preview.pdf")
+
+
+def test_generate_weekly_pdf_candidate_carries_both_oss_paths(monkeypatch, tmp_path) -> None:
+    import candidate_store
+    import weekly_report
+
+    original_output_dir = settings.output_dir
+    object.__setattr__(settings, "output_dir", tmp_path)
+    saved: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        weekly_report,
+        "build_weekly_assets",
+        lambda event=None: {
+            "start_date": "2026-06-08",
+            "end_date": "2026-06-14",
+            "days_requested": 7,
+            "archives_loaded": 7,
+            "misses": [],
+            "local_pdf": str(tmp_path / "full.pdf"),
+            "local_md": str(tmp_path / "weekly.md"),
+            "local_html": str(tmp_path / "weekly.html"),
+            "oss_pdf_path": "oss://test-bucket/gongkao-morning-mailer/weekly/gongkao-weekly-2026-06-08_to_2026-06-14.pdf",
+            "pdf_engine": "typst",
+            "typst_meta": {"engine": "typst"},
+            "attachment": {"filename": "full-weekly.pdf"},
+            "lite_preview": {
+                "status": "ok",
+                "local_pdf": str(tmp_path / "lite.pdf"),
+                "oss_pdf_path": "oss://test-bucket/gongkao-morning-mailer/weekly/gongkao-weekly-2026-06-08_to_2026-06-14-lite-preview.pdf",
+                "attachment_filename": "lite-weekly-preview.pdf",
+                "pdf_engine": "typst",
+                "typst_meta": {"engine": "typst"},
+                "error": "",
+                "oss_upload_ok": True,
+                "oss_upload_error": "",
+            },
+            "oss_upload": {
+                "pdf": {
+                    "ok": True,
+                    "oss_path": "oss://test-bucket/gongkao-morning-mailer/weekly/gongkao-weekly-2026-06-08_to_2026-06-14.pdf",
+                },
+                "lite_preview_pdf": {
+                    "ok": True,
+                    "oss_path": "oss://test-bucket/gongkao-morning-mailer/weekly/gongkao-weekly-2026-06-08_to_2026-06-14-lite-preview.pdf",
+                },
+            },
+        },
+    )
+    def fake_save_candidate(payload):
+        saved["payload"] = payload
+        return {"candidate_saved": True}
+
+    monkeypatch.setattr(candidate_store, "save_candidate", fake_save_candidate)
+
+    try:
+        result = generate_weekly_pdf_candidate({"delivery_date": "2026-06-15"})
+    finally:
+        object.__setattr__(settings, "output_dir", original_output_dir)
+
+    weekly_pdf = result["weekly_pdf"]
+    assert weekly_pdf["oss_pdf_path"].endswith("gongkao-weekly-2026-06-08_to_2026-06-14.pdf")
+    assert weekly_pdf["lite_preview"]["oss_pdf_path"].endswith("gongkao-weekly-2026-06-08_to_2026-06-14-lite-preview.pdf")
+    assert saved["payload"]["weekly_pdf"]["oss_pdf_path"] == weekly_pdf["oss_pdf_path"]
+    assert saved["payload"]["weekly_pdf"]["lite_preview"]["oss_pdf_path"] == weekly_pdf["lite_preview"]["oss_pdf_path"]
+
+
 def test_build_weekly_pdf_preview_candidate_message_marks_preview_as_free_preview() -> None:
     plain_text, html_body = build_weekly_pdf_preview_candidate_message(
         {
@@ -439,3 +546,4 @@ def test_build_weekly_pdf_preview_candidate_message_marks_preview_as_free_previe
     assert "candidate" not in body.lower()
     assert "debug" not in body.lower()
     assert "quality gate" not in body.lower()
+    assert "周日复盘版" not in body

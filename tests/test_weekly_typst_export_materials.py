@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from weekly_typst_export import render_typst
+from weekly_typst_export import render_preview_typst, render_typst
 
 
 def _base_data() -> dict:
@@ -103,3 +103,38 @@ def test_render_typst_shows_at_most_three_material_cards() -> None:
     assert "素材2" in text
     assert "素材3" in text
     assert "素材4" not in text
+
+
+def test_render_typst_cleans_internal_copy_and_updates_extension_note() -> None:
+    text = render_typst(_base_data())
+
+    assert "周日复盘版" not in text
+    assert "不新增精读文章" not in text
+    assert "宁缺毋滥，不为凑数补卡" not in text
+    assert "内部测试" not in text
+    assert "quality gate" not in text.lower()
+    assert "p0" not in text.lower()
+    assert "后台字段" not in text
+    assert "json" not in text.lower()
+    assert "candidate" not in text.lower()
+    assert "复制链接或搜索原文题目打开原文" in text
+
+
+def test_render_preview_typst_keeps_frontend_copy_clean() -> None:
+    text = render_preview_typst(
+        {
+            "period": "2026.06.09 - 2026.06.13",
+            "theme_overview": "本周主要围绕基层治理闭环办理和公共服务精准抵达展开。",
+            "focus_points": ["基层治理要把群众诉求转化为闭环办理机制"],
+            "full_modules": ["本周高频考点地图"],
+            "expression_preview": "把群众诉求接住、办实、反馈清楚。",
+            "material_preview": {"title": "素材片段", "source": "精读文章", "summary": "只展示一小段真实可用内容。"},
+            "practice_preview": {"title": "训练题片段", "question": "请谈谈如何推进闭环办理。", "direction": "先摸清诉求，再公开反馈。"},
+            "cta_url": "https://example.com/paid",
+        }
+    )
+
+    assert "周日复盘版" not in text
+    assert "内部测试" not in text
+    assert "quality gate" not in text.lower()
+    assert "candidate" not in text.lower()

@@ -91,6 +91,52 @@ def _oss_get_text(object_key: str) -> tuple[bool, str, str]:
         return False, "", str(exc)
 
 
+def _weekly_oss_target_path(prefix: str, filename: str) -> str:
+    cfg = oss_config()
+    bucket = str(cfg.get("bucket") or "").strip()
+    object_key = f"{prefix.strip().strip('/')}/{filename}".strip("/")
+    if not bucket or not object_key:
+        return ""
+    return f"oss://{bucket}/{object_key}"
+
+
+def _normalize_oss_upload_meta(result: dict[str, Any] | None, *, fallback_path: str = "") -> dict[str, Any]:
+    meta = dict(result or {})
+    normalized_path = str(meta.get("oss_path") or meta.get("path") or fallback_path or "").strip()
+    if normalized_path:
+        meta["oss_path"] = normalized_path
+        meta["path"] = normalized_path
+    return meta
+
+
+def _upload_weekly_artifact_if_possible(*, prefix: str, local_path: Path, content_type: str) -> dict[str, Any]:
+    fallback_path = _weekly_oss_target_path(prefix, local_path.name)
+    if not local_path.exists():
+        return {
+            "ok": False,
+            "oss_path": fallback_path,
+            "path": fallback_path,
+            "error": f"local artifact missing: {local_path}",
+        }
+    if not oss_ready():
+        return {
+            "ok": False,
+            "oss_path": fallback_path,
+            "path": fallback_path,
+            "error": "OSS config is incomplete.",
+        }
+    try:
+        result = put_oss_object(f"{prefix}/{local_path.name}", local_path.read_bytes(), content_type)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "oss_path": fallback_path,
+            "path": fallback_path,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    return _normalize_oss_upload_meta(result, fallback_path=fallback_path)
+
+
 def load_daily_archives(end_date: dt.date | None = None, days: int | None = None) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     end_date = end_date or dt.datetime.now(TZ).date()
     days = days or settings.weekly_pdf_days
@@ -1092,14 +1138,34 @@ def build_weekly_assets(event: Any | None = None) -> dict[str, Any]:
     except Exception as exc:
         preview_error = f"{type(exc).__name__}: {exc}"
 
+    prefix = settings.weekly_pdf_prefix.strip().strip("/")
     upload_meta: dict[str, Any] = {}
-    if settings.history_storage == "oss":
-        prefix = settings.weekly_pdf_prefix.strip().strip("/")
-        upload_meta["pdf"] = put_oss_object(f"{prefix}/{pdf_path.name}", pdf_path.read_bytes(), "application/pdf")
-        upload_meta["md"] = put_oss_object(f"{prefix}/{md_path.name}", md_path.read_bytes(), "text/markdown; charset=utf-8")
-        upload_meta["html"] = put_oss_object(f"{prefix}/{html_path.name}", html_path.read_bytes(), "text/html; charset=utf-8")
+    if prefix:
+        upload_meta["pdf"] = _upload_weekly_artifact_if_possible(
+            prefix=prefix,
+            local_path=pdf_path,
+            content_type="application/pdf",
+        )
+        upload_meta["md"] = _upload_weekly_artifact_if_possible(
+            prefix=prefix,
+            local_path=md_path,
+            content_type="text/markdown; charset=utf-8",
+        )
+        upload_meta["html"] = _upload_weekly_artifact_if_possible(
+            prefix=prefix,
+            local_path=html_path,
+            content_type="text/html; charset=utf-8",
+        )
         if preview_meta and preview_pdf_path.exists():
-            upload_meta["lite_preview_pdf"] = put_oss_object(f"{prefix}/{preview_pdf_path.name}", preview_pdf_path.read_bytes(), "application/pdf")
+            upload_meta["lite_preview_pdf"] = _upload_weekly_artifact_if_possible(
+                prefix=prefix,
+                local_path=preview_pdf_path,
+                content_type="application/pdf",
+            )
+
+    full_oss_path = str(((upload_meta.get("pdf") or {}).get("oss_path") or "")).strip()
+    preview_upload_meta = upload_meta.get("lite_preview_pdf") or {}
+    preview_oss_path = str((preview_upload_meta.get("oss_path") or "")).strip()
 
     attachment = {
         "filename": f"公考晨读本周复盘资料包_{start_date}_至_{end_date_text}.pdf",
@@ -1122,6 +1188,7 @@ def build_weekly_assets(event: Any | None = None) -> dict[str, Any]:
         "archives_loaded": len(archives),
         "misses": misses,
         "local_pdf": str(pdf_path),
+        "oss_pdf_path": full_oss_path,
         "pdf_engine": pdf_engine,
         "typst_meta": typst_meta,
         "local_md": str(md_path),
@@ -1133,11 +1200,13 @@ def build_weekly_assets(event: Any | None = None) -> dict[str, Any]:
             "status": "ok" if lite_preview_attachment else "failed",
             "local_pdf": str(preview_pdf_path) if lite_preview_attachment else "",
             "attachment": lite_preview_attachment,
-            "oss_pdf_path": ((upload_meta.get("lite_preview_pdf") or {}).get("oss_path") if lite_preview_attachment else ""),
+            "oss_pdf_path": (preview_oss_path if lite_preview_attachment else ""),
             "attachment_filename": (lite_preview_attachment or {}).get("filename") if lite_preview_attachment else "",
             "pdf_engine": "typst" if lite_preview_attachment else "",
             "typst_meta": preview_meta,
             "error": preview_error,
+            "oss_upload_ok": bool(preview_upload_meta.get("ok")) if lite_preview_attachment else False,
+            "oss_upload_error": str(preview_upload_meta.get("error") or "") if lite_preview_attachment else "",
         },
         "oss_upload": upload_meta,
     }

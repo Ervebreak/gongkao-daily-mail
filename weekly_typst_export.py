@@ -702,7 +702,7 @@ def render_typst(data: dict[str, Any]) -> str:
         material_section = f"""
 #pagebreak()
 = {next_section_no:02d}｜作文素材积累·一例多用
-#info-strip[使用建议][只保留本周真正有事实依据、能迁移到考场表达里的素材；宁缺毋滥，不为凑数补卡。]
+#info-strip[阅读提示][本部分优先整理本周最适合迁移到申论和面试表达里的素材卡片，便于集中复盘和反复使用。]
 {material_cards}
 """
         next_section_no += 1
@@ -721,7 +721,7 @@ def render_typst(data: dict[str, Any]) -> str:
   margin: (x: 13mm, y: 17mm),
   numbering: "1",
   header: align(left)[#text(size: 8.5pt, fill: rgb("#64748b"))[公考晨读 · 周复盘资料包 V1.3]],
-  footer: text(size: 8pt, fill: rgb("#94a3b8"))[周日复盘版 · 摘要/框架/表达/素材/题目/索引],
+  footer: text(size: 8pt, fill: rgb("#94a3b8"))[周复盘资料包 · 摘要/框架/表达/素材/题目/索引],
 )
 #set text(font: ("Microsoft YaHei", "SimSun"), size: 10.2pt, lang: "zh")
 #set par(justify: false, leading: 0.72em, spacing: 0.62em)
@@ -751,7 +751,7 @@ def render_typst(data: dict[str, Any]) -> str:
 #let framework-box(body) = block(fill: white, stroke: 0.6pt + line, inset: 10pt, radius: 7.5pt, width: 100%, breakable: false)[#body]
 #let question-card(body) = block(fill: rgb("#fbfcff"), stroke: 0.6pt + line, inset: 10pt, radius: 7.5pt, width: 100%, breakable: true)[#body]
 #let takeaway-card(body) = block(fill: white, stroke: 0.6pt + line, inset: 10pt, radius: 7.5pt, width: 100%, breakable: false)[#body]
-#let candidate-answer(body) = block(fill: white, stroke: (left: 3pt + brand, rest: 0.55pt + line), inset: 9pt, radius: 5.5pt, width: 100%, breakable: true)[#text(weight: "bold", fill: brand)[考生版参考答案]#v(5pt)#body]
+#let reference-answer-card(body) = block(fill: white, stroke: (left: 3pt + brand, rest: 0.55pt + line), inset: 9pt, radius: 5.5pt, width: 100%, breakable: true)[#text(weight: "bold", fill: brand)[考生版参考答案]#v(5pt)#body]
 #let answer-box(label, body) = block(fill: rgb("#fff8e8"), stroke: 0.55pt + rgb("#f0d9aa"), inset: 8pt, radius: 5.5pt, width: 100%, breakable: true)[#text(weight: "bold", fill: brand)[#label：] #body]
 #let quote-card(sentence, scenario) = block(fill: rgb("#f8fafc"), stroke: (left: 3pt + blue, rest: 0pt), inset: 8pt, radius: 5.5pt, width: 100%, breakable: true)[#text(weight: "bold")[#sentence]#if scenario != "" [#linebreak()#muted[适用：#scenario]]]
 #let step-item(no, label, body) = grid(columns: (24pt, 1fr), gutter: 7pt, box(fill: num-fill, stroke: 0.5pt + rgb("#cfe3fb"), inset: (x: 4.5pt, y: 2.5pt), radius: 10pt)[#text(size: 8pt, fill: blue, weight: "bold")[#no]], [#if label != "" [#text(weight: "bold", fill: brand)[#label]#linebreak()]#body])
@@ -791,7 +791,7 @@ def render_typst(data: dict[str, Any]) -> str:
   #if suggested-case-materials != "" [#info-strip[建议素材][#suggested-case-materials]]
   #if suggested-policy-expressions != "" [#info-strip[政策表达][#suggested-policy-expressions]]
   #if answer-hint != "" [#info-strip[作答提示][#answer-hint]]
-  #if mini-reference-answer != "" [#candidate-answer[#mini-reference-answer]]
+  #if mini-reference-answer != "" [#reference-answer-card[#mini-reference-answer]]
   #if use-boundary != "" [#muted[使用边界：#use-boundary]]
 ]
 
@@ -803,7 +803,7 @@ def render_typst(data: dict[str, Any]) -> str:
   #linebreak()
   #text(fill: blue, size: 26pt, weight: "bold")[重点优先型周复盘资料包 V1.3]
   #v(10pt)
-  #text(fill: brand, size: 12pt)[{typst_text(data["period"])}｜周日复盘版｜不新增精读文章]
+  #text(fill: brand, size: 12pt)[{typst_text(data["period"])}｜周复盘资料包]
   #v(24pt)
   #grid(columns: (1fr, 1fr, 1fr, 1fr), gutter: 8pt)[
     #box(fill: cover-card, stroke: 0.6pt + line, inset: 8pt, radius: 10pt)[#text(fill: brand, size: 21pt, weight: "bold")[{stats["featured_count"]}]#linebreak()#text(fill: muted-color, size: 8pt)[篇精读复盘]]
@@ -829,7 +829,7 @@ def render_typst(data: dict[str, Any]) -> str:
 ]
 
 #pagebreak()
-#set page(numbering: "1", header: align(left)[#text(size: 8.5pt, fill: muted-color)[公考晨读 · 周复盘资料包 V1.3]], footer: text(size: 8pt, fill: rgb("#94a3b8"))[周日复盘版 · 速览/考点/素材/表达/训练/回看/索引])
+#set page(numbering: "1", header: align(left)[#text(size: 8.5pt, fill: muted-color)[公考晨读 · 周复盘资料包 V1.3]], footer: text(size: 8pt, fill: rgb("#94a3b8"))[周复盘资料包 · 速览/考点/素材/表达/训练/回看/索引])
 
 = 01｜本周 3 分钟速览
 #info-strip[复盘顺序][{typst_text(review_order_text)}]
@@ -882,7 +882,7 @@ def render_typst(data: dict[str, Any]) -> str:
 
 #pagebreak()
 = {quick_section_no:02d}｜延伸阅读索引
-#info-strip[说明][本页只做“摘要 + 原文入口”。如需阅读全文，请复制链接打开原文；PDF 不收录延伸阅读全文。]
+#info-strip[说明][本页只做“摘要 + 原文入口”。如需阅读全文，请复制链接或搜索原文题目打开原文；PDF 不收录延伸阅读全文。]
 #block-title[精读原文入口]
 #table(columns: (0.7fr, 2.3fr, 1.2fr, 2.6fr), inset: 5pt, stroke: 0.45pt + line, fill: (x, y) => if y == 0 {{ table-head }} else if calc.odd(y) {{ rgb("#f8fafc") }} else {{ white }},
   [#text(fill: brand, weight: "bold")[日期]], [#text(fill: brand, weight: "bold")[文章]], [#text(fill: brand, weight: "bold")[主题]], [#text(fill: brand, weight: "bold")[一句话价值]],
