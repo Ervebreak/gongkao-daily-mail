@@ -702,7 +702,7 @@ def render_typst(data: dict[str, Any]) -> str:
         material_section = f"""
 #pagebreak()
 = {next_section_no:02d}｜作文素材积累·一例多用
-#info-strip[使用建议][只保留本周真正有事实依据、能迁移到考场表达里的素材；宁缺毋滥，不为凑数补卡。]
+#info-strip[阅读提示][本部分优先整理本周最适合迁移到申论和面试表达里的素材卡片，便于集中复盘和反复使用。]
 {material_cards}
 """
         next_section_no += 1
@@ -718,15 +718,15 @@ def render_typst(data: dict[str, Any]) -> str:
 #set document(title: [公考晨读周复盘资料包 V1.3])
 #set page(
   paper: "a4",
-  margin: (x: 13mm, y: 17mm),
+  margin: (x: 16mm, y: 21mm),
   numbering: "1",
   header: align(left)[#text(size: 8.5pt, fill: rgb("#64748b"))[公考晨读 · 周复盘资料包 V1.3]],
-  footer: text(size: 8pt, fill: rgb("#94a3b8"))[周日复盘版 · 摘要/框架/表达/素材/题目/索引],
+  footer: text(size: 8pt, fill: rgb("#94a3b8"))[周复盘资料包 · 摘要/框架/表达/素材/题目/索引],
 )
-#set text(font: ("Microsoft YaHei", "SimSun"), size: 10.2pt, lang: "zh")
-#set par(justify: false, leading: 0.72em, spacing: 0.62em)
-#set list(spacing: 0.42em)
-#set enum(spacing: 0.42em)
+#set text(font: ("Microsoft YaHei", "SimSun"), size: 10.5pt, lang: "zh")
+#set par(justify: false, leading: 0.9em, spacing: 0.86em)
+#set list(spacing: 0.62em)
+#set enum(spacing: 0.62em)
 
 #let brand = rgb("#0f3b68")
 #let blue = rgb("#185a9d")
@@ -741,50 +741,50 @@ def render_typst(data: dict[str, Any]) -> str:
 #let num-fill = rgb("#e9f3ff")
 #let muted-color = rgb("#64748b")
 
-#let muted(body) = text(size: 8.6pt, fill: muted-color)[#body]
-#let badge(body) = box(fill: rgb("#e9f3ff"), stroke: 0.5pt + rgb("#cfe3fb"), inset: (x: 5pt, y: 2pt), radius: 7pt)[#text(size: 8pt, fill: blue, weight: "bold")[#body]]
-#let block-title(body) = [#v(11pt)#box(stroke: (left: 3pt + blue), inset: (left: 7pt))[#text(size: 13pt, fill: brand, weight: "bold")[#body]]#v(6pt)]
-#let info-strip(label, body) = block(fill: print-panel, stroke: 0.45pt + line, inset: 7pt, radius: 4.5pt, width: 100%, breakable: true)[#text(weight: "bold", fill: brand)[#label：] #body]
-#let panel(title, body) = block(fill: print-panel, stroke: 0.55pt + line, inset: 9pt, radius: 6.5pt, width: 100%, breakable: false)[#text(weight: "bold", fill: brand)[#title]#v(5pt)#body]
-#let mini-panel(title, body) = box(fill: rgb("#f8fafc"), stroke: 0.55pt + line, inset: 9pt, radius: 6.5pt, width: 100%)[#text(weight: "bold", fill: brand)[#title]#v(4pt)#body]
-#let article-card(body) = block(fill: white, stroke: 0.6pt + line, inset: 10pt, radius: 7.5pt, width: 100%, breakable: false)[#body]
-#let framework-box(body) = block(fill: white, stroke: 0.6pt + line, inset: 10pt, radius: 7.5pt, width: 100%, breakable: false)[#body]
-#let question-card(body) = block(fill: rgb("#fbfcff"), stroke: 0.6pt + line, inset: 10pt, radius: 7.5pt, width: 100%, breakable: true)[#body]
-#let takeaway-card(body) = block(fill: white, stroke: 0.6pt + line, inset: 10pt, radius: 7.5pt, width: 100%, breakable: false)[#body]
-#let candidate-answer(body) = block(fill: white, stroke: (left: 3pt + brand, rest: 0.55pt + line), inset: 9pt, radius: 5.5pt, width: 100%, breakable: true)[#text(weight: "bold", fill: brand)[考生版参考答案]#v(5pt)#body]
-#let answer-box(label, body) = block(fill: rgb("#fff8e8"), stroke: 0.55pt + rgb("#f0d9aa"), inset: 8pt, radius: 5.5pt, width: 100%, breakable: true)[#text(weight: "bold", fill: brand)[#label：] #body]
-#let quote-card(sentence, scenario) = block(fill: rgb("#f8fafc"), stroke: (left: 3pt + blue, rest: 0pt), inset: 8pt, radius: 5.5pt, width: 100%, breakable: true)[#text(weight: "bold")[#sentence]#if scenario != "" [#linebreak()#muted[适用：#scenario]]]
-#let step-item(no, label, body) = grid(columns: (24pt, 1fr), gutter: 7pt, box(fill: num-fill, stroke: 0.5pt + rgb("#cfe3fb"), inset: (x: 4.5pt, y: 2.5pt), radius: 10pt)[#text(size: 8pt, fill: blue, weight: "bold")[#no]], [#if label != "" [#text(weight: "bold", fill: brand)[#label]#linebreak()]#body])
-#let map-card(title, body) = box(fill: white, stroke: (left: 3pt + blue, rest: 0.55pt + line), inset: 8pt, radius: 6pt, width: 100%)[#text(size: 11pt, weight: "bold", fill: brand)[#title]#v(3pt)#body]
-#let day-title(no, title, focus) = box(fill: day-surface, stroke: 0.65pt + line, inset: 12pt, radius: 8pt, width: 100%)[#grid(columns: (48pt, 1fr), gutter: 9pt)[#box(fill: day-badge-fill, inset: 8pt, radius: 7pt)[#text(fill: brand, weight: "bold")[#no]]][#text(fill: brand, size: 14.8pt, weight: "bold")[#title]#linebreak()#text(fill: muted-color, size: 9.6pt)[#focus]]]
-#let expr-row(no, sentence, meta) = grid(columns: (28pt, 1fr), gutter: 9pt, box(fill: num-fill, stroke: 0.5pt + rgb("#cfe3fb"), inset: 6pt, radius: 5pt)[#text(fill: blue, weight: "bold", size: 8.5pt)[#no]], [#text(weight: "bold")[#sentence]#linebreak()#muted[#meta]])
-#let frame-row(title, body) = box(fill: rgb("#f8fbff"), stroke: 0.55pt + line, inset: 9pt, radius: 6.5pt, width: 100%)[#text(weight: "bold", fill: brand)[#title]#v(4pt)#body]
-#let quote-bank(body) = block(fill: white, stroke: 0.6pt + line, inset: 10pt, radius: 7.5pt, width: 100%, breakable: true)[#body]
-#let material-example(theme, body) = block(fill: rgb("#f8fbff"), stroke: 0.45pt + line, inset: 8pt, radius: 6pt, width: 100%, breakable: true)[
+#let muted(body) = text(size: 8.9pt, fill: muted-color)[#body]
+#let badge(body) = box(fill: rgb("#e9f3ff"), stroke: 0.5pt + rgb("#cfe3fb"), inset: (x: 6pt, y: 3pt), radius: 8pt)[#text(size: 8.2pt, fill: blue, weight: "bold")[#body]]
+#let block-title(body) = [#v(16pt)#box(stroke: (left: 3pt + blue), inset: (left: 8pt, y: 1pt))[#text(size: 14pt, fill: brand, weight: "bold")[#body]]#v(10pt)]
+#let info-strip(label, body) = block(fill: print-panel, stroke: 0.45pt + line, inset: 10pt, radius: 6pt, width: 100%, breakable: true)[#text(weight: "bold", fill: brand)[#label：] #body]
+#let panel(title, body) = block(fill: print-panel, stroke: 0.55pt + line, inset: 12pt, radius: 8pt, width: 100%, breakable: true)[#text(weight: "bold", fill: brand)[#title]#v(7pt)#body]
+#let mini-panel(title, body) = box(fill: rgb("#f8fafc"), stroke: 0.55pt + line, inset: 11pt, radius: 7.5pt, width: 100%)[#text(weight: "bold", fill: brand)[#title]#v(6pt)#body]
+#let article-card(body) = block(fill: white, stroke: 0.6pt + line, inset: 13pt, radius: 9pt, width: 100%, breakable: false)[#body]
+#let framework-box(body) = block(fill: white, stroke: 0.6pt + line, inset: 13pt, radius: 9pt, width: 100%, breakable: false)[#body]
+#let question-card(body) = block(fill: rgb("#fbfcff"), stroke: 0.6pt + line, inset: 13pt, radius: 9pt, width: 100%, breakable: true)[#body]
+#let takeaway-card(body) = block(fill: white, stroke: 0.6pt + line, inset: 13pt, radius: 9pt, width: 100%, breakable: false)[#body]
+#let candidate-answer(body) = block(fill: white, stroke: (left: 3pt + brand, rest: 0.55pt + line), inset: 11pt, radius: 6.5pt, width: 100%, breakable: true)[#text(weight: "bold", fill: brand)[考生版参考答案]#v(6pt)#body]
+#let answer-box(label, body) = block(fill: rgb("#fff8e8"), stroke: 0.55pt + rgb("#f0d9aa"), inset: 10pt, radius: 6.5pt, width: 100%, breakable: true)[#text(weight: "bold", fill: brand)[#label：] #body]
+#let quote-card(sentence, scenario) = block(fill: rgb("#f8fafc"), stroke: (left: 3pt + blue, rest: 0pt), inset: 10pt, radius: 6.5pt, width: 100%, breakable: true)[#text(weight: "bold")[#sentence]#if scenario != "" [#linebreak()#muted[适用：#scenario]]]
+#let step-item(no, label, body) = grid(columns: (28pt, 1fr), gutter: 9pt, box(fill: num-fill, stroke: 0.5pt + rgb("#cfe3fb"), inset: (x: 5pt, y: 3pt), radius: 10pt)[#text(size: 8.4pt, fill: blue, weight: "bold")[#no]], [#if label != "" [#text(weight: "bold", fill: brand)[#label]#linebreak()]#body])
+#let map-card(title, body) = box(fill: white, stroke: (left: 3pt + blue, rest: 0.55pt + line), inset: 11pt, radius: 7.5pt, width: 100%)[#text(size: 11.5pt, weight: "bold", fill: brand)[#title]#v(5pt)#body]
+#let day-title(no, title, focus) = box(fill: day-surface, stroke: 0.65pt + line, inset: 14pt, radius: 9pt, width: 100%)[#grid(columns: (52pt, 1fr), gutter: 11pt)[#box(fill: day-badge-fill, inset: 9pt, radius: 7pt)[#text(fill: brand, weight: "bold")[#no]]][#text(fill: brand, size: 15.2pt, weight: "bold")[#title]#linebreak()#text(fill: muted-color, size: 9.8pt)[#focus]]]
+#let expr-row(no, sentence, meta) = grid(columns: (30pt, 1fr), gutter: 10pt, box(fill: num-fill, stroke: 0.5pt + rgb("#cfe3fb"), inset: 7pt, radius: 6pt)[#text(fill: blue, weight: "bold", size: 8.7pt)[#no]], [#text(weight: "bold")[#sentence]#linebreak()#muted[#meta]])
+#let frame-row(title, body) = box(fill: rgb("#f8fbff"), stroke: 0.55pt + line, inset: 11pt, radius: 7.5pt, width: 100%)[#text(weight: "bold", fill: brand)[#title]#v(6pt)#body]
+#let quote-bank(body) = block(fill: white, stroke: 0.6pt + line, inset: 13pt, radius: 9pt, width: 100%, breakable: true)[#body]
+#let material-example(theme, body) = block(fill: rgb("#f8fbff"), stroke: 0.45pt + line, inset: 10pt, radius: 7pt, width: 100%, breakable: true)[
   #text(weight: "bold", fill: brand)[#theme]
-  #v(3pt)
+  #v(5pt)
   #body
 ]
-#let material-card(title, material-type, source-dates, source-articles, material-summary, examples, use-boundary, target-topics, suggested-question-types) = block(fill: white, stroke: 0.6pt + line, inset: 10pt, radius: 7.5pt, width: 100%, breakable: true)[
+#let material-card(title, material-type, source-dates, source-articles, material-summary, examples, use-boundary, target-topics, suggested-question-types) = block(fill: white, stroke: 0.6pt + line, inset: 13pt, radius: 9pt, width: 100%, breakable: true)[
   #text(size: 12pt, weight: "bold", fill: brand)[作文素材积累·#title（一例多用）]
   #if material-type != "" [#linebreak()#badge[#material-type]]
-  #v(5pt)
+  #v(7pt)
   #if source-dates != "" or source-articles != "" [#info-strip[来源][#source-dates#if source-dates != "" and source-articles != "" [｜#source-articles]]]
   #if target-topics != "" [#info-strip[可用主题方向][#target-topics]]
   #if suggested-question-types != "" [#info-strip[适用题型][#suggested-question-types]]
   #if material-summary != "" [#info-strip[素材简介][#material-summary]]
   #if examples != "" [
-    #v(4pt)
+    #v(6pt)
     #text(weight: "bold", fill: brand)[作文示例]
-    #v(4pt)
+    #v(6pt)
     #examples
   ]
   #if use-boundary != "" [#muted[使用边界：#use-boundary]]
 ]
-#let practice-card(title, question-type, question, target-topics, suggested-golden-sentences, suggested-case-materials, suggested-policy-expressions, answer-hint, mini-reference-answer, use-boundary) = block(fill: white, stroke: 0.6pt + line, inset: 10pt, radius: 7.5pt, width: 100%, breakable: true)[
+#let practice-card(title, question-type, question, target-topics, suggested-golden-sentences, suggested-case-materials, suggested-policy-expressions, answer-hint, mini-reference-answer, use-boundary) = block(fill: white, stroke: 0.6pt + line, inset: 13pt, radius: 9pt, width: 100%, breakable: true)[
   #text(size: 12pt, weight: "bold", fill: brand)[#title]
   #if question-type != "" [#linebreak()#badge[#question-type]]
-  #v(5pt)
+  #v(7pt)
   #if question != "" [#text(weight: "bold")[#question]]
   #if target-topics != "" [#info-strip[训练主题][#target-topics]]
   #if suggested-golden-sentences != "" [#info-strip[建议金句][#suggested-golden-sentences]]
@@ -796,28 +796,28 @@ def render_typst(data: dict[str, Any]) -> str:
 ]
 
 #set page(numbering: none, header: none, footer: none)
-#box(fill: cover-surface, stroke: 0.8pt + line, inset: 24pt, radius: 12pt, width: 100%, height: 135mm)[
+#box(fill: cover-surface, stroke: 0.8pt + line, inset: 28pt, radius: 14pt, width: 100%, height: 145mm)[
   #text(fill: blue, size: 9.5pt, weight: "bold")[WEEKLY REVIEW · 公考晨读周复盘资料包]
-  #v(18pt)
+  #v(22pt)
   #text(fill: brand, size: 32pt, weight: "bold")[公考晨读]
   #linebreak()
   #text(fill: blue, size: 26pt, weight: "bold")[重点优先型周复盘资料包 V1.3]
-  #v(10pt)
-  #text(fill: brand, size: 12pt)[{typst_text(data["period"])}｜周日复盘版｜不新增精读文章]
-  #v(24pt)
-  #grid(columns: (1fr, 1fr, 1fr, 1fr), gutter: 8pt)[
-    #box(fill: cover-card, stroke: 0.6pt + line, inset: 8pt, radius: 10pt)[#text(fill: brand, size: 21pt, weight: "bold")[{stats["featured_count"]}]#linebreak()#text(fill: muted-color, size: 8pt)[篇精读复盘]]
+  #v(12pt)
+  #text(fill: brand, size: 12pt)[{typst_text(data["period"])}｜周复盘资料包]
+  #v(28pt)
+  #grid(columns: (1fr, 1fr, 1fr, 1fr), gutter: 10pt)[
+    #box(fill: cover-card, stroke: 0.6pt + line, inset: 10pt, radius: 11pt)[#text(fill: brand, size: 21pt, weight: "bold")[{stats["featured_count"]}]#linebreak()#text(fill: muted-color, size: 8pt)[篇精读复盘]]
   ][
-    #box(fill: cover-card, stroke: 0.6pt + line, inset: 8pt, radius: 10pt)[#text(fill: brand, size: 21pt, weight: "bold")[{stats["questions_count"]}]#linebreak()#text(fill: muted-color, size: 8pt)[道考场训练]]
+    #box(fill: cover-card, stroke: 0.6pt + line, inset: 10pt, radius: 11pt)[#text(fill: brand, size: 21pt, weight: "bold")[{stats["questions_count"]}]#linebreak()#text(fill: muted-color, size: 8pt)[道考场训练]]
   ][
-    #box(fill: cover-card, stroke: 0.6pt + line, inset: 8pt, radius: 10pt)[#text(fill: brand, size: 21pt, weight: "bold")[{stats["golden_count"]}]#linebreak()#text(fill: muted-color, size: 8pt)[句可背表达]]
+    #box(fill: cover-card, stroke: 0.6pt + line, inset: 10pt, radius: 11pt)[#text(fill: brand, size: 21pt, weight: "bold")[{stats["golden_count"]}]#linebreak()#text(fill: muted-color, size: 8pt)[句可背表达]]
   ][
-    #box(fill: cover-card, stroke: 0.6pt + line, inset: 8pt, radius: 10pt)[#text(fill: brand, size: 21pt, weight: "bold")[{stats["quick_count"]}]#linebreak()#text(fill: muted-color, size: 8pt)[篇延伸索引]]
+    #box(fill: cover-card, stroke: 0.6pt + line, inset: 10pt, radius: 11pt)[#text(fill: brand, size: 21pt, weight: "bold")[{stats["quick_count"]}]#linebreak()#text(fill: muted-color, size: 8pt)[篇延伸索引]]
   ]
 ]
 
-#v(8pt)
-#grid(columns: (1.2fr, 0.9fr), gutter: 9pt)[
+#v(12pt)
+#grid(columns: (1.15fr, 0.95fr), gutter: 12pt)[
   #panel[使用说明][
     + 先看本周 3 分钟速览。
     + 再看考场素材库和金句表达库。
@@ -829,16 +829,17 @@ def render_typst(data: dict[str, Any]) -> str:
 ]
 
 #pagebreak()
-#set page(numbering: "1", header: align(left)[#text(size: 8.5pt, fill: muted-color)[公考晨读 · 周复盘资料包 V1.3]], footer: text(size: 8pt, fill: rgb("#94a3b8"))[周日复盘版 · 速览/考点/素材/表达/训练/回看/索引])
+#set page(numbering: "1", header: align(left)[#text(size: 8.5pt, fill: muted-color)[公考晨读 · 周复盘资料包 V1.3]], footer: text(size: 8pt, fill: rgb("#94a3b8"))[周复盘资料包 · 速览/考点/素材/表达/训练/回看/索引])
 
 = 01｜本周 3 分钟速览
 #info-strip[复盘顺序][{typst_text(review_order_text)}]
-#grid(columns: (1fr, 1fr), gutter: 8pt)[
+#grid(columns: (1fr, 1fr), gutter: 12pt)[
   #panel[高频考点][{overview_exam_points if overview_exam_points else '#muted[暂无高频考点]'}]
 ][
   #panel[关键词][{overview_keywords if overview_keywords else '#muted[暂无关键词]'}]
 ]
-#grid(columns: (1fr, 1fr), gutter: 8pt)[
+#v(6pt)
+#grid(columns: (1fr, 1fr), gutter: 12pt)[
   #panel[最值得背][{overview_expressions if overview_expressions else '#muted[暂无精选表达]'}]
 ][
   #panel[最值得练][{overview_practice}]
@@ -847,14 +848,14 @@ def render_typst(data: dict[str, Any]) -> str:
 #block-title[本周主题总览]
 #info-strip[复盘方式][{typst_text(review_method_text)}]
 
-#table(columns: (0.8fr, 2fr, 2.2fr, 1.7fr), inset: 5pt, stroke: 0.45pt + line, fill: (x, y) => if y == 0 {{ table-head }} else if calc.odd(y) {{ rgb("#f8fafc") }} else {{ white }},
+#table(columns: (0.9fr, 1.7fr, 2.4fr, 2fr), inset: 7pt, stroke: 0.45pt + line, fill: (x, y) => if y == 0 {{ table-head }} else if calc.odd(y) {{ rgb("#f8fafc") }} else {{ white }},
   [#text(fill: brand, weight: "bold")[日期]], [#text(fill: brand, weight: "bold")[主题]], [#text(fill: brand, weight: "bold")[精读文章]], [#text(fill: brand, weight: "bold")[训练方向]],
   {overview_rows}
 )
 
 #pagebreak()
 #block-title[02｜本周高频考点地图]
-#grid(columns: (1fr, 1fr), gutter: 8pt)[
+#grid(columns: (1fr, 1fr), gutter: 12pt)[
 {map_cards}
 ]
 
@@ -882,14 +883,14 @@ def render_typst(data: dict[str, Any]) -> str:
 
 #pagebreak()
 = {quick_section_no:02d}｜延伸阅读索引
-#info-strip[说明][本页只做“摘要 + 原文入口”。如需阅读全文，请复制链接打开原文；PDF 不收录延伸阅读全文。]
+#info-strip[说明][本页只做“摘要 + 原文入口”。如需阅读全文，请复制链接或搜索原文题目打开原文；PDF 不收录延伸阅读全文。]
 #block-title[精读原文入口]
-#table(columns: (0.7fr, 2.3fr, 1.2fr, 2.6fr), inset: 5pt, stroke: 0.45pt + line, fill: (x, y) => if y == 0 {{ table-head }} else if calc.odd(y) {{ rgb("#f8fafc") }} else {{ white }},
+#table(columns: (0.8fr, 2.6fr, 1.2fr, 2.8fr), inset: 7pt, stroke: 0.45pt + line, fill: (x, y) => if y == 0 {{ table-head }} else if calc.odd(y) {{ rgb("#f8fafc") }} else {{ white }},
   [#text(fill: brand, weight: "bold")[日期]], [#text(fill: brand, weight: "bold")[文章]], [#text(fill: brand, weight: "bold")[主题]], [#text(fill: brand, weight: "bold")[一句话价值]],
   {featured_index_rows}
 )
 #block-title[补充阅读清单]
-#table(columns: (0.7fr, 2.3fr, 1.2fr, 2.6fr), inset: 5pt, stroke: 0.45pt + line, fill: (x, y) => if y == 0 {{ table-head }} else if calc.odd(y) {{ rgb("#f8fafc") }} else {{ white }},
+#table(columns: (0.8fr, 2.6fr, 1.2fr, 2.8fr), inset: 7pt, stroke: 0.45pt + line, fill: (x, y) => if y == 0 {{ table-head }} else if calc.odd(y) {{ rgb("#f8fafc") }} else {{ white }},
   [#text(fill: brand, weight: "bold")[日期]], [#text(fill: brand, weight: "bold")[文章]], [#text(fill: brand, weight: "bold")[主题]], [#text(fill: brand, weight: "bold")[考试价值]],
   {quick_index if quick_index else table_cell("") + "," + table_cell("暂无补充阅读") + "," + table_cell("") + "," + table_cell("") + ","}
 )
@@ -920,64 +921,67 @@ def render_preview_typst(data: dict[str, Any]) -> str:
 #set document(title: [公考晨读周复盘预览版])
 #set page(
   paper: "a4",
-  margin: (x: 15mm, y: 18mm),
+  margin: (x: 17mm, y: 21mm),
   numbering: "1",
 )
-#set text(font: ("Microsoft YaHei", "SimSun"), size: 10.5pt, lang: "zh")
-#set par(justify: false, leading: 0.72em, spacing: 0.65em)
+#set text(font: ("Microsoft YaHei", "SimSun"), size: 10.8pt, lang: "zh")
+#set par(justify: false, leading: 0.92em, spacing: 0.88em)
+#set list(spacing: 0.66em)
+#set enum(spacing: 0.66em)
 
 #let brand = rgb("#0f3b68")
 #let line = rgb("#d7e2ef")
 #let soft = rgb("#f6f8fb")
 #let warm = rgb("#fff8e8")
-#let muted(body) = text(size: 8.8pt, fill: rgb("#64748b"))[#body]
-#let section(title, body) = block(fill: white, stroke: 0.6pt + line, inset: 10pt, radius: 7pt, width: 100%, breakable: true)[#text(size: 12pt, weight: "bold", fill: brand)[#title]#v(5pt)#body]
+#let muted(body) = text(size: 9pt, fill: rgb("#64748b"))[#body]
+#let section(title, body) = block(fill: white, stroke: 0.6pt + line, inset: 13pt, radius: 8pt, width: 100%, breakable: true)[#text(size: 12.5pt, weight: "bold", fill: brand)[#title]#v(7pt)#body]
 #let chip(body) = box(fill: rgb("#e9f3ff"), stroke: 0.5pt + rgb("#cfe3fb"), inset: (x: 6pt, y: 2pt), radius: 7pt)[#text(size: 8.2pt, fill: brand, weight: "bold")[#body]]
 
-#box(fill: soft, stroke: 0.8pt + line, inset: 20pt, radius: 12pt, width: 100%)[
+#box(fill: soft, stroke: 0.8pt + line, inset: 24pt, radius: 14pt, width: 100%)[
   #text(fill: brand, size: 10pt, weight: "bold")[WEEKLY REVIEW · 免费预览版]
-  #v(10pt)
+  #v(14pt)
   #text(fill: brand, size: 26pt, weight: "bold")[公考晨读周复盘预览]
-  #v(6pt)
+  #v(8pt)
   #text(size: 11pt)[{typst_text(data.get("period") or "")}]
-  #v(12pt)
+  #v(16pt)
   #text(size: 11pt)[这是一份周复盘预览，帮你快速了解本周重点，也先看看完整版资料包会提供什么。]
 ]
 
-#v(10pt)
+#v(14pt)
 #section[本周主题速览][{typst_text(data.get("theme_overview") or "")}]
 
-#v(8pt)
+#v(10pt)
 #section[本周 3 个高频考点方向][{focus_rows}]
 
-#v(8pt)
+#v(10pt)
 #section[完整版 PDF 目录预览][
   {module_rows}
 ]
 
-#v(8pt)
+#v(10pt)
+#pagebreak()
 #section[免费内容片段][
   #text(weight: "bold", fill: brand)[1 条可背表达]
-  #v(3pt)
+  #v(5pt)
   {expression_preview}
-  #v(8pt)
+  #v(12pt)
   #text(weight: "bold", fill: brand)[1 个素材简介片段]
-  #v(3pt)
+  #v(5pt)
   {material_title}
   #if "{material_source}" != "" [#linebreak()#muted[来源：{material_source}]]
   #linebreak(){material_summary}
-  #v(8pt)
+  #v(12pt)
   #text(weight: "bold", fill: brand)[1 道训练题片段]
-  #v(3pt)
+  #v(5pt)
   {practice_title}
   #linebreak(){practice_question}
   #if "{practice_direction}" != "" [#linebreak()#muted[思考方向：{practice_direction}]]
 ]
 
-#v(8pt)
+#v(10pt)
 #section[获取完整版][
   完整版周 PDF 会提供更完整的素材、表达、训练题和每日压缩回看。暂时不参加也没关系，这份预览可以先帮你建立本周复盘框架。
-  #v(6pt)
+  #v(8pt)
   {typst_text(cta_line)}
 ]
 """

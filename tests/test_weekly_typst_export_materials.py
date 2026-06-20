@@ -33,6 +33,10 @@ def test_render_typst_hides_material_section_when_no_cards() -> None:
 
     assert "作文素材积累·一例多用" not in text
     assert "本周考场素材库" not in text
+    assert "margin: (x: 16mm, y: 21mm)" in text
+    assert "leading: 0.9em" in text
+    assert "spacing: 0.86em" in text
+    assert "周日复盘版" not in text
 
 
 def test_render_typst_shows_material_cards_as_one_case_many_uses() -> None:
@@ -72,6 +76,7 @@ def test_render_typst_shows_material_cards_as_one_case_many_uses() -> None:
     assert "事实锚点" not in text
     assert "不适合用于" not in text
     assert "本周考场素材库" not in text
+    assert "复制链接或搜索原文题目打开原文" in text
 
 
 def test_render_typst_shows_at_most_three_material_cards() -> None:

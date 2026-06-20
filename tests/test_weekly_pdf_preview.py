@@ -131,6 +131,10 @@ def test_render_preview_typst_contains_preview_sections() -> None:
     assert "candidate" not in text.lower()
     assert "debug" not in text.lower()
     assert "quality gate" not in text.lower()
+    assert "margin: (x: 17mm, y: 21mm)" in text
+    assert "leading: 0.92em" in text
+    assert "spacing: 0.88em" in text
+    assert "#pagebreak()" in text
 
 
 def test_send_segmented_email_uses_distinct_attachments_for_full_and_lite(monkeypatch, tmp_path) -> None:
