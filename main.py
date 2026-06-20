@@ -2861,13 +2861,36 @@ def generate_weekly_pdf_candidate(event: Any | None = None) -> dict[str, Any]:
     assets = build_weekly_assets(weekly_event)
     subject = f"{settings.subject_prefix}本周复盘资料包｜{assets['start_date']}至{assets['end_date']}"
     quality_gate = {"overall": "ok", "p0_count": 0, "p0_issues": []}
+    full_upload_meta = ((assets.get("oss_upload") or {}).get("pdf") or {})
+    preview_upload_meta = ((assets.get("oss_upload") or {}).get("lite_preview_pdf") or {})
+    weekly_quality_issues: list[dict[str, Any]] = []
+    if assets.get("local_pdf") and assets.get("oss_pdf_path") and not full_upload_meta.get("ok"):
+        weekly_quality_issues.append(
+            {
+                "severity": "medium",
+                "code": "weekly_pdf_oss_upload_failed",
+                "message": str(full_upload_meta.get("error") or "完整版周 PDF 上传 OSS 失败。"),
+            }
+        )
+    if (
+        (assets.get("lite_preview") or {}).get("local_pdf")
+        and (assets.get("lite_preview") or {}).get("oss_pdf_path")
+        and not preview_upload_meta.get("ok")
+    ):
+        weekly_quality_issues.append(
+            {
+                "severity": "medium",
+                "code": "weekly_pdf_lite_preview_oss_upload_failed",
+                "message": str(preview_upload_meta.get("error") or "免费预览周 PDF 上传 OSS 失败。"),
+            }
+        )
     quality = {
         "final": {
             "weekly_pdf": {
                 "ok": True,
-                "status": "ok",
-                "score": 100,
-                "issues": [],
+                "status": "ok" if not weekly_quality_issues else "degraded",
+                "score": 100 if not weekly_quality_issues else 88,
+                "issues": weekly_quality_issues,
                 "archives_loaded": assets.get("archives_loaded"),
                 "misses": assets.get("misses") or [],
                 "pdf_engine": assets.get("pdf_engine"),
@@ -2884,7 +2907,9 @@ def generate_weekly_pdf_candidate(event: Any | None = None) -> dict[str, Any]:
         "local_pdf": assets.get("local_pdf"),
         "local_md": assets.get("local_md"),
         "local_html": assets.get("local_html"),
-        "oss_pdf_path": ((assets.get("oss_upload") or {}).get("pdf") or {}).get("oss_path"),
+        "oss_pdf_path": assets.get("oss_pdf_path") or str(full_upload_meta.get("oss_path") or ""),
+        "oss_upload_ok": bool(full_upload_meta.get("ok")),
+        "oss_upload_error": str(full_upload_meta.get("error") or ""),
         "attachment_filename": (assets.get("attachment") or {}).get("filename") or "gongkao-weekly.pdf",
         "pdf_engine": assets.get("pdf_engine"),
         "typst_meta": assets.get("typst_meta"),
@@ -2892,6 +2917,8 @@ def generate_weekly_pdf_candidate(event: Any | None = None) -> dict[str, Any]:
             "status": ((assets.get("lite_preview") or {}).get("status") or "").strip(),
             "local_pdf": (assets.get("lite_preview") or {}).get("local_pdf") or "",
             "oss_pdf_path": (assets.get("lite_preview") or {}).get("oss_pdf_path") or "",
+            "oss_upload_ok": bool((assets.get("lite_preview") or {}).get("oss_upload_ok")),
+            "oss_upload_error": (assets.get("lite_preview") or {}).get("oss_upload_error") or "",
             "attachment_filename": (assets.get("lite_preview") or {}).get("attachment_filename") or "",
             "pdf_engine": (assets.get("lite_preview") or {}).get("pdf_engine") or "",
             "typst_meta": (assets.get("lite_preview") or {}).get("typst_meta"),
@@ -2925,6 +2952,12 @@ def generate_weekly_pdf_candidate(event: Any | None = None) -> dict[str, Any]:
         weekly_end_date=assets.get("end_date"),
         archives_loaded=assets.get("archives_loaded"),
         local_pdf=assets.get("local_pdf"),
+        oss_pdf_path=weekly_pdf.get("oss_pdf_path"),
+        oss_upload_ok=weekly_pdf.get("oss_upload_ok"),
+        oss_upload_error=weekly_pdf.get("oss_upload_error"),
+        lite_preview_oss_pdf_path=(weekly_pdf.get("lite_preview") or {}).get("oss_pdf_path"),
+        lite_preview_upload_ok=(weekly_pdf.get("lite_preview") or {}).get("oss_upload_ok"),
+        lite_preview_upload_error=(weekly_pdf.get("lite_preview") or {}).get("oss_upload_error"),
         **candidate_save_result,
     )
     log_path = logger.save("latest_weekly_pdf_candidate.log")
