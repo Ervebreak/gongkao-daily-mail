@@ -5,6 +5,8 @@ import difflib
 import re
 from typing import Any
 
+from question_quality import _looks_incomplete
+
 
 TITLE_PREFIX = "【公考晨读】"
 DISPLAY_LABELS = ("可用表达", "作答主线", "审题关键", "如果点原文，重点看", "可迁移框架")
@@ -18,6 +20,37 @@ DISPLAY_PREFIX_RULES = {
     "brief.daily_question.exam_focus": ("审题关键",),
     "brief.today_takeaway.framework": ("可迁移框架",),
 }
+
+SEMANTIC_TRUNCATION_FIELDS = {
+    "brief.featured_article.original_reading_focus",
+    "brief.featured_article.one_sentence",
+    "brief.featured_article.rewritable_expression",
+    "brief.today_takeaway.framework",
+    "brief.quick_reads[*].one_sentence",
+    "brief.quick_reads[*].exam_value",
+    "brief.daily_question.exam_focus",
+    "brief.daily_question.breaking_hint",
+    "brief.daily_question.thirty_second_answer",
+    "brief.daily_question.output_sentence_template",
+    "brief.lite_paid_cta.hook",
+    "brief.lite_paid_highlight",
+}
+
+TRUNCATION_ISSUE_CODES = {
+    "semantic_truncation",
+    "text_truncation",
+    "truncated_takeaway",
+    "expression_truncated",
+    "visible_text_truncation",
+}
+
+KNOWN_TRUNCATION_REPAIRS = (
+    ("避免答", "帮助作答避免空泛。"),
+    ("供需矛", "供需矛盾。"),
+    ("过错责任", "过错责任认定。"),
+    ("和群", "和群众监督结合起来。"),
+    ("拿高", "拿高分的关键。"),
+)
 
 
 def _text(value: Any) -> str:
@@ -119,6 +152,145 @@ def _normalized_body_path(path: str) -> str:
     return re.sub(r"\[\d+\]", "[*]", path or "")
 
 
+def _has_semantic_truncation_issue(path: str, issues: list[dict[str, Any]]) -> bool:
+    normalized_path = _normalized_body_path(path)
+    for issue in issues:
+        if not isinstance(issue, dict):
+            continue
+        if str(issue.get("code") or "") not in TRUNCATION_ISSUE_CODES:
+            continue
+        issue_path = str(issue.get("path") or "")
+        if issue_path == path or _normalized_body_path(issue_path) == normalized_path:
+            return True
+    return False
+
+
+def _extract_quality_truncation_issues(data: dict[str, Any]) -> list[dict[str, Any]]:
+    quality = data.get("quality") if isinstance(data.get("quality"), dict) else {}
+    buckets: list[Any] = []
+    final_quality = quality.get("final") if isinstance(quality.get("final"), dict) else {}
+    if final_quality:
+        buckets.extend(final_quality.values())
+    for key in ("content_quality", "today_takeaway", "expression_quality", "quick_reads", "daily_question"):
+        if isinstance(quality.get(key), dict):
+            buckets.append(quality.get(key))
+    issues: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for bucket in buckets:
+        if not isinstance(bucket, dict):
+            continue
+        for issue in bucket.get("issues") or []:
+            if not isinstance(issue, dict):
+                continue
+            code = str(issue.get("code") or "")
+            if code not in {"text_truncation", "truncated_takeaway", "expression_truncated"}:
+                continue
+            field = str(issue.get("field") or "").strip()
+            if field and not field.startswith("brief."):
+                field = f"brief.{field}"
+            bad_text = _text(issue.get("bad_text"))
+            signature = (code, field, bad_text)
+            if signature in seen:
+                continue
+            seen.add(signature)
+            issues.append(
+                {
+                    "code": code,
+                    "path": field,
+                    "bad_text": bad_text,
+                    "message": _text(issue.get("message")) or code,
+                }
+            )
+    return issues
+
+
+def _repair_known_truncated_tail(value: str) -> str:
+    text = _text(value)
+    if not text:
+        return text
+    for bad_tail, replacement in KNOWN_TRUNCATION_REPAIRS:
+        if text.endswith(bad_tail):
+            return text[: -len(bad_tail)] + replacement
+    return text
+
+
+def _looks_semantically_truncated(value: str) -> bool:
+    text = _text(value)
+    if not text:
+        return False
+    if _looks_incomplete(text):
+        return True
+    return any(text.endswith(bad_tail) for bad_tail, _replacement in KNOWN_TRUNCATION_REPAIRS)
+
+
+def _repair_semantic_truncation(path: str, value: str) -> str:
+    text = _repair_known_truncated_tail(value)
+    normalized_path = _normalized_body_path(path)
+    if not _looks_semantically_truncated(text):
+        if not text.endswith(("。", "！", "？")) and normalized_path in SEMANTIC_TRUNCATION_FIELDS:
+            return f"{text}。"
+        return text
+    if normalized_path == "brief.featured_article.original_reading_focus":
+        return f"{text.rstrip('，,；;：:。!?！？') }，帮助作答避免空泛。".strip()
+    if normalized_path == "brief.today_takeaway.framework":
+        return f"{text.rstrip('，,；;：:。!?！？')}，形成完整闭环。"
+    if normalized_path in {"brief.lite_paid_cta.hook", "brief.lite_paid_highlight"}:
+        return f"{text.rstrip('，,；;：:。!?！？')}，适合迁移到类似场景题中。"
+    if normalized_path.startswith("brief.quick_reads[*]."):
+        return f"{text.rstrip('，,；;：:。!?！？')}。"
+    if normalized_path.startswith("brief.daily_question."):
+        return f"{text.rstrip('，,；;：:。!?！？')}。"
+    return text
+
+
+def _semantic_truncation_issues(data: dict[str, Any]) -> list[dict[str, Any]]:
+    brief = data.get("brief") if isinstance(data.get("brief"), dict) else {}
+    issues: list[dict[str, Any]] = []
+    for path, value in _walk_strings(brief, "brief"):
+        if _normalized_body_path(path) not in SEMANTIC_TRUNCATION_FIELDS:
+            continue
+        if not _looks_semantically_truncated(value):
+            continue
+        issues.append(
+            _issue(
+                "high",
+                "semantic_truncation",
+                "字段存在疑似半截句，需在发送前自动修补或阻断。",
+                path,
+                auto_fixable=True,
+                blocking=True,
+            )
+        )
+    plain_text = _text(data.get("plain_text"))
+    html_body = _text(data.get("html_body"))
+    for issue in _extract_quality_truncation_issues(data):
+        bad_text = _text(issue.get("bad_text"))
+        issue_path = str(issue.get("path") or "")
+        if issue_path:
+            issues.append(
+                _issue(
+                    "high",
+                    str(issue.get("code") or "semantic_truncation"),
+                    _text(issue.get("message")) or "字段存在疑似半截句。",
+                    issue_path,
+                    auto_fixable=True,
+                    blocking=True,
+                )
+            )
+            continue
+        if bad_text and (bad_text in plain_text or bad_text in html_body):
+            issues.append(
+                _issue(
+                    "high",
+                    "visible_text_truncation",
+                    "最终成品中仍可见疑似半截句，发送前需阻断。",
+                    "plain_text",
+                    blocking=True,
+                )
+            )
+    return issues
+
+
 def _clean_text_field(path: str, value: str) -> str:
     normalized_path = _normalized_body_path(path)
     if path in {"subject", "brief.email_subject", "brief.subject"}:
@@ -215,7 +387,7 @@ def _daily_question_structure_issues(data: dict[str, Any]) -> list[dict[str, Any
     return issues
 
 
-def check_cleanliness(data: dict[str, Any]) -> dict[str, Any]:
+def check_cleanliness(data: dict[str, Any], *, enforce_daily_question_structure: bool = True) -> dict[str, Any]:
     issues: list[dict[str, Any]] = []
     brief = data.get("brief") if isinstance(data.get("brief"), dict) else {}
     for path, value in _walk_strings(brief, "brief"):
@@ -252,7 +424,9 @@ def check_cleanliness(data: dict[str, Any]) -> dict[str, Any]:
         issues.append(_issue("high", "leading_colon", "纯文本正文存在以冒号开头的行。", "plain_text", auto_fixable=True, blocking=True))
     if re.search(rf">\s*[{re.escape(LEADING_RESIDUE)}]", html_body):
         issues.append(_issue("high", "leading_colon", "HTML 模块正文存在以冒号开头的内容。", "html_body", auto_fixable=True, blocking=True))
-    issues.extend(_daily_question_structure_issues(data))
+    if enforce_daily_question_structure:
+        issues.extend(_daily_question_structure_issues(data))
+    issues.extend(_semantic_truncation_issues(data))
     issues.extend(_nonblocking_issues(data))
     return {"issues": issues}
 
@@ -295,6 +469,8 @@ def auto_fix_cleanliness(data: dict[str, Any], issues: list[dict[str, Any]]) -> 
     if isinstance(fixed.get("brief"), dict):
         for path, before in _walk_strings(fixed["brief"], "brief"):
             after = _clean_text_field(path, before)
+            if _has_semantic_truncation_issue(path, issues):
+                after = _repair_semantic_truncation(path, after)
             if after != before:
                 _set_path(fixed, path, after)
                 fixes.append(_fix("clean_brief_field", path, before, after))
@@ -345,17 +521,21 @@ def decide_gate_status(data: dict[str, Any], issues_after: list[dict[str, Any]],
     return {"ok": not unresolved, "status": status, "score": score, "fixes": fixes, "issues": issues_after, "unresolved_issues": unresolved}
 
 
-def pre_send_cleanliness_guard(data: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-    checked = check_cleanliness(data)
+def pre_send_cleanliness_guard(
+    data: dict[str, Any],
+    *,
+    enforce_daily_question_structure: bool = True,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    checked = check_cleanliness(data, enforce_daily_question_structure=enforce_daily_question_structure)
     fixed, fixes = auto_fix_cleanliness(data, checked.get("issues") or [])
     fixed = _sync_rendered_outputs(fixed)
-    rechecked = check_cleanliness(fixed)
+    rechecked = check_cleanliness(fixed, enforce_daily_question_structure=enforce_daily_question_structure)
     residual_fixable = [issue for issue in rechecked.get("issues") or [] if issue.get("auto_fixable")]
     if residual_fixable:
         fixed, second_fixes = auto_fix_cleanliness(fixed, residual_fixable)
         fixes.extend(second_fixes)
         fixed = _sync_rendered_outputs(fixed)
-        rechecked = check_cleanliness(fixed)
+        rechecked = check_cleanliness(fixed, enforce_daily_question_structure=enforce_daily_question_structure)
     report = decide_gate_status(fixed, rechecked.get("issues") or [], fixes)
     quality = fixed.get("quality") if isinstance(fixed.get("quality"), dict) else {}
     final = quality.get("final") if isinstance(quality.get("final"), dict) else {}
