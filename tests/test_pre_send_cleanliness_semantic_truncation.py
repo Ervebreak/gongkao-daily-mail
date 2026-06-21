@@ -11,6 +11,9 @@ def _payload() -> dict:
             "featured_article": {
                 "original_reading_focus": "从追问责任边界入手，避免答",
             },
+            "lite_paid_cta": {
+                "hook": "这些细节是申论对策题拿高",
+            },
             "today_takeaway": {
                 "framework": "把平台治理、部门协同和群",
                 "common_knowledge_points": [],
@@ -36,6 +39,7 @@ def _payload() -> dict:
     ("path", "expected"),
     [
         ("featured_article.original_reading_focus", "从追问责任边界入手，帮助作答避免空泛。"),
+        ("lite_paid_cta.hook", "这些细节是申论对策题拿高分的关键。"),
         ("quick_reads[0].one_sentence", "公开规则和纠偏机制有助于破解供需矛盾。"),
         ("quick_reads[1].one_sentence", "明确平台审核边界与过错责任认定。"),
         ("today_takeaway.framework", "把平台治理、部门协同和群众监督结合起来。"),

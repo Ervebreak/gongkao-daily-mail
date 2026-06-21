@@ -2462,7 +2462,8 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
                 "plain_text": plain_text,
                 "html_body": html_body,
                 "quality": candidate.get("quality") or {},
-            }
+            },
+            enforce_daily_question_structure=False,
         )
         candidate.update(
             {
