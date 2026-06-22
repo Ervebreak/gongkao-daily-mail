@@ -22,6 +22,7 @@ from email.utils import formataddr, parseaddr
 import requests
 
 from config import settings
+from email_renderer import render_plain_unsubscribe_text, render_unsubscribe_button
 from history import oss_config, oss_headers, oss_ready, oss_url
 from weekly_pdf_tracking import replace_weekly_pdf_tracking_placeholders
 
@@ -43,6 +44,8 @@ SUBSCRIBER_BASE_FIELDS = [
     "send_mode",
     "note",
     "reminder_sent",
+    "referral_code",
+    "referred_by",
 ]
 FULL_VARIANTS = {"full_normal", "full_trial_d3", "full_trial_d1", "full_trial_d0"}
 LITE_VARIANTS = {"free_lite", "expired_lite"}
@@ -131,6 +134,8 @@ def normalize_recipient_record(item: dict[str, Any]) -> dict[str, str]:
     normalized["send_mode"] = (normalized.get("send_mode") or "").strip().lower()
     normalized["note"] = normalized.get("note", "")
     normalized["reminder_sent"] = normalized.get("reminder_sent", "")
+    normalized["referral_code"] = normalized.get("referral_code", "").strip()
+    normalized["referred_by"] = normalized.get("referred_by", "").strip()
     return normalized
 
 
@@ -712,6 +717,118 @@ def personalize_html_for_recipient(html_body: str, recipient: dict[str, str]) ->
     )
 
 
+def personalize_plain_text_for_recipient(plain_text: str, recipient: dict[str, str]) -> str:
+    return (
+        plain_text.replace(FEEDBACK_UID_PLACEHOLDER, recipient.get("uid", ""))
+        .replace(FEEDBACK_EMAIL_HASH_PLACEHOLDER, recipient.get("email_hash", ""))
+    )
+
+
+def _recipient_referral_tier(recipient: dict[str, str]) -> str:
+    variant = str(recipient.get("variant") or "").strip()
+    if variant in FULL_VARIANTS:
+        return "full"
+    if variant in LITE_VARIANTS:
+        return "lite"
+    tier = str(recipient.get("tier") or "").strip().lower()
+    if tier in {"full", "lite"}:
+        return tier
+    send_mode = str(recipient.get("send_mode") or "").strip().lower()
+    if send_mode == "full":
+        return "full"
+    return "lite"
+
+
+def _referral_module_copy(recipient: dict[str, str]) -> dict[str, str] | None:
+    referral_code = str(recipient.get("referral_code") or "").strip()
+    referral_entry_url = settings.referral_entry_url.strip()
+    if not referral_code or not referral_entry_url:
+        return None
+    if _recipient_referral_tier(recipient) == "full":
+        return {
+            "title": "推荐给备考同学：",
+            "body": "如果你觉得完整版晨读对备考有帮助，也可以推荐给身边备考的同学先体验。对方可以通过你的推荐码领取 3 天完整版试看；如果后续付费订阅，你的完整版有效期延长 7 天。",
+        }
+    return {
+        "title": "推荐解锁完整版：",
+        "body": "如果你暂时还在观望完整版，也可以推荐给身边备考的同学先体验。对方可以通过你的推荐码领取 3 天完整版试看；如果后续付费订阅，你将获得 7 天完整版权益。",
+    }
+
+
+def _render_referral_plain_text(recipient: dict[str, str]) -> str:
+    copy = _referral_module_copy(recipient)
+    if not copy:
+        return ""
+    referral_code = str(recipient.get("referral_code") or "").strip()
+    referral_entry_url = settings.referral_entry_url.strip()
+    return (
+        f"{copy['title']}\n"
+        f"{copy['body']}\n"
+        f"你的推荐码：{referral_code}\n"
+        f"体验报名链接：{referral_entry_url}\n"
+        "对方报名时填写这个推荐码，我就能识别是你推荐的。"
+    )
+
+
+def _render_referral_html(recipient: dict[str, str]) -> str:
+    copy = _referral_module_copy(recipient)
+    if not copy:
+        return ""
+    referral_code = html.escape(str(recipient.get("referral_code") or "").strip())
+    referral_entry_url = html.escape(settings.referral_entry_url.strip(), quote=True)
+    return f"""
+    <div style="max-width:680px;margin:18px auto 10px;padding:0 12px;">
+      <div style="border:1px solid #dbe4f0;border-radius:18px;background:#f8fbff;padding:18px 18px 16px;">
+        <div style="font-size:16px;line-height:1.6;color:#1e3a5f;font-weight:800;margin-bottom:8px;">
+          {html.escape(copy["title"])}
+        </div>
+        <div style="font-size:14px;line-height:1.9;color:#334155;margin-bottom:10px;">
+          {html.escape(copy["body"])}
+        </div>
+        <div style="font-size:13px;line-height:1.9;color:#475569;">
+          <div><strong>你的推荐码：</strong>{referral_code}</div>
+          <div><strong>体验报名链接：</strong><a href="{referral_entry_url}" target="_blank" style="color:#165dff;text-decoration:none;">{referral_entry_url}</a></div>
+          <div>对方报名时填写这个推荐码，我就能识别是你推荐的。</div>
+        </div>
+      </div>
+    </div>
+    """
+
+
+def _insert_plain_text_before_unsubscribe(plain_text: str, addition: str, recipient: dict[str, str]) -> str:
+    if not addition or addition in plain_text:
+        return plain_text
+    unsubscribe_text = personalize_plain_text_for_recipient(render_plain_unsubscribe_text({}), recipient)
+    if unsubscribe_text and unsubscribe_text in plain_text:
+        return plain_text.replace(unsubscribe_text, f"{addition}\n\n{unsubscribe_text}", 1)
+    return f"{plain_text}\n\n{addition}"
+
+
+def _insert_html_before_unsubscribe(html_body: str, addition: str, recipient: dict[str, str]) -> str:
+    if not addition or addition in html_body:
+        return html_body
+    unsubscribe_button = personalize_html_for_recipient(render_unsubscribe_button({}), recipient)
+    if unsubscribe_button and unsubscribe_button in html_body:
+        return html_body.replace(unsubscribe_button, f"{addition}\n{unsubscribe_button}", 1)
+    if "</body>" in html_body:
+        return html_body.replace("</body>", f"{addition}\n</body>", 1)
+    return html_body + addition
+
+
+def personalize_email_payload_for_recipient(
+    plain_text: str,
+    html_body: str,
+    recipient: dict[str, str],
+) -> tuple[str, str]:
+    personalized_plain_text = personalize_plain_text_for_recipient(plain_text, recipient)
+    personalized_html = personalize_html_for_recipient(html_body, recipient)
+    referral_plain_text = _render_referral_plain_text(recipient)
+    referral_html = _render_referral_html(recipient)
+    personalized_plain_text = _insert_plain_text_before_unsubscribe(personalized_plain_text, referral_plain_text, recipient)
+    personalized_html = _insert_html_before_unsubscribe(personalized_html, referral_html, recipient)
+    return personalized_plain_text, personalized_html
+
+
 def personalize_html_for_bcc(html_body: str) -> str:
     return replace_weekly_pdf_tracking_placeholders(
         html_body.replace(FEEDBACK_UID_PLACEHOLDER, "bcc").replace(FEEDBACK_EMAIL_HASH_PLACEHOLDER, ""),
@@ -792,8 +909,8 @@ def _send_email_to_records(
             for recipient in recipients:
                 email = recipient["email"]
                 try:
-                    personalized_html = personalize_html_for_recipient(html_body, recipient)
-                    message = build_message(subject, plain_text, personalized_html, email, attachments=attachments)
+                    personalized_plain_text, personalized_html = personalize_email_payload_for_recipient(plain_text, html_body, recipient)
+                    message = build_message(subject, personalized_plain_text, personalized_html, email, attachments=attachments)
                     server.sendmail(settings.smtp_user, [email], message.as_string())
                     result["success_count"] = int(result["success_count"]) + 1
                     result["recipient_status"].append({"email": email, "uid": recipient.get("uid", ""), "status": "sent"})
@@ -1061,8 +1178,8 @@ def send_email(subject: str, plain_text: str, html_body: str, test_mode: bool = 
             for recipient in recipients:
                 email = recipient["email"]
                 try:
-                    personalized_html = personalize_html_for_recipient(html_body, recipient)
-                    message = build_message(subject, plain_text, personalized_html, email, attachments=attachments)
+                    personalized_plain_text, personalized_html = personalize_email_payload_for_recipient(plain_text, html_body, recipient)
+                    message = build_message(subject, personalized_plain_text, personalized_html, email, attachments=attachments)
                     server.sendmail(settings.smtp_user, [email], message.as_string())
                     result["success_count"] = int(result["success_count"]) + 1
                     result["recipient_status"].append({"email": email, "uid": recipient.get("uid", ""), "status": "sent"})

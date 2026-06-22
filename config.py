@@ -129,6 +129,7 @@ class Settings:
     subject_prefix: str = get_env("MAIL_SUBJECT_PREFIX", "【公考晨读】")
     feedback_base_url: str = get_env("FEEDBACK_BASE_URL").strip()
     paid_trial_entry_url: str = get_env("PAID_TRIAL_ENTRY_URL").strip()
+    referral_entry_url: str = get_env("REFERRAL_ENTRY_URL").strip()
     unsubscribe_email_raw: str = get_env("UNSUBSCRIBE_EMAIL").strip()
     unsubscribe_mode: str = get_env("UNSUBSCRIBE_MODE", "mailto").strip().lower()
     feedback_prefix: str = get_env("FEEDBACK_PREFIX", "gongkao-morning-mailer/feedback").strip().strip("/")
