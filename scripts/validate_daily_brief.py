@@ -12,55 +12,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from brief_quality import evaluate_brief_cleanliness
 from brief_schema import ensure_brief_schema
 from email_renderer import render_email_html, render_plain_text
-from duplication_quality import evaluate_duplication
-from expression_quality import evaluate_expression_quality
-from framework_quality import evaluate_framework_map
-from question_quality import evaluate_daily_question
-from quick_reads_quality import evaluate_quick_reads
-from takeaway_quality import evaluate_takeaway
-
-
-P0_CODES = {
-    "missing_question",
-    "missing_task",
-    "too_broad",
-    "missing_candidate_answer",
-    "truncated_answer",
-    "isolated_number",
-    "incomplete_sentence",
-    "incomplete_label",
-    "exam_migration_step",
-    "missing_main_line",
-    "too_few_steps",
-    "empty_golden_sentence",
-    "truncated_takeaway",
-    "email_too_short",
-    "missing_html",
-    "dev_marker_leaked",
-    "python_list_leaked",
-    "truncated_email",
-    "quick_read_dev_marker",
-    "empty_quick_read",
-    "quick_reads_all_news_summary",
-    "dev_marker_repeated",
-    "abnormal_copy_duplication",
-    "expression_dev_marker",
-    "expression_truncated",
-}
-
-
-MODULE_LABELS = {
-    "daily_question": "今日一题",
-    "framework_map": "框架图",
-    "today_takeaway": "今日可带走",
-    "brief_cleanliness": "整封邮件清洁度",
-    "quick_reads": "速读考试价值",
-    "duplication": "跨模块重复",
-    "expression_quality": "考生表达质感",
-}
+from pre_send_cleanliness import pre_send_cleanliness_guard
+from quality_gate import MODULE_LABELS, build_gate_from_quality_map, evaluate_all_quality, evaluate_selection_quality
 
 
 def load_json(path: Path) -> Any:
@@ -72,25 +27,27 @@ def write_json(path: Path, data: Any) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
 
 
-def issue_level(module: str, issue: dict[str, Any]) -> str:
-    severity = str(issue.get("severity") or "").lower()
-    code = str(issue.get("code") or "")
-    if severity == "high" and code in P0_CODES:
+def _issue_key(issue: dict[str, Any]) -> tuple[str, str]:
+    return str(issue.get("module") or ""), str(issue.get("code") or "")
+
+
+def _module_issue_level(module: str, issue: dict[str, Any], gate_p0: set[tuple[str, str]]) -> str:
+    if (module, str(issue.get("code") or "")) in gate_p0:
         return "P0"
+    severity = str(issue.get("severity") or "").lower()
     if severity in {"high", "medium"}:
         return "P1"
     return "P2"
 
 
-def normalize_module_result(module: str, result: dict[str, Any]) -> dict[str, Any]:
+def normalize_module_result(module: str, result: dict[str, Any], gate_p0: set[tuple[str, str]]) -> dict[str, Any]:
     issues = []
     for issue in result.get("issues") or []:
         if not isinstance(issue, dict):
             continue
-        level = issue_level(module, issue)
         issues.append(
             {
-                "level": level,
+                "level": _module_issue_level(module, issue, gate_p0),
                 "severity": issue.get("severity"),
                 "code": issue.get("code"),
                 "message": issue.get("message"),
@@ -99,12 +56,7 @@ def normalize_module_result(module: str, result: dict[str, Any]) -> dict[str, An
     p0_count = sum(1 for item in issues if item.get("level") == "P0")
     p1_count = sum(1 for item in issues if item.get("level") == "P1")
     p2_count = sum(1 for item in issues if item.get("level") == "P2")
-    if p0_count:
-        status = "block"
-    elif p1_count:
-        status = "review"
-    else:
-        status = "pass"
+    status = "block" if p0_count else ("review" if p1_count else "pass")
     return {
         "label": MODULE_LABELS.get(module, module),
         "status": status,
@@ -118,41 +70,22 @@ def normalize_module_result(module: str, result: dict[str, Any]) -> dict[str, An
     }
 
 
-def summarize_report(modules: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    p0_count = sum(item.get("p0_count", 0) for item in modules.values())
+def summarize_report(modules: dict[str, dict[str, Any]], gate: dict[str, Any]) -> dict[str, Any]:
+    p0_count = int(gate.get("p0_count") or 0)
     p1_count = sum(item.get("p1_count", 0) for item in modules.values())
     p2_count = sum(item.get("p2_count", 0) for item in modules.values())
-    p0_issues = []
-    rewrite_required_modules = []
-    for module, result in modules.items():
-        if result.get("status") in {"block", "review"} and module != "brief_cleanliness":
-            rewrite_required_modules.append(module)
-        for issue in result.get("issues") or []:
-            if issue.get("level") == "P0":
-                p0_issues.append(
-                    {
-                        "module": module,
-                        "code": issue.get("code"),
-                        "message": issue.get("message"),
-                    }
-                )
-    if p0_count:
-        overall = "block"
-        send_decision = "block"
-    elif p1_count:
-        overall = "review"
-        send_decision = "allow_after_rewrite"
-    else:
-        overall = "pass"
-        send_decision = "allow"
+    rewrite_required_modules = [module for module, result in modules.items() if result.get("status") in {"block", "review"} and module != "brief_cleanliness"]
+    overall = "block" if p0_count else ("review" if p1_count else "pass")
+    send_decision = "block" if p0_count else ("allow_after_rewrite" if p1_count else "allow")
     return {
         "overall": overall,
         "p0_count": p0_count,
         "p1_count": p1_count,
         "p2_count": p2_count,
-        "p0_issues": p0_issues[:12],
+        "p0_issues": gate.get("p0_issues") or [],
         "send_decision": send_decision,
         "rewrite_required_modules": rewrite_required_modules,
+        "quality_gate": gate,
     }
 
 
@@ -164,22 +97,28 @@ def build_report(brief: dict[str, Any], plain_text: str | None = None, html_body
     if html_body is None:
         html_body = render_email_html(brief)
 
-    raw_results = {
-        "daily_question": evaluate_daily_question(brief),
-        "framework_map": evaluate_framework_map(brief),
-        "today_takeaway": evaluate_takeaway(brief),
-        "brief_cleanliness": evaluate_brief_cleanliness(brief, plain_text, html_body),
-        "quick_reads": evaluate_quick_reads(brief),
-        "duplication": evaluate_duplication(brief),
-        "expression_quality": evaluate_expression_quality(brief),
-    }
-    modules = {
-        module: normalize_module_result(module, result)
-        for module, result in raw_results.items()
-    }
-    summary = summarize_report(modules)
+    guarded, cleanliness_quality = pre_send_cleanliness_guard(
+        {"brief": brief, "subject": str(brief.get("email_subject") or ""), "plain_text": plain_text, "html_body": html_body, "quality": {}}
+    )
+    brief = guarded.get("brief") if isinstance(guarded.get("brief"), dict) else brief
+    plain_text = str(guarded.get("plain_text") or plain_text)
+    html_body = str(guarded.get("html_body") or html_body)
+    selection_quality = evaluate_selection_quality(brief)
+    raw_results = evaluate_all_quality(
+        brief,
+        plain_text,
+        html_body,
+        test_invocation=True,
+        selection_quality=selection_quality,
+        cleanliness_quality=cleanliness_quality,
+        latest_json={"brief": brief},
+    )
+    gate = build_gate_from_quality_map(raw_results, plain_text=plain_text, html_body=html_body)
+    gate_p0 = {_issue_key(issue) for issue in (gate.get("p0_issues") or []) if isinstance(issue, dict)}
+    modules = {module: normalize_module_result(module, result, gate_p0) for module, result in raw_results.items()}
+    summary = summarize_report(modules, gate)
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         **summary,
         "schema_warnings": schema_warnings,
         "modules": modules,
@@ -191,7 +130,6 @@ def build_report(brief: dict[str, Any], plain_text: str | None = None, html_body
 
 
 def unwrap_input_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], str | None, str | None, str | None, str]:
-    """Accept either a raw brief JSON or a full candidate JSON wrapper."""
     if isinstance(payload.get("brief"), dict):
         return (
             payload["brief"],
