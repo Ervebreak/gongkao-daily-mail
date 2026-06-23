@@ -178,7 +178,7 @@ def _write_subscribers_text(text: str, source: str) -> dict[str, Any]:
         cfg = oss_config()
         response = requests.put(
             oss_url({**cfg, "object_key": object_key}),
-            data=text.encode("utf-8"),
+            data=text.encode("utf-8-sig"),
             headers=oss_headers("PUT", {**cfg, "object_key": object_key}, "text/csv; charset=utf-8"),
             timeout=20,
         )
@@ -187,7 +187,7 @@ def _write_subscribers_text(text: str, source: str) -> dict[str, Any]:
 
     path = Path(source)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    path.write_text(text, encoding="utf-8-sig")
     return {"storage": "local", "path": str(path), "oss_write_ok": False}
 
 

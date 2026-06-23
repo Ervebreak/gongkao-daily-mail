@@ -22,6 +22,7 @@ from email.utils import formataddr, parseaddr
 import requests
 
 from config import settings
+from email_renderer import render_plain_unsubscribe_text, render_unsubscribe_button
 from history import oss_config, oss_headers, oss_ready, oss_url
 from weekly_pdf_tracking import replace_weekly_pdf_tracking_placeholders
 
@@ -43,6 +44,8 @@ SUBSCRIBER_BASE_FIELDS = [
     "send_mode",
     "note",
     "reminder_sent",
+    "referral_code",
+    "referred_by",
 ]
 FULL_VARIANTS = {"full_normal", "full_trial_d3", "full_trial_d1", "full_trial_d0"}
 LITE_VARIANTS = {"free_lite", "expired_lite"}
@@ -101,6 +104,41 @@ def _fallback_uid(email: str, prefix: str = "u") -> str:
     return f"{prefix}_{_email_hash(email)[:10]}"
 
 
+def _referral_code_for_email(email: str) -> str:
+    digest = hashlib.sha256(email.strip().lower().encode("utf-8")).hexdigest()[:6].upper()
+    return f"GK{digest}"
+
+
+def _referral_code_candidates(email: str) -> list[str]:
+    normalized_email = email.strip().lower()
+    digest = hashlib.sha256(normalized_email.encode("utf-8")).hexdigest().upper()
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for length in (6, 8, 9, 10, 11, 12):
+        code = f"GK{digest[:length]}"
+        if code not in seen:
+            seen.add(code)
+            candidates.append(code)
+    max_length = 12
+    for start in range(1, max(1, len(digest) - max_length + 1)):
+        code = f"GK{digest[start:start + max_length]}"
+        if len(code) != 2 + max_length:
+            continue
+        if code not in seen:
+            seen.add(code)
+            candidates.append(code)
+    return candidates
+
+
+def _unique_referral_code_for_email(email: str, used_codes: dict[str, str]) -> str:
+    normalized_email = email.strip().lower()
+    for code in _referral_code_candidates(email):
+        owner = used_codes.get(code, "")
+        if not owner or owner == normalized_email:
+            return code
+    raise RuntimeError(f"Unable to generate unique referral code for {normalized_email}")
+
+
 def _subscriber_fieldnames(fieldnames: list[str] | None) -> list[str]:
     ordered: list[str] = []
     for name in fieldnames or []:
@@ -131,6 +169,8 @@ def normalize_recipient_record(item: dict[str, Any]) -> dict[str, str]:
     normalized["send_mode"] = (normalized.get("send_mode") or "").strip().lower()
     normalized["note"] = normalized.get("note", "")
     normalized["reminder_sent"] = normalized.get("reminder_sent", "")
+    normalized["referral_code"] = normalized.get("referral_code", "").strip()
+    normalized["referred_by"] = normalized.get("referred_by", "").strip()
     return normalized
 
 
@@ -150,6 +190,48 @@ def normalize_recipient_records(raw_items: list[dict[str, Any]]) -> list[dict[st
     return recipients
 
 
+def apply_referral_code_backfill(table: dict[str, Any]) -> dict[str, Any]:
+    records = table.get("records") if isinstance(table.get("records"), list) else []
+    source_fieldnames = [str(name or "").strip() for name in (table.get("source_fieldnames") or []) if str(name or "").strip()]
+    fieldnames = _subscriber_fieldnames(table.get("fieldnames") or source_fieldnames)
+    generated_emails: list[str] = []
+    generated_count = 0
+    used_codes: dict[str, str] = {}
+
+    for item in records:
+        if not isinstance(item, dict):
+            continue
+        email = str(item.get("email") or "").strip().lower()
+        referral_code = str(item.get("referral_code") or "").strip()
+        if email and referral_code and referral_code not in used_codes:
+            used_codes[referral_code] = email
+
+    for item in records:
+        if not isinstance(item, dict):
+            continue
+        email = str(item.get("email") or "").strip()
+        referral_code = str(item.get("referral_code") or "").strip()
+        referred_by = str(item.get("referred_by") or "").strip()
+        item["referred_by"] = referred_by
+        if not email or referral_code:
+            item["referral_code"] = referral_code
+            continue
+        generated = _unique_referral_code_for_email(email, used_codes)
+        item["referral_code"] = generated
+        used_codes[generated] = email.lower()
+        generated_emails.append(email.lower())
+        generated_count += 1
+
+    meta = {
+        "subscribers_referral_code_updates": generated_count,
+        "subscribers_referral_code_update_emails": generated_emails,
+        "subscribers_referral_field_backfill_needed": "referral_code" not in source_fieldnames or "referred_by" not in source_fieldnames,
+    }
+    table["fieldnames"] = fieldnames
+    table["referral_backfill_meta"] = meta
+    return meta
+
+
 def parse_subscribers_csv(csv_text: str) -> list[str]:
     return [item["email"] for item in parse_subscribers_csv_records(csv_text)]
 
@@ -165,7 +247,9 @@ def parse_subscribers_csv_table(csv_text: str) -> dict[str, Any]:
         record = {name: row.get(name, "") for name in fieldnames}
         record["_row_index"] = str(row_index)
         rows.append(record)
-    return {"fieldnames": fieldnames, "source_fieldnames": source_fieldnames, "records": normalize_recipient_records(rows)}
+    table = {"fieldnames": fieldnames, "source_fieldnames": source_fieldnames, "records": normalize_recipient_records(rows)}
+    apply_referral_code_backfill(table)
+    return table
 
 
 def parse_subscribers_csv_all_records(csv_text: str) -> list[dict[str, str]]:
@@ -580,6 +664,11 @@ def serialize_subscribers_csv(records: list[dict[str, str]], fieldnames: list[st
     return buffer.getvalue()
 
 
+def serialize_subscribers_csv_bytes(records: list[dict[str, str]], fieldnames: list[str] | None = None) -> tuple[str, bytes]:
+    text = serialize_subscribers_csv(records, fieldnames)
+    return text, text.encode("utf-8-sig")
+
+
 def backup_and_save_subscribers_table_to_oss(table: dict[str, Any]) -> dict[str, Any]:
     meta: dict[str, Any] = {
         "subscribers_write_ok": False,
@@ -595,13 +684,15 @@ def backup_and_save_subscribers_table_to_oss(table: dict[str, Any]) -> dict[str,
         return meta
     records = normalize_recipient_records(table.get("records") or [])
     fieldnames = _subscriber_fieldnames(table.get("fieldnames") or [])
-    body_text = serialize_subscribers_csv(records, fieldnames)
-    body = body_text.encode("utf-8")
-    backup_body = str(table.get("raw_text") or body_text).encode("utf-8")
+    body_text, body = serialize_subscribers_csv_bytes(records, fieldnames)
+    backup_source_text = str(table.get("raw_text") or body_text)
+    backup_body = backup_source_text.encode("utf-8-sig")
     object_key = str(table.get("object_key") or settings.subscribers_oss_key).strip().lstrip("/")
     backup_key = _subscriber_backup_object_key(object_key)
     source_cfg = _subscribers_oss_config(object_key)
     backup_cfg = _subscribers_oss_config(backup_key)
+    meta["subscribers_object_key"] = object_key
+    meta["subscribers_backup_object_key"] = backup_key
     backup_response = requests.put(
         oss_url(backup_cfg),
         headers=oss_headers("PUT", backup_cfg, "text/csv; charset=utf-8"),
@@ -639,6 +730,13 @@ def subscribers_table_needs_reminder_field_backfill(table: dict[str, Any] | None
         return False
     source_fieldnames = [str(name or "").strip() for name in (table.get("source_fieldnames") or []) if str(name or "").strip()]
     return "reminder_sent" not in source_fieldnames
+
+
+def subscribers_table_needs_referral_backfill(table: dict[str, Any] | None) -> bool:
+    if not isinstance(table, dict):
+        return False
+    meta = table.get("referral_backfill_meta") if isinstance(table.get("referral_backfill_meta"), dict) else {}
+    return bool(meta.get("subscribers_referral_field_backfill_needed")) or int(meta.get("subscribers_referral_code_updates", 0)) > 0
 
 
 def apply_successful_reminder_updates(
@@ -710,6 +808,118 @@ def personalize_html_for_recipient(html_body: str, recipient: dict[str, str]) ->
         .replace(FEEDBACK_EMAIL_HASH_PLACEHOLDER, recipient.get("email_hash", "")),
         email,
     )
+
+
+def personalize_plain_text_for_recipient(plain_text: str, recipient: dict[str, str]) -> str:
+    return (
+        plain_text.replace(FEEDBACK_UID_PLACEHOLDER, recipient.get("uid", ""))
+        .replace(FEEDBACK_EMAIL_HASH_PLACEHOLDER, recipient.get("email_hash", ""))
+    )
+
+
+def _recipient_referral_tier(recipient: dict[str, str]) -> str:
+    variant = str(recipient.get("variant") or "").strip()
+    if variant in FULL_VARIANTS:
+        return "full"
+    if variant in LITE_VARIANTS:
+        return "lite"
+    tier = str(recipient.get("tier") or "").strip().lower()
+    if tier in {"full", "lite"}:
+        return tier
+    send_mode = str(recipient.get("send_mode") or "").strip().lower()
+    if send_mode == "full":
+        return "full"
+    return "lite"
+
+
+def _referral_module_copy(recipient: dict[str, str]) -> dict[str, str] | None:
+    referral_code = str(recipient.get("referral_code") or "").strip()
+    referral_entry_url = settings.referral_entry_url.strip()
+    if not referral_code or not referral_entry_url:
+        return None
+    if _recipient_referral_tier(recipient) == "full":
+        return {
+            "title": "推荐给备考同学：",
+            "body": "如果你觉得完整版晨读对备考有帮助，也可以推荐给身边备考的同学先体验。对方可以通过你的推荐码领取 3 天完整版试看；如果后续付费订阅，你的完整版有效期延长 7 天。",
+        }
+    return {
+        "title": "推荐解锁完整版：",
+        "body": "如果你暂时还在观望完整版，也可以推荐给身边备考的同学先体验。对方可以通过你的推荐码领取 3 天完整版试看；如果后续付费订阅，你将获得 7 天完整版权益。",
+    }
+
+
+def _render_referral_plain_text(recipient: dict[str, str]) -> str:
+    copy = _referral_module_copy(recipient)
+    if not copy:
+        return ""
+    referral_code = str(recipient.get("referral_code") or "").strip()
+    referral_entry_url = settings.referral_entry_url.strip()
+    return (
+        f"{copy['title']}\n"
+        f"{copy['body']}\n"
+        f"你的推荐码：{referral_code}\n"
+        f"体验报名链接：{referral_entry_url}\n"
+        "对方报名时填写这个推荐码，我就能识别是你推荐的。"
+    )
+
+
+def _render_referral_html(recipient: dict[str, str]) -> str:
+    copy = _referral_module_copy(recipient)
+    if not copy:
+        return ""
+    referral_code = html.escape(str(recipient.get("referral_code") or "").strip())
+    referral_entry_url = html.escape(settings.referral_entry_url.strip(), quote=True)
+    return f"""
+    <div style="max-width:680px;margin:18px auto 10px;padding:0 12px;">
+      <div style="border:1px solid #dbe4f0;border-radius:18px;background:#f8fbff;padding:18px 18px 16px;">
+        <div style="font-size:16px;line-height:1.6;color:#1e3a5f;font-weight:800;margin-bottom:8px;">
+          {html.escape(copy["title"])}
+        </div>
+        <div style="font-size:14px;line-height:1.9;color:#334155;margin-bottom:10px;">
+          {html.escape(copy["body"])}
+        </div>
+        <div style="font-size:13px;line-height:1.9;color:#475569;">
+          <div><strong>你的推荐码：</strong>{referral_code}</div>
+          <div><strong>体验报名链接：</strong><a href="{referral_entry_url}" target="_blank" style="color:#165dff;text-decoration:none;">{referral_entry_url}</a></div>
+          <div>对方报名时填写这个推荐码，我就能识别是你推荐的。</div>
+        </div>
+      </div>
+    </div>
+    """
+
+
+def _insert_plain_text_before_unsubscribe(plain_text: str, addition: str, recipient: dict[str, str]) -> str:
+    if not addition or addition in plain_text:
+        return plain_text
+    unsubscribe_text = personalize_plain_text_for_recipient(render_plain_unsubscribe_text({}), recipient)
+    if unsubscribe_text and unsubscribe_text in plain_text:
+        return plain_text.replace(unsubscribe_text, f"{addition}\n\n{unsubscribe_text}", 1)
+    return f"{plain_text}\n\n{addition}"
+
+
+def _insert_html_before_unsubscribe(html_body: str, addition: str, recipient: dict[str, str]) -> str:
+    if not addition or addition in html_body:
+        return html_body
+    unsubscribe_button = personalize_html_for_recipient(render_unsubscribe_button({}), recipient)
+    if unsubscribe_button and unsubscribe_button in html_body:
+        return html_body.replace(unsubscribe_button, f"{addition}\n{unsubscribe_button}", 1)
+    if "</body>" in html_body:
+        return html_body.replace("</body>", f"{addition}\n</body>", 1)
+    return html_body + addition
+
+
+def personalize_email_payload_for_recipient(
+    plain_text: str,
+    html_body: str,
+    recipient: dict[str, str],
+) -> tuple[str, str]:
+    personalized_plain_text = personalize_plain_text_for_recipient(plain_text, recipient)
+    personalized_html = personalize_html_for_recipient(html_body, recipient)
+    referral_plain_text = _render_referral_plain_text(recipient)
+    referral_html = _render_referral_html(recipient)
+    personalized_plain_text = _insert_plain_text_before_unsubscribe(personalized_plain_text, referral_plain_text, recipient)
+    personalized_html = _insert_html_before_unsubscribe(personalized_html, referral_html, recipient)
+    return personalized_plain_text, personalized_html
 
 
 def personalize_html_for_bcc(html_body: str) -> str:
@@ -792,8 +1002,8 @@ def _send_email_to_records(
             for recipient in recipients:
                 email = recipient["email"]
                 try:
-                    personalized_html = personalize_html_for_recipient(html_body, recipient)
-                    message = build_message(subject, plain_text, personalized_html, email, attachments=attachments)
+                    personalized_plain_text, personalized_html = personalize_email_payload_for_recipient(plain_text, html_body, recipient)
+                    message = build_message(subject, personalized_plain_text, personalized_html, email, attachments=attachments)
                     server.sendmail(settings.smtp_user, [email], message.as_string())
                     result["success_count"] = int(result["success_count"]) + 1
                     result["recipient_status"].append({"email": email, "uid": recipient.get("uid", ""), "status": "sent"})
@@ -987,11 +1197,19 @@ def send_segmented_email(
         "subscribers_reminder_update_emails": [],
         "subscribers_reminder_update_variants": {},
     }
+    referral_update_meta: dict[str, Any] = {
+        "subscribers_referral_code_updates": 0,
+        "subscribers_referral_code_update_emails": [],
+        "subscribers_referral_field_backfill_needed": False,
+    }
     try_expiration_update_meta: dict[str, Any] = {
         "subscribers_try_expiration_updates": 0,
         "subscribers_try_expiration_update_emails": [],
     }
     needs_reminder_field_backfill = subscribers_table_needs_reminder_field_backfill(subscribers_table)
+    needs_referral_backfill = subscribers_table_needs_referral_backfill(subscribers_table)
+    if isinstance(subscribers_table, dict):
+        referral_update_meta = dict(subscribers_table.get("referral_backfill_meta") or referral_update_meta)
     if subscribers_table and not test_mode and str(subscribers_table.get("storage") or "").lower() == "oss":
         if enable_trial_reminders:
             reminder_update_meta = apply_successful_reminder_updates(subscribers_table, variant_results)
@@ -1000,6 +1218,7 @@ def send_segmented_email(
             reminder_update_meta["subscribers_reminder_updates"] > 0
             or try_expiration_update_meta["subscribers_try_expiration_updates"] > 0
             or needs_reminder_field_backfill
+            or needs_referral_backfill
         ):
             subscribers_write_meta = backup_and_save_subscribers_table_to_oss(subscribers_table)
             subscribers_write_meta["subscribers_write_skipped"] = False
@@ -1025,6 +1244,7 @@ def send_segmented_email(
         "variant_results": variant_results,
         "variant_counts": audit.get("variant_counts") or {},
         **reminder_update_meta,
+        **referral_update_meta,
         **try_expiration_update_meta,
         **subscribers_write_meta,
         "send_audit": audit,
@@ -1061,8 +1281,8 @@ def send_email(subject: str, plain_text: str, html_body: str, test_mode: bool = 
             for recipient in recipients:
                 email = recipient["email"]
                 try:
-                    personalized_html = personalize_html_for_recipient(html_body, recipient)
-                    message = build_message(subject, plain_text, personalized_html, email, attachments=attachments)
+                    personalized_plain_text, personalized_html = personalize_email_payload_for_recipient(plain_text, html_body, recipient)
+                    message = build_message(subject, personalized_plain_text, personalized_html, email, attachments=attachments)
                     server.sendmail(settings.smtp_user, [email], message.as_string())
                     result["success_count"] = int(result["success_count"]) + 1
                     result["recipient_status"].append({"email": email, "uid": recipient.get("uid", ""), "status": "sent"})

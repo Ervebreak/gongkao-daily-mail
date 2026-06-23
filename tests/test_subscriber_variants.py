@@ -7,6 +7,7 @@ from email_sender import (
     apply_successful_reminder_updates,
     recipient_variant,
     render_variant_email_payloads,
+    serialize_subscribers_csv_bytes,
     serialize_subscribers_csv,
     send_segmented_email,
     subscribers_table_needs_reminder_field_backfill,
@@ -300,6 +301,66 @@ def test_send_segmented_email_writes_when_reminder_field_missing(monkeypatch) ->
     assert result["subscribers_write_ok"] is True
 
 
+def test_send_segmented_email_writes_when_referral_code_needs_backfill(monkeypatch) -> None:
+    def fake_send(*args, **kwargs):
+        recipients = kwargs.get("recipients") if "recipients" in kwargs else args[3]
+        return {
+            "send_mode": "individual",
+            "recipient_source": kwargs.get("recipient_source", "test"),
+            "valid_recipient_count": len(recipients),
+            "success_count": len(recipients),
+            "fail_count": 0,
+            "recipient_status": [{"email": item["email"], "status": "sent"} for item in recipients],
+            "failures": [],
+        }
+
+    captured: dict[str, object] = {}
+
+    def fake_backup(table):
+        captured["object_key"] = table.get("object_key")
+        captured["records"] = table.get("records")
+        return {
+            "subscribers_write_ok": True,
+            "subscribers_backup_ok": True,
+            "subscribers_object_key": table.get("object_key"),
+            "subscribers_backup_object_key": "gongkao-morning-mailer/subscribers.backup.csv",
+        }
+
+    monkeypatch.setattr(email_sender, "_send_email_to_records", fake_send)
+    monkeypatch.setattr(email_sender, "backup_and_save_subscribers_table_to_oss", fake_backup)
+
+    segments = split_recipient_records(
+        [{"email": "user@example.com", "status": "active", "plan": "free", "paid_until": "", "send_mode": "lite"}],
+        today="2026-06-07",
+    )
+    subscribers_table = email_sender.parse_subscribers_csv_table(
+        "email,status,plan,paid_until,send_mode\n"
+        "user@example.com,active,free,,lite\n"
+    )
+    subscribers_table["storage"] = "oss"
+    subscribers_table["object_key"] = "gongkao-morning-mailer/subscribers.csv"
+
+    result = send_segmented_email(
+        "测试主题",
+        "FULL",
+        "<html><body>FULL</body></html>",
+        "LITE",
+        "<html><body>LITE</body></html>",
+        delivery_date="2026-06-07",
+        test_mode=False,
+        segments=segments,
+        recipient_source="test",
+        enable_trial_reminders=True,
+        subscribers_table=subscribers_table,
+    )
+
+    assert result["subscribers_write_skipped"] is False
+    assert result["subscribers_write_ok"] is True
+    assert result["subscribers_referral_code_updates"] == 1
+    assert captured["object_key"] == "gongkao-morning-mailer/subscribers.csv"
+    assert captured["records"][0]["referral_code"].startswith("GK")
+
+
 def test_send_segmented_email_writes_when_try_plan_expires(monkeypatch) -> None:
     def fake_send(*args, **kwargs):
         recipients = kwargs.get("recipients") if "recipients" in kwargs else args[3]
@@ -313,8 +374,16 @@ def test_send_segmented_email_writes_when_try_plan_expires(monkeypatch) -> None:
             "failures": [],
         }
 
+    captured: dict[str, object] = {}
+
     def fake_backup(table):
-        return {"subscribers_write_ok": True, "subscribers_backup_ok": True}
+        captured["object_key"] = table.get("object_key")
+        return {
+            "subscribers_write_ok": True,
+            "subscribers_backup_ok": True,
+            "subscribers_object_key": table.get("object_key"),
+            "subscribers_backup_object_key": "gongkao-morning-mailer/subscribers.backup.csv",
+        }
 
     monkeypatch.setattr(email_sender, "_send_email_to_records", fake_send)
     monkeypatch.setattr(email_sender, "backup_and_save_subscribers_table_to_oss", fake_backup)
@@ -328,6 +397,7 @@ def test_send_segmented_email_writes_when_try_plan_expires(monkeypatch) -> None:
         "fieldnames": ["email", "status", "plan", "paid_until", "send_mode", "note"],
         "source_fieldnames": ["email", "status", "plan", "paid_until", "send_mode", "note"],
         "storage": "oss",
+        "object_key": "gongkao-morning-mailer/subscribers.csv",
     }
 
     result = send_segmented_email(
@@ -347,5 +417,74 @@ def test_send_segmented_email_writes_when_try_plan_expires(monkeypatch) -> None:
     assert result["subscribers_write_skipped"] is False
     assert result["subscribers_write_ok"] is True
     assert result["subscribers_try_expiration_updates"] == 1
+    assert captured["object_key"] == "gongkao-morning-mailer/subscribers.csv"
     assert subscribers_table["records"][0]["plan"] == "free"
     assert subscribers_table["records"][0]["send_mode"] == "lite"
+
+
+def test_backup_and_save_subscribers_table_to_oss_overwrites_same_main_key(monkeypatch) -> None:
+    calls: list[dict[str, str]] = []
+
+    class _Response:
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            return None
+
+    def fake_put(url, headers=None, data=None, timeout=None):
+        calls.append({"url": url, "content_type": headers.get("Content-Type", "") if isinstance(headers, dict) else ""})
+        return _Response()
+
+    monkeypatch.setattr(email_sender, "oss_ready", lambda: True)
+    monkeypatch.setattr(
+        email_sender,
+        "oss_config",
+        lambda: {
+            "endpoint": "https://oss-example.aliyuncs.com",
+            "bucket": "bucket-demo",
+            "access_key_id": "ak",
+            "access_key_secret": "sk",
+        },
+    )
+    monkeypatch.setattr(email_sender, "oss_url", lambda cfg: f"https://oss.example/{cfg['object_key']}")
+    monkeypatch.setattr(email_sender, "oss_headers", lambda method, cfg, content_type=None: {"Content-Type": content_type or ""})
+    monkeypatch.setattr(email_sender.requests, "put", fake_put)
+    original_storage = email_sender.settings.subscribers_storage
+    original_key = email_sender.settings.subscribers_oss_key
+    original_bucket = email_sender.settings.oss_bucket
+    object.__setattr__(email_sender.settings, "subscribers_storage", "oss")
+    object.__setattr__(email_sender.settings, "subscribers_oss_key", "gongkao-morning-mailer/subscribers.csv")
+    object.__setattr__(email_sender.settings, "oss_bucket", "bucket-demo")
+
+    try:
+        table = {
+            "records": [{"email": "user@example.com", "status": "active", "plan": "free", "paid_until": "", "send_mode": "lite", "referral_code": "GKABCD12"}],
+            "fieldnames": ["email", "status", "plan", "paid_until", "send_mode", "referral_code"],
+            "source_fieldnames": ["email", "status", "plan", "paid_until", "send_mode", "referral_code"],
+            "storage": "oss",
+            "object_key": "gongkao-morning-mailer/subscribers.csv",
+            "raw_text": "email,status,plan,paid_until,send_mode,referral_code\nuser@example.com,active,free,,lite,GKABCD12\n",
+        }
+
+        meta = email_sender.backup_and_save_subscribers_table_to_oss(table)
+    finally:
+        object.__setattr__(email_sender.settings, "subscribers_storage", original_storage)
+        object.__setattr__(email_sender.settings, "subscribers_oss_key", original_key)
+        object.__setattr__(email_sender.settings, "oss_bucket", original_bucket)
+
+    assert meta["subscribers_write_ok"] is True
+    assert meta["subscribers_object_key"] == "gongkao-morning-mailer/subscribers.csv"
+    assert meta["subscribers_backup_object_key"] != meta["subscribers_object_key"]
+    assert "subscribers.backup_" in calls[0]["url"]
+    assert calls[1]["url"].endswith("gongkao-morning-mailer/subscribers.csv")
+
+
+def test_serialize_subscribers_csv_bytes_uses_utf8_bom() -> None:
+    text, data = serialize_subscribers_csv_bytes(
+        [{"email": "user@example.com", "status": "active", "nickname": "中文昵称"}],
+        ["email", "status", "nickname"],
+    )
+
+    assert text.startswith("email,status,nickname")
+    assert data.startswith(b"\xef\xbb\xbf")
+    assert "中文昵称" in data.decode("utf-8-sig")
