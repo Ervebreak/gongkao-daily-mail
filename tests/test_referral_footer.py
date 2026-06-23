@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import types
+from pathlib import Path
 
 sys.modules.setdefault("requests", types.SimpleNamespace())
 
@@ -260,3 +261,38 @@ def test_existing_referral_code_is_not_overwritten() -> None:
 
     assert table["records"][0]["referral_code"] == "KEEP01"
     assert table["referral_backfill_meta"]["subscribers_referral_code_updates"] == 0
+
+
+def test_referral_code_collision_expands_hash_length(monkeypatch) -> None:
+    class _FakeHash:
+        def __init__(self, value: str) -> None:
+            self.value = value
+
+        def hexdigest(self) -> str:
+            return self.value
+
+    digest_map = {
+        b"alpha@example.com": "ABCDEF1100000000000000000000000000000000000000000000000000000000",
+        b"beta@example.com": "ABCDEF2200000000000000000000000000000000000000000000000000000000",
+    }
+
+    def fake_sha256(payload: bytes) -> _FakeHash:
+        return _FakeHash(digest_map[payload])
+
+    monkeypatch.setattr(email_sender.hashlib, "sha256", fake_sha256)
+
+    table = email_sender.parse_subscribers_csv_table(
+        "uid,email,status,plan,paid_until,send_mode\n"
+        "u1,alpha@example.com,active,free,,lite\n"
+        "u2,beta@example.com,active,free,,lite\n"
+    )
+
+    assert table["records"][0]["referral_code"] == "GKABCDEF"
+    assert table["records"][1]["referral_code"] == "GKABCDEF22"
+    assert table["referral_backfill_meta"]["subscribers_referral_code_updates"] == 2
+
+
+def test_env_example_contains_referral_entry_url() -> None:
+    content = Path(__file__).resolve().parents[1].joinpath(".env.example").read_text(encoding="utf-8")
+
+    assert "REFERRAL_ENTRY_URL=" in content

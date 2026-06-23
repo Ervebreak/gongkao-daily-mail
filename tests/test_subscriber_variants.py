@@ -7,6 +7,7 @@ from email_sender import (
     apply_successful_reminder_updates,
     recipient_variant,
     render_variant_email_payloads,
+    serialize_subscribers_csv_bytes,
     serialize_subscribers_csv,
     send_segmented_email,
     subscribers_table_needs_reminder_field_backfill,
@@ -476,3 +477,14 @@ def test_backup_and_save_subscribers_table_to_oss_overwrites_same_main_key(monke
     assert meta["subscribers_backup_object_key"] != meta["subscribers_object_key"]
     assert "subscribers.backup_" in calls[0]["url"]
     assert calls[1]["url"].endswith("gongkao-morning-mailer/subscribers.csv")
+
+
+def test_serialize_subscribers_csv_bytes_uses_utf8_bom() -> None:
+    text, data = serialize_subscribers_csv_bytes(
+        [{"email": "user@example.com", "status": "active", "nickname": "中文昵称"}],
+        ["email", "status", "nickname"],
+    )
+
+    assert text.startswith("email,status,nickname")
+    assert data.startswith(b"\xef\xbb\xbf")
+    assert "中文昵称" in data.decode("utf-8-sig")

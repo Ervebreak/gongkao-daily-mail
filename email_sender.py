@@ -109,6 +109,36 @@ def _referral_code_for_email(email: str) -> str:
     return f"GK{digest}"
 
 
+def _referral_code_candidates(email: str) -> list[str]:
+    normalized_email = email.strip().lower()
+    digest = hashlib.sha256(normalized_email.encode("utf-8")).hexdigest().upper()
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for length in (6, 8, 9, 10, 11, 12):
+        code = f"GK{digest[:length]}"
+        if code not in seen:
+            seen.add(code)
+            candidates.append(code)
+    max_length = 12
+    for start in range(1, max(1, len(digest) - max_length + 1)):
+        code = f"GK{digest[start:start + max_length]}"
+        if len(code) != 2 + max_length:
+            continue
+        if code not in seen:
+            seen.add(code)
+            candidates.append(code)
+    return candidates
+
+
+def _unique_referral_code_for_email(email: str, used_codes: dict[str, str]) -> str:
+    normalized_email = email.strip().lower()
+    for code in _referral_code_candidates(email):
+        owner = used_codes.get(code, "")
+        if not owner or owner == normalized_email:
+            return code
+    raise RuntimeError(f"Unable to generate unique referral code for {normalized_email}")
+
+
 def _subscriber_fieldnames(fieldnames: list[str] | None) -> list[str]:
     ordered: list[str] = []
     for name in fieldnames or []:
@@ -166,6 +196,15 @@ def apply_referral_code_backfill(table: dict[str, Any]) -> dict[str, Any]:
     fieldnames = _subscriber_fieldnames(table.get("fieldnames") or source_fieldnames)
     generated_emails: list[str] = []
     generated_count = 0
+    used_codes: dict[str, str] = {}
+
+    for item in records:
+        if not isinstance(item, dict):
+            continue
+        email = str(item.get("email") or "").strip().lower()
+        referral_code = str(item.get("referral_code") or "").strip()
+        if email and referral_code and referral_code not in used_codes:
+            used_codes[referral_code] = email
 
     for item in records:
         if not isinstance(item, dict):
@@ -177,8 +216,9 @@ def apply_referral_code_backfill(table: dict[str, Any]) -> dict[str, Any]:
         if not email or referral_code:
             item["referral_code"] = referral_code
             continue
-        generated = _referral_code_for_email(email)
+        generated = _unique_referral_code_for_email(email, used_codes)
         item["referral_code"] = generated
+        used_codes[generated] = email.lower()
         generated_emails.append(email.lower())
         generated_count += 1
 
@@ -624,6 +664,11 @@ def serialize_subscribers_csv(records: list[dict[str, str]], fieldnames: list[st
     return buffer.getvalue()
 
 
+def serialize_subscribers_csv_bytes(records: list[dict[str, str]], fieldnames: list[str] | None = None) -> tuple[str, bytes]:
+    text = serialize_subscribers_csv(records, fieldnames)
+    return text, text.encode("utf-8-sig")
+
+
 def backup_and_save_subscribers_table_to_oss(table: dict[str, Any]) -> dict[str, Any]:
     meta: dict[str, Any] = {
         "subscribers_write_ok": False,
@@ -639,9 +684,9 @@ def backup_and_save_subscribers_table_to_oss(table: dict[str, Any]) -> dict[str,
         return meta
     records = normalize_recipient_records(table.get("records") or [])
     fieldnames = _subscriber_fieldnames(table.get("fieldnames") or [])
-    body_text = serialize_subscribers_csv(records, fieldnames)
-    body = body_text.encode("utf-8")
-    backup_body = str(table.get("raw_text") or body_text).encode("utf-8")
+    body_text, body = serialize_subscribers_csv_bytes(records, fieldnames)
+    backup_source_text = str(table.get("raw_text") or body_text)
+    backup_body = backup_source_text.encode("utf-8-sig")
     object_key = str(table.get("object_key") or settings.subscribers_oss_key).strip().lstrip("/")
     backup_key = _subscriber_backup_object_key(object_key)
     source_cfg = _subscribers_oss_config(object_key)
