@@ -20,6 +20,15 @@ from feedback import handle_feedback, is_feedback_invocation
 from history import normalize_title
 from lite_email_renderer import render_lite_email
 from logger import RunLogger
+from quality_gate import (
+    MODULE_LABELS as QUALITY_MODULE_LABELS,
+    build_gate_from_quality_map as shared_build_gate_from_quality_map,
+    build_quality_gate as shared_build_quality_gate,
+    evaluate_all_quality as shared_evaluate_all_quality,
+    evaluate_selection_quality as shared_evaluate_selection_quality,
+    evaluate_weekly_pdf_quality as shared_evaluate_weekly_pdf_quality,
+    looks_like_gate_drift,
+)
 
 
 TZ = dt.timezone(dt.timedelta(hours=8))
@@ -291,124 +300,28 @@ def build_quality_gate(
     policy_coordinate_quality: dict[str, Any] | None = None,
     subject_quality: dict[str, Any] | None = None,
     reading_guide_quality: dict[str, Any] | None = None,
+    lite_email_quality: dict[str, Any] | None = None,
+    weekly_pdf_quality: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    content_quality_p0_codes = {
-        "missing_required_module",
-        "wrong_article_understanding",
-        "fabricated_policy",
-    }
-    p0_codes = {
-        "missing_question",
-        "missing_task",
-        "too_broad",
-        "missing_candidate_answer",
-        "isolated_number",
-        "grassroots_authority_overreach",
-        "incomplete_label",
-        "exam_migration_step",
-        "missing_main_line",
-        "too_few_steps",
-        "empty_golden_sentence",
-        "label_leaked_in_golden_sentence",
-        "email_too_short",
-        "missing_html",
-        "dev_marker_leaked",
-        "python_list_leaked",
-        "quick_read_dev_marker",
-        "empty_quick_read",
-        "missing_quick_read_one_sentence",
-        "quick_read_url_not_valid",
-        "quick_reads_all_news_summary",
-        "weak_featured_selection",
-        "sensitive_topic_needs_review",
-        "dev_marker_repeated",
-        "abnormal_copy_duplication",
-        "repeated_expression_across_modules",
-        "module_role_overlap",
-        "expression_dev_marker",
-        "label_leaked_in_expression",
-        "fixed_framework_template",
-        "universal_framework_content",
-        "content_quality_p0",
-        "low_content_quality",
-        "low_user_safety",
-        "low_exam_value",
-        "low_source_alignment",
-        "unsafe_sensitive_framing",
-        "unsupported_claims",
-        "mainline_incoherent",
-        "content_quality_reviewer_error",
-        "duplicate_label_prefix",
-        "leading_colon",
-        "rewritable_expression_label_prefix",
-        "duplicate_subject_prefix",
-        "daily_question_missing_identity",
-        "daily_question_missing_scene",
-        "daily_question_missing_conflict",
-        "daily_question_missing_task",
-        "policy_quote_missing",
-        "policy_quote_too_long",
-        "policy_source_missing",
-        "qiushi_used_as_policy_source",
-        "qiushi_rendered_as_policy_quote",
-        "qiushi_rendered_in_policy_line",
-        "matched_policy_id_missing",
-        "matched_policy_id_not_found",
-        "authoritative_source_missing",
-        "vague_leader_source",
-    }
-    p0_issues: list[dict[str, str]] = []
-    modules = (
-        ("daily_question", question_quality),
-        ("framework_map", framework_quality),
-        ("today_takeaway", takeaway_quality or {}),
-        ("brief_cleanliness", brief_quality or {}),
-        ("quick_reads", quick_reads_quality or {}),
-        ("duplication", duplication_quality or {}),
-        ("expression_quality", expression_quality or {}),
-        ("module_redundancy", module_redundancy_quality or {}),
-        ("content_risk", content_risk_quality or {}),
-        ("selection", selection_quality or {}),
-        ("content_quality", content_quality or {}),
-        ("pre_send_cleanliness", cleanliness_quality or {}),
-        ("policy_coordinate", policy_coordinate_quality or {}),
-        ("subject_quality", subject_quality or {}),
-        ("reading_guide", reading_guide_quality or {}),
+    return shared_build_quality_gate(
+        question_quality,
+        framework_quality,
+        takeaway_quality,
+        brief_quality,
+        quick_reads_quality,
+        duplication_quality,
+        expression_quality,
+        module_redundancy_quality,
+        content_risk_quality,
+        selection_quality,
+        content_quality,
+        cleanliness_quality,
+        policy_coordinate_quality,
+        subject_quality,
+        reading_guide_quality,
+        lite_email_quality,
+        weekly_pdf_quality,
     )
-    for module, quality in modules:
-        for issue in quality.get("issues") or []:
-            if not isinstance(issue, dict):
-                continue
-            code = str(issue.get("code") or "")
-            severity = str(issue.get("severity") or "").lower()
-            if severity == "high" and code in p0_codes:
-                p0_issues.append({
-                    "module": str(issue.get("module_override") or module),
-                    "code": code,
-                    "message": str(issue.get("message") or code),
-                })
-    content_quality_payload = content_quality or {}
-    content_quality_failed = str(content_quality_payload.get("status") or "").lower() == "fail" or content_quality_payload.get("can_send") is False
-    if content_quality_failed:
-        for issue in content_quality_payload.get("issues") or []:
-            if not isinstance(issue, dict):
-                continue
-            code = str(issue.get("code") or "")
-            severity = str(issue.get("severity") or "").lower()
-            if severity != "high" or code not in content_quality_p0_codes:
-                continue
-            candidate_issue = {
-                "module": str(issue.get("module_override") or "content_quality"),
-                "code": code,
-                "message": str(issue.get("message") or code),
-            }
-            if candidate_issue not in p0_issues:
-                p0_issues.append(candidate_issue)
-    return {
-        "overall": "fail" if p0_issues else "ok",
-        "p0_count": len(p0_issues),
-        "p0_issues": p0_issues[:8],
-    }
 
 
 SENSITIVE_TOPIC_TERMS = (
@@ -466,6 +379,7 @@ def _selection_sensitive_surface(brief: dict[str, Any], featured: dict[str, Any]
 
 
 def evaluate_selection_quality(brief: dict[str, Any]) -> dict[str, Any]:
+    return shared_evaluate_selection_quality(brief)
     two_stage = brief.get("_llm_two_stage") if isinstance(brief.get("_llm_two_stage"), dict) else {}
     selection = two_stage.get("selection") if isinstance(two_stage.get("selection"), dict) else {}
     featured = selection.get("featured") if isinstance(selection.get("featured"), dict) else {}
@@ -1871,91 +1785,30 @@ def evaluate_all_quality(
     test_invocation: bool,
     selection_quality: dict[str, Any] | None = None,
     cleanliness_quality: dict[str, Any] | None = None,
+    latest_json: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    from brief_quality import evaluate_brief_cleanliness
-    from content_quality_reviewer import evaluate_content_quality
-    from content_risk_quality import evaluate_content_risks
-    from duplication_quality import evaluate_duplication
-    from expression_quality import evaluate_expression_quality
-    from framework_quality import evaluate_framework_map
-    from module_redundancy_quality import evaluate_module_redundancy
-    from policy_coordinate_quality import evaluate_policy_coordinate_quality
-    from question_quality import evaluate_daily_question
-    from quick_reads_quality import evaluate_quick_reads
-    from reading_guide_quality import evaluate_reading_guide_quality
-    from subject_quality import evaluate_subject_quality
-    from takeaway_quality import evaluate_takeaway
-
     if selection_quality is None:
         selection_quality = evaluate_selection_quality(brief)
-    if cleanliness_quality is None:
-        cleanliness_quality = {}
-    return {
-        "daily_question": evaluate_daily_question(brief),
-        "framework_map": evaluate_framework_map(brief),
-        "today_takeaway": evaluate_takeaway(brief),
-        "brief_cleanliness": evaluate_brief_cleanliness(brief, plain_text, html_body),
-        "quick_reads": evaluate_quick_reads(brief),
-        "duplication": evaluate_duplication(brief),
-        "expression_quality": evaluate_expression_quality(brief),
-        "module_redundancy": evaluate_module_redundancy(brief),
-        "content_risk": evaluate_content_risks(brief, plain_text, html_body),
-        "selection": selection_quality,
-        "content_quality": evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation),
-        "cleanliness": cleanliness_quality,
-        "policy_coordinate": evaluate_policy_coordinate_quality(brief, plain_text, html_body),
-        "subject_quality": evaluate_subject_quality(brief),
-        "reading_guide": evaluate_reading_guide_quality(brief),
-    }
+    return shared_evaluate_all_quality(
+        brief,
+        plain_text,
+        html_body,
+        test_invocation=test_invocation,
+        selection_quality=selection_quality,
+        cleanliness_quality=cleanliness_quality,
+        latest_json=latest_json,
+    )
 
 
 def build_gate_from_quality_map(quality: dict[str, Any], plain_text: str = "", html_body: str = "") -> dict[str, Any]:
-    gate = build_quality_gate(
-        quality.get("daily_question", {}),
-        quality.get("framework_map", {}),
-        quality.get("today_takeaway", {}),
-        quality.get("brief_cleanliness", {}),
-        quality.get("quick_reads", {}),
-        quality.get("duplication", {}),
-        quality.get("expression_quality", {}),
-        quality.get("module_redundancy", {}),
-        quality.get("content_risk", {}),
-        quality.get("selection", {}),
-        quality.get("content_quality", {}),
-        quality.get("cleanliness", {}),
-        quality.get("policy_coordinate", {}),
-        quality.get("subject_quality", {}),
-        quality.get("reading_guide", {}),
-    )
-    for issue in _collect_visible_truncation_gate_issues(quality, plain_text=plain_text, html_body=html_body):
-        if issue not in gate["p0_issues"]:
-            gate["p0_issues"].append(issue)
-    gate["p0_count"] = len(gate["p0_issues"])
-    gate["p0_issues"] = gate["p0_issues"][:8]
-    gate["overall"] = "fail" if gate["p0_issues"] else "ok"
-    return gate
+    return shared_build_gate_from_quality_map(quality, plain_text=plain_text, html_body=html_body)
 
 
 def _log_quality_map(logger: RunLogger, quality: dict[str, Any], suffix: str) -> None:
-    labels = {
-        "daily_question": "today question quality",
-        "framework_map": "framework map quality",
-        "today_takeaway": "today takeaway quality",
-        "brief_cleanliness": "brief cleanliness quality",
-        "quick_reads": "quick reads quality",
-        "duplication": "duplication quality",
-        "expression_quality": "expression quality",
-        "module_redundancy": "module redundancy quality",
-        "content_risk": "content risk quality",
-        "content_quality": "content quality",
-        "policy_coordinate": "policy coordinate quality",
-        "subject_quality": "subject quality",
-        "reading_guide": "reading guide quality",
-    }
-    for key, label in labels.items():
+    for key, label in QUALITY_MODULE_LABELS.items():
         item = quality.get(key)
         if isinstance(item, dict):
-            logger.info(f"{label} {suffix}".strip(), **item)
+            logger.info(f"{label} quality {suffix}".strip(), **item)
 
 
 def recompute_after_brief_change(
@@ -1996,6 +1849,7 @@ def recompute_after_brief_change(
         test_invocation=test_invocation,
         selection_quality=selection_quality,
         cleanliness_quality=cleanliness_quality,
+        latest_json={"brief": brief, "subject": str(rendered.get("subject") or subject)},
     )
     _log_quality_map(logger, quality, reason)
     return {
@@ -2327,6 +2181,7 @@ def evaluate_candidate_with_current_quality(
     delivery_date: str,
     *,
     test_invocation: bool = False,
+    enforce_daily_question_structure: bool = True,
 ) -> dict[str, Any]:
     from brief_schema import ensure_brief_schema
     from email_renderer import render_email_html, render_plain_text
@@ -2353,7 +2208,8 @@ def evaluate_candidate_with_current_quality(
     plain_text = render_plain_text(brief)
     html_body = render_email_html(brief)
     guarded, cleanliness_quality = pre_send_cleanliness_guard(
-        {"brief": brief, "subject": str(subject), "plain_text": plain_text, "html_body": html_body, "quality": {}}
+        {"brief": brief, "subject": str(subject), "plain_text": plain_text, "html_body": html_body, "quality": {}},
+        enforce_daily_question_structure=enforce_daily_question_structure,
     )
     brief = guarded.get("brief") if isinstance(guarded.get("brief"), dict) else brief
     subject = str(guarded.get("subject") or subject)
@@ -2367,6 +2223,7 @@ def evaluate_candidate_with_current_quality(
         test_invocation=test_invocation,
         selection_quality=selection_quality,
         cleanliness_quality=cleanliness_quality,
+        latest_json=candidate,
     )
     quality_gate = build_gate_from_quality_map(quality_map, plain_text=plain_text, html_body=html_body)
     return {
@@ -2430,6 +2287,7 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
 
     candidate_date = str(candidate.get("delivery_date") or "")
     quality_gate = candidate.get("quality_gate") if isinstance(candidate.get("quality_gate"), dict) else {}
+    stored_quality_gate = dict(quality_gate)
     if candidate_date != delivery_date:
         logger.info("candidate send blocked", reason="candidate_date_mismatch", candidate_date=candidate_date, delivery_date=delivery_date)
         try:
@@ -2515,13 +2373,94 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
                 "cleanliness_quality": cleanliness_quality,
                 "log": str(log_path),
             }
+        try:
+            current_selection_quality = evaluate_selection_quality(candidate["brief"])
+            current_quality_map = evaluate_all_quality(
+                candidate["brief"],
+                str(candidate.get("plain_text") or ""),
+                str(candidate.get("html_body") or ""),
+                test_invocation=test_invocation,
+                selection_quality=current_selection_quality,
+                cleanliness_quality=cleanliness_quality,
+                latest_json=candidate,
+            )
+            quality_gate = build_gate_from_quality_map(
+                current_quality_map,
+                plain_text=str(candidate.get("plain_text") or ""),
+                html_body=str(candidate.get("html_body") or ""),
+            )
+            candidate["quality"] = {"final": current_quality_map, "gate": quality_gate}
+            candidate["quality_gate"] = quality_gate
+            candidate["stored_quality_gate"] = stored_quality_gate
+            logger.info("candidate morning quality recheck", stored_quality_gate=stored_quality_gate, current_quality_gate=quality_gate)
+            if looks_like_gate_drift(stored_quality_gate, quality_gate):
+                logger.info("candidate send blocked", reason="morning_gate_drift", stored_quality_gate=stored_quality_gate, current_quality_gate=quality_gate)
+                try:
+                    metrics_result = append_morning_metrics(
+                        delivery_date=delivery_date,
+                        test_invocation=test_invocation,
+                        status="blocked",
+                        reason="morning_gate_drift",
+                        candidate=candidate,
+                        load_meta=load_meta,
+                    )
+                    logger.info("harness metrics", **metrics_result)
+                except Exception as exc:
+                    logger.info("harness metrics failed", error=str(exc))
+                log_path = logger.save("latest_candidate_send.log")
+                logger.dump_to_stdout()
+                return {
+                    "status": "blocked",
+                    "reason": "morning_gate_drift",
+                    "delivery_date": delivery_date,
+                    "stored_quality_gate": stored_quality_gate,
+                    "current_quality_gate": quality_gate,
+                    "log": str(log_path),
+                }
+        except Exception as exc:
+            logger.info("candidate morning quality recheck failed", error=str(exc), fallback_to_stored_gate=True)
+            candidate["morning_gate_drift"] = {"status": "recheck_failed", "error": str(exc)}
     else:
-        logger.info(
-            "weekly pdf candidate send using stored quality gate",
-            quality_gate=quality_gate,
-            candidate_recheck_skipped=True,
-            reason="weekly_pdf_candidate",
-        )
+        try:
+            current_quality_map = {
+                "weekly_pdf": shared_evaluate_weekly_pdf_quality(candidate, delivery_date=delivery_date)
+            }
+            quality_gate = build_gate_from_quality_map(
+                current_quality_map,
+                plain_text=str(candidate.get("plain_text") or ""),
+                html_body=str(candidate.get("html_body") or ""),
+            )
+            candidate["quality"] = {"final": current_quality_map, "gate": quality_gate}
+            candidate["quality_gate"] = quality_gate
+            candidate["stored_quality_gate"] = stored_quality_gate
+            logger.info("weekly pdf candidate morning quality recheck", stored_quality_gate=stored_quality_gate, current_quality_gate=quality_gate)
+            if looks_like_gate_drift(stored_quality_gate, quality_gate):
+                logger.info("candidate send blocked", reason="morning_gate_drift", stored_quality_gate=stored_quality_gate, current_quality_gate=quality_gate)
+                try:
+                    metrics_result = append_morning_metrics(
+                        delivery_date=delivery_date,
+                        test_invocation=test_invocation,
+                        status="blocked",
+                        reason="morning_gate_drift",
+                        candidate=candidate,
+                        load_meta=load_meta,
+                    )
+                    logger.info("harness metrics", **metrics_result)
+                except Exception as exc:
+                    logger.info("harness metrics failed", error=str(exc))
+                log_path = logger.save("latest_candidate_send.log")
+                logger.dump_to_stdout()
+                return {
+                    "status": "blocked",
+                    "reason": "morning_gate_drift",
+                    "delivery_date": delivery_date,
+                    "stored_quality_gate": stored_quality_gate,
+                    "current_quality_gate": quality_gate,
+                    "log": str(log_path),
+                }
+        except Exception as exc:
+            logger.info("weekly pdf candidate morning quality recheck failed", error=str(exc), fallback_to_stored_gate=True)
+            candidate["morning_gate_drift"] = {"status": "recheck_failed", "error": str(exc)}
     if quality_gate.get("overall") != "ok":
         logger.info("candidate send blocked", reason="quality_gate_fail", quality_gate=quality_gate)
         try:
@@ -2927,6 +2866,33 @@ def generate_weekly_pdf_candidate(event: Any | None = None) -> dict[str, Any]:
         },
     }
     plain_text, html_body = build_weekly_pdf_candidate_message(weekly_pdf)
+    weekly_quality = shared_evaluate_weekly_pdf_quality(
+        {
+            "weekly_pdf": weekly_pdf,
+            "plain_text": plain_text,
+            "html_body": html_body,
+        },
+        delivery_date=delivery_date,
+    )
+    for code, upload_meta, message in (
+        ("weekly_pdf_oss_upload_failed", full_upload_meta, "完整版周 PDF 上传 OSS 失败。"),
+        ("weekly_pdf_lite_preview_oss_upload_failed", preview_upload_meta, "免费预览周 PDF 上传 OSS 失败。"),
+    ):
+        if upload_meta and not upload_meta.get("ok"):
+            weekly_quality.setdefault("issues", []).append(
+                {
+                    "severity": "medium",
+                    "code": code,
+                    "message": str(upload_meta.get("error") or message),
+                }
+            )
+    if weekly_quality.get("issues"):
+        weekly_quality["ok"] = not any(str(item.get("severity") or "").lower() == "high" for item in weekly_quality["issues"])
+        weekly_quality["status"] = "fail" if not weekly_quality["ok"] else "review"
+        weekly_quality["score"] = max(0, int(weekly_quality.get("score") or 100) - 4 * len(weekly_quality["issues"]))
+    quality = {"final": {"weekly_pdf": weekly_quality}}
+    quality_gate = build_gate_from_quality_map(quality, plain_text=plain_text, html_body=html_body)
+    quality["gate"] = quality_gate
     candidate_payload = {
         "schema_version": 1,
         "candidate_type": "weekly_pdf",
@@ -3387,6 +3353,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
         test_invocation=test_invocation,
         selection_quality=selection_quality,
         cleanliness_quality=cleanliness_quality,
+        latest_json={"brief": brief, "subject": subject},
     )
     question_quality = quality_map["daily_question"]
     framework_quality = quality_map["framework_map"]
@@ -3477,6 +3444,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                     test_invocation=test_invocation,
                     selection_quality=selection_quality,
                     cleanliness_quality=cleanliness_quality,
+                    latest_json={"brief": brief, "subject": subject},
                 )
                 question_quality = quality_map["daily_question"]
                 framework_quality = quality_map["framework_map"]
@@ -3515,6 +3483,28 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
         fallback_used=brief["lite_paid_cta"]["fallback_used"],
         hook_chars=len(brief["lite_paid_cta"]["hook"]),
     )
+    quality_map = evaluate_all_quality(
+        brief,
+        plain_text,
+        html_body,
+        test_invocation=test_invocation,
+        selection_quality=selection_quality,
+        cleanliness_quality=cleanliness_quality,
+        latest_json={"brief": brief, "subject": subject},
+    )
+    question_quality = quality_map["daily_question"]
+    framework_quality = quality_map["framework_map"]
+    takeaway_quality = quality_map["today_takeaway"]
+    brief_quality = quality_map["brief_cleanliness"]
+    quick_reads_quality = quality_map["quick_reads"]
+    duplication_quality = quality_map["duplication"]
+    expression_quality = quality_map["expression_quality"]
+    module_redundancy_quality = quality_map["module_redundancy"]
+    content_risk_quality = quality_map["content_risk"]
+    content_quality = quality_map["content_quality"]
+    quality_gate = build_gate_from_quality_map(quality_map, plain_text=plain_text, html_body=html_body)
+    quality_blocked = (not test_invocation) and quality_gate.get("overall") == "fail"
+    logger.info("quality gate after lite cta check", **quality_gate, blocked=quality_blocked)
     subscribers_table, recipient_source = load_subscriber_table_for_segmentation(test_mode=test_invocation)
     segments = split_recipient_records(subscribers_table.get("records") or [], today=today)
     logger.info(
@@ -3556,6 +3546,9 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
             "content_quality": content_quality,
             "cleanliness": cleanliness_quality,
             "policy_coordinate": quality_map.get("policy_coordinate", {}),
+            "subject_quality": quality_map.get("subject_quality", {}),
+            "reading_guide": quality_map.get("reading_guide", {}),
+            "lite_email": quality_map.get("lite_email", {}),
         },
         "rewrite": rewrite_result,
         "minor_auto_fix": minor_fix_result,
