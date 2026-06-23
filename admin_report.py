@@ -8,6 +8,7 @@ from config import settings
 from email_sender import normalize_recipients, send_email_to_recipients
 from lite_email_renderer import render_lite_email
 from quality_issue_schema import severity_counts
+from quality_reflections import load_latest_quality_reflections, render_reflection_lines
 
 
 def _e(value: Any) -> str:
@@ -479,6 +480,29 @@ def build_quality_card_markdown(candidate: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _reflection_html(reflections: dict[str, Any]) -> str:
+    lines = render_reflection_lines(reflections)
+    items = "".join(f"<li>{_e(line.lstrip('- ').strip())}</li>" for line in lines if line.strip())
+    if not items:
+        items = "<li>本次未新增 reflection。</li>"
+    summary = reflections.get("summary") if isinstance(reflections.get("summary"), dict) else {}
+    repeated = summary.get("repeated_issue_types") if isinstance(summary.get("repeated_issue_types"), dict) else {}
+    promoted = summary.get("promoted_counts") if isinstance(summary.get("promoted_counts"), dict) else {}
+    meta_parts: list[str] = []
+    if repeated:
+        meta_parts.append(f"重复问题：{json.dumps(repeated, ensure_ascii=False)}")
+    if promoted:
+        meta_parts.append(f"流转状态：{json.dumps(promoted, ensure_ascii=False)}")
+    meta_html = ""
+    if meta_parts:
+        meta_html = "<p style='margin:8px 0 0;color:#4b5563;font-size:13px;'>" + "<br>".join(_e(item) for item in meta_parts) + "</p>"
+    return (
+        "<div style='border:1px solid #e5e7eb;border-radius:8px;padding:12px;background:#f9fafb;'>"
+        "<ul style='margin:0;padding-left:20px;'>"
+        f"{items}</ul>{meta_html}</div>"
+    )
+
+
 def build_admin_quality_report(candidate: dict[str, Any], candidate_save_result: dict[str, Any] | None = None) -> tuple[str, str, str]:
     candidate_save_result = candidate_save_result or {}
     delivery_date = str(candidate.get("delivery_date") or "")
@@ -489,6 +513,7 @@ def build_admin_quality_report(candidate: dict[str, Any], candidate_save_result:
     featured = final_selection.get("featured") if isinstance(final_selection.get("featured"), dict) else {}
     quick_reads = final_selection.get("quick_reads") if isinstance(final_selection.get("quick_reads"), list) else []
     blocked_archive = candidate.get("blocked_archive") if isinstance(candidate.get("blocked_archive"), dict) else {}
+    reflections = candidate.get("quality_reflections") if isinstance(candidate.get("quality_reflections"), dict) else load_latest_quality_reflections(settings.output_dir)
     status = str(quality_gate.get("overall") or "unknown")
     p0_count = int(quality_gate.get("p0_count") or 0)
     candidate_path = candidate_save_result.get("candidate_oss_path") or candidate_save_result.get("candidate_local_path") or ""
@@ -522,7 +547,10 @@ def build_admin_quality_report(candidate: dict[str, Any], candidate_save_result:
             plain_lines.append(f"速读{idx}：{item.get('title') or ''}")
 
     quality_card = candidate.get("quality_card_markdown") or build_quality_card_markdown(candidate)
+    reflection_lines = render_reflection_lines(reflections)
     plain_lines.extend(["", "发送前质量卡：", quality_card])
+
+    plain_lines.extend(["", "鏈璐ㄩ噺鍙嶆€濓細", *reflection_lines])
 
     html_body = f"""<!doctype html>
 <html>
@@ -551,9 +579,15 @@ def build_admin_quality_report(candidate: dict[str, Any], candidate_save_result:
 </html>"""
     html_body = html_body.replace(
         "</div>\n</body>",
-        f"<h3 style=\"font-size:16px;margin:18px 0 8px;\">发送前质量卡</h3><pre style=\"white-space:pre-wrap;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;\">{_e(quality_card)}</pre></div>\n</body>",
+        (
+            f"<h3 style=\"font-size:16px;margin:18px 0 8px;\">发送前质量卡</h3>"
+            f"<pre style=\"white-space:pre-wrap;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;\">{_e(quality_card)}</pre>"
+            f"<h3 style=\"font-size:16px;margin:18px 0 8px;\">本次质量反思</h3>"
+            f"{_reflection_html(reflections)}</div>\n</body>"
+        ),
     )
-    return admin_subject, "\n".join(plain_lines), html_body
+    plain_text = "\n".join(plain_lines).replace("\u93c8\ue101\ue0bc\u7490\u3129\u567a\u9359\u5d86\u20ac\u6fd3\u7d30", "本次质量反思：")
+    return admin_subject, plain_text, html_body
 
 
 def send_admin_quality_report(candidate: dict[str, Any], candidate_save_result: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -568,6 +602,7 @@ def send_admin_quality_report(candidate: dict[str, Any], candidate_save_result: 
     candidate_html = str(candidate.get("html_body") or "")
     candidate_plain = str(candidate.get("plain_text") or "")
     delivery_date = str(candidate.get("delivery_date") or "candidate")
+    reflections = candidate.get("quality_reflections") if isinstance(candidate.get("quality_reflections"), dict) else load_latest_quality_reflections(settings.output_dir)
     lite_rendered = render_lite_email(candidate)
     candidate_lite_html = str(candidate.get("lite_html_body") or lite_rendered.get("html_body") or "")
     candidate_lite_plain = str(candidate.get("lite_plain_text") or lite_rendered.get("plain_text") or "")
@@ -591,6 +626,11 @@ def send_admin_quality_report(candidate: dict[str, Any], candidate_save_result: 
             "filename": "latest_quality_card.md",
             "content": candidate.get("quality_card_markdown") or build_quality_card_markdown(candidate),
             "content_type": "text/markdown; charset=utf-8",
+        },
+        {
+            "filename": "latest_quality_reflections.json",
+            "content": json.dumps(reflections or {}, ensure_ascii=False, indent=2),
+            "content_type": "application/json",
         },
         {
             "filename": f"candidate_email_{delivery_date}.html",

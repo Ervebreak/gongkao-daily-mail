@@ -3028,6 +3028,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
     from module_redundancy_quality import evaluate_module_redundancy
     from pre_send_cleanliness import pre_send_cleanliness_guard
     from question_quality import evaluate_daily_question
+    from quality_reflections import generate_quality_reflections
     from quick_reads_quality import evaluate_quick_reads
     from takeaway_quality import evaluate_takeaway
     from brief_quality import evaluate_brief_cleanliness
@@ -3661,6 +3662,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
     candidate_save_result: dict[str, Any] | None = None
     admin_report_result: dict[str, Any] | None = None
     blocked_archive_result: dict[str, Any] | None = None
+    quality_reflections_result: dict[str, Any] | None = None
     if candidate_invocation:
         candidate_payload = build_candidate_payload(
             delivery_date=today,
@@ -3699,6 +3701,27 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
             logger.info("blocked run archived", **blocked_archive_result)
             candidate_save_result = save_candidate(candidate_payload)
             logger.info("candidate saved with blocked archive", **candidate_save_result)
+        try:
+            quality_reflections_result = generate_quality_reflections(
+                output_dir=settings.output_dir,
+                knowledge_dir=Path(__file__).resolve().parent / "knowledge",
+                candidate=candidate_payload,
+                latest_quality=quality_payload,
+                latest_quality_card=quality_card_markdown,
+                rewrite_comparison=rewrite_comparison,
+                blocked_run_dir=Path(blocked_archive_result["blocked_archive_path"]) if blocked_archive_result and blocked_archive_result.get("blocked_archive_path") else None,
+            )
+            candidate_payload["quality_reflections"] = quality_reflections_result
+            candidate_save_result = save_candidate(candidate_payload)
+            logger.info(
+                "quality reflections generated",
+                reflection_count=quality_reflections_result.get("reflection_count", 0),
+                source_run=quality_reflections_result.get("source_run"),
+                candidate_saved=bool(candidate_save_result and candidate_save_result.get("candidate_saved")),
+            )
+        except Exception as exc:
+            quality_reflections_result = {"reflection_count": 0, "error": str(exc)}
+            logger.info("quality reflections failed", error=str(exc))
         try:
             admin_report_result = send_admin_quality_report(candidate_payload, candidate_save_result)
         except Exception as exc:
