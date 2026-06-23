@@ -104,6 +104,11 @@ def _fallback_uid(email: str, prefix: str = "u") -> str:
     return f"{prefix}_{_email_hash(email)[:10]}"
 
 
+def _referral_code_for_email(email: str) -> str:
+    digest = hashlib.sha256(email.strip().lower().encode("utf-8")).hexdigest()[:6].upper()
+    return f"GK{digest}"
+
+
 def _subscriber_fieldnames(fieldnames: list[str] | None) -> list[str]:
     ordered: list[str] = []
     for name in fieldnames or []:
@@ -155,6 +160,38 @@ def normalize_recipient_records(raw_items: list[dict[str, Any]]) -> list[dict[st
     return recipients
 
 
+def apply_referral_code_backfill(table: dict[str, Any]) -> dict[str, Any]:
+    records = table.get("records") if isinstance(table.get("records"), list) else []
+    source_fieldnames = [str(name or "").strip() for name in (table.get("source_fieldnames") or []) if str(name or "").strip()]
+    fieldnames = _subscriber_fieldnames(table.get("fieldnames") or source_fieldnames)
+    generated_emails: list[str] = []
+    generated_count = 0
+
+    for item in records:
+        if not isinstance(item, dict):
+            continue
+        email = str(item.get("email") or "").strip()
+        referral_code = str(item.get("referral_code") or "").strip()
+        referred_by = str(item.get("referred_by") or "").strip()
+        item["referred_by"] = referred_by
+        if not email or referral_code:
+            item["referral_code"] = referral_code
+            continue
+        generated = _referral_code_for_email(email)
+        item["referral_code"] = generated
+        generated_emails.append(email.lower())
+        generated_count += 1
+
+    meta = {
+        "subscribers_referral_code_updates": generated_count,
+        "subscribers_referral_code_update_emails": generated_emails,
+        "subscribers_referral_field_backfill_needed": "referral_code" not in source_fieldnames or "referred_by" not in source_fieldnames,
+    }
+    table["fieldnames"] = fieldnames
+    table["referral_backfill_meta"] = meta
+    return meta
+
+
 def parse_subscribers_csv(csv_text: str) -> list[str]:
     return [item["email"] for item in parse_subscribers_csv_records(csv_text)]
 
@@ -170,7 +207,9 @@ def parse_subscribers_csv_table(csv_text: str) -> dict[str, Any]:
         record = {name: row.get(name, "") for name in fieldnames}
         record["_row_index"] = str(row_index)
         rows.append(record)
-    return {"fieldnames": fieldnames, "source_fieldnames": source_fieldnames, "records": normalize_recipient_records(rows)}
+    table = {"fieldnames": fieldnames, "source_fieldnames": source_fieldnames, "records": normalize_recipient_records(rows)}
+    apply_referral_code_backfill(table)
+    return table
 
 
 def parse_subscribers_csv_all_records(csv_text: str) -> list[dict[str, str]]:
@@ -607,6 +646,8 @@ def backup_and_save_subscribers_table_to_oss(table: dict[str, Any]) -> dict[str,
     backup_key = _subscriber_backup_object_key(object_key)
     source_cfg = _subscribers_oss_config(object_key)
     backup_cfg = _subscribers_oss_config(backup_key)
+    meta["subscribers_object_key"] = object_key
+    meta["subscribers_backup_object_key"] = backup_key
     backup_response = requests.put(
         oss_url(backup_cfg),
         headers=oss_headers("PUT", backup_cfg, "text/csv; charset=utf-8"),
@@ -644,6 +685,13 @@ def subscribers_table_needs_reminder_field_backfill(table: dict[str, Any] | None
         return False
     source_fieldnames = [str(name or "").strip() for name in (table.get("source_fieldnames") or []) if str(name or "").strip()]
     return "reminder_sent" not in source_fieldnames
+
+
+def subscribers_table_needs_referral_backfill(table: dict[str, Any] | None) -> bool:
+    if not isinstance(table, dict):
+        return False
+    meta = table.get("referral_backfill_meta") if isinstance(table.get("referral_backfill_meta"), dict) else {}
+    return bool(meta.get("subscribers_referral_field_backfill_needed")) or int(meta.get("subscribers_referral_code_updates", 0)) > 0
 
 
 def apply_successful_reminder_updates(
@@ -1104,11 +1152,19 @@ def send_segmented_email(
         "subscribers_reminder_update_emails": [],
         "subscribers_reminder_update_variants": {},
     }
+    referral_update_meta: dict[str, Any] = {
+        "subscribers_referral_code_updates": 0,
+        "subscribers_referral_code_update_emails": [],
+        "subscribers_referral_field_backfill_needed": False,
+    }
     try_expiration_update_meta: dict[str, Any] = {
         "subscribers_try_expiration_updates": 0,
         "subscribers_try_expiration_update_emails": [],
     }
     needs_reminder_field_backfill = subscribers_table_needs_reminder_field_backfill(subscribers_table)
+    needs_referral_backfill = subscribers_table_needs_referral_backfill(subscribers_table)
+    if isinstance(subscribers_table, dict):
+        referral_update_meta = dict(subscribers_table.get("referral_backfill_meta") or referral_update_meta)
     if subscribers_table and not test_mode and str(subscribers_table.get("storage") or "").lower() == "oss":
         if enable_trial_reminders:
             reminder_update_meta = apply_successful_reminder_updates(subscribers_table, variant_results)
@@ -1117,6 +1173,7 @@ def send_segmented_email(
             reminder_update_meta["subscribers_reminder_updates"] > 0
             or try_expiration_update_meta["subscribers_try_expiration_updates"] > 0
             or needs_reminder_field_backfill
+            or needs_referral_backfill
         ):
             subscribers_write_meta = backup_and_save_subscribers_table_to_oss(subscribers_table)
             subscribers_write_meta["subscribers_write_skipped"] = False
@@ -1142,6 +1199,7 @@ def send_segmented_email(
         "variant_results": variant_results,
         "variant_counts": audit.get("variant_counts") or {},
         **reminder_update_meta,
+        **referral_update_meta,
         **try_expiration_update_meta,
         **subscribers_write_meta,
         "send_audit": audit,

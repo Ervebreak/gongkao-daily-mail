@@ -236,3 +236,27 @@ def test_subscribers_csv_table_supports_referral_columns() -> None:
     assert "referred_by" in table["fieldnames"]
     assert table["records"][0]["referral_code"] == "ABC123"
     assert table["records"][0]["referred_by"] == "REF001"
+
+
+def test_missing_referral_code_column_is_backfilled_and_generated() -> None:
+    table = email_sender.parse_subscribers_csv_table(
+        "uid,email,status,plan,paid_until,send_mode\n"
+        "u1,Test@Example.com,active,free,,lite\n"
+    )
+
+    assert "referral_code" in table["fieldnames"]
+    assert "referred_by" in table["fieldnames"]
+    assert table["records"][0]["referral_code"] == "GK973DFE"
+    assert table["records"][0]["referred_by"] == ""
+    assert table["referral_backfill_meta"]["subscribers_referral_code_updates"] == 1
+    assert table["referral_backfill_meta"]["subscribers_referral_field_backfill_needed"] is True
+
+
+def test_existing_referral_code_is_not_overwritten() -> None:
+    table = email_sender.parse_subscribers_csv_table(
+        "uid,email,status,plan,paid_until,send_mode,referral_code,referred_by\n"
+        "u1,test@example.com,active,free,,lite,KEEP01,\n"
+    )
+
+    assert table["records"][0]["referral_code"] == "KEEP01"
+    assert table["referral_backfill_meta"]["subscribers_referral_code_updates"] == 0
