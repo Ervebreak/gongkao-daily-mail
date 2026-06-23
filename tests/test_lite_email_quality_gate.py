@@ -25,9 +25,10 @@ def _payload(hook: str) -> dict:
 
 
 def test_lite_email_quality_flags_truncated_hook() -> None:
+    truncated_hook = "今天这道题适合练群众诉求复杂、工作推进受阻类场景，完整版会把思路拆成先稳情绪—摸清诉求—公开协商—闭环反馈，帮助你在基层治理题里实现"
     result = evaluate_lite_email_quality(
-        _payload("今天这道题适合练先摸清诉求、再公开协商，适合迁移到基层治理题"),
-        plain_text="今天完整版多讲了什么\n今日完整版亮点：今天这道题适合练先摸清诉求、再公开协商，适合迁移到基层治理题",
+        _payload(truncated_hook),
+        plain_text=f"今天完整版多讲了什么\n今日完整版亮点：{truncated_hook}",
         html_body="<p>今天完整版多讲了什么</p>",
     )
 

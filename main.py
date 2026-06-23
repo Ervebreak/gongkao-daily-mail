@@ -2223,7 +2223,7 @@ def evaluate_candidate_with_current_quality(
         test_invocation=test_invocation,
         selection_quality=selection_quality,
         cleanliness_quality=cleanliness_quality,
-        latest_json=candidate,
+        latest_json={**candidate, "brief": brief, "subject": str(subject), "plain_text": plain_text, "html_body": html_body},
     )
     quality_gate = build_gate_from_quality_map(quality_map, plain_text=plain_text, html_body=html_body)
     return {
@@ -2374,20 +2374,24 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
                 "log": str(log_path),
             }
         try:
-            current_selection_quality = evaluate_selection_quality(candidate["brief"])
+            current_brief = candidate["brief"] if isinstance(candidate.get("brief"), dict) else {}
+            current_subject = str(candidate.get("subject") or subject)
+            current_plain_text = str(candidate.get("plain_text") or "")
+            current_html_body = str(candidate.get("html_body") or "")
+            current_selection_quality = evaluate_selection_quality(current_brief)
             current_quality_map = evaluate_all_quality(
-                candidate["brief"],
-                str(candidate.get("plain_text") or ""),
-                str(candidate.get("html_body") or ""),
+                current_brief,
+                current_plain_text,
+                current_html_body,
                 test_invocation=test_invocation,
                 selection_quality=current_selection_quality,
                 cleanliness_quality=cleanliness_quality,
-                latest_json=candidate,
+                latest_json={**candidate, "brief": current_brief, "subject": current_subject, "plain_text": current_plain_text, "html_body": current_html_body},
             )
             quality_gate = build_gate_from_quality_map(
                 current_quality_map,
-                plain_text=str(candidate.get("plain_text") or ""),
-                html_body=str(candidate.get("html_body") or ""),
+                plain_text=current_plain_text,
+                html_body=current_html_body,
             )
             candidate["quality"] = {"final": current_quality_map, "gate": quality_gate}
             candidate["quality_gate"] = quality_gate
@@ -2418,6 +2422,29 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
                     "log": str(log_path),
                 }
         except Exception as exc:
+            if not test_invocation:
+                logger.info("candidate send blocked", reason="morning_gate_recheck_error", error=str(exc))
+                try:
+                    metrics_result = append_morning_metrics(
+                        delivery_date=delivery_date,
+                        test_invocation=test_invocation,
+                        status="blocked",
+                        reason="morning_gate_recheck_error",
+                        candidate=candidate,
+                        load_meta=load_meta,
+                    )
+                    logger.info("harness metrics", **metrics_result)
+                except Exception as metrics_exc:
+                    logger.info("harness metrics failed", error=str(metrics_exc))
+                log_path = logger.save("latest_candidate_send.log")
+                logger.dump_to_stdout()
+                return {
+                    "status": "blocked",
+                    "reason": "morning_gate_recheck_error",
+                    "delivery_date": delivery_date,
+                    "error": str(exc),
+                    "log": str(log_path),
+                }
             logger.info("candidate morning quality recheck failed", error=str(exc), fallback_to_stored_gate=True)
             candidate["morning_gate_drift"] = {"status": "recheck_failed", "error": str(exc)}
     else:
@@ -2459,6 +2486,29 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
                     "log": str(log_path),
                 }
         except Exception as exc:
+            if not test_invocation:
+                logger.info("candidate send blocked", reason="morning_gate_recheck_error", error=str(exc))
+                try:
+                    metrics_result = append_morning_metrics(
+                        delivery_date=delivery_date,
+                        test_invocation=test_invocation,
+                        status="blocked",
+                        reason="morning_gate_recheck_error",
+                        candidate=candidate,
+                        load_meta=load_meta,
+                    )
+                    logger.info("harness metrics", **metrics_result)
+                except Exception as metrics_exc:
+                    logger.info("harness metrics failed", error=str(metrics_exc))
+                log_path = logger.save("latest_candidate_send.log")
+                logger.dump_to_stdout()
+                return {
+                    "status": "blocked",
+                    "reason": "morning_gate_recheck_error",
+                    "delivery_date": delivery_date,
+                    "error": str(exc),
+                    "log": str(log_path),
+                }
             logger.info("weekly pdf candidate morning quality recheck failed", error=str(exc), fallback_to_stored_gate=True)
             candidate["morning_gate_drift"] = {"status": "recheck_failed", "error": str(exc)}
     if quality_gate.get("overall") != "ok":
