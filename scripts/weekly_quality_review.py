@@ -89,6 +89,20 @@ def _top(counter: collections.Counter[str], limit: int = 8) -> list[dict[str, An
     return [{"name": key, "count": value} for key, value in counter.most_common(limit)]
 
 
+def _promoted_value(row: dict[str, Any]) -> str:
+    promoted = str(row.get("promoted_to") or "").strip()
+    if promoted:
+        return promoted
+    status = str(row.get("status") or "").strip()
+    if status == "converted_to_rule":
+        return "rule"
+    if status in {"covered_by_checker", "converted_to_script", "needs_checker"}:
+        return "checker"
+    if status == "converted_to_example":
+        return "example"
+    return "archived"
+
+
 def build_weekly_review(
     *,
     metrics_path: Path,
@@ -147,6 +161,17 @@ def build_weekly_review(
     converted_issues = [row for row in quality_issues if str(row.get("status") or "") in {"converted_to_rule", "converted_to_script", "converted_to_example"}]
     issue_type_counts: collections.Counter[str] = collections.Counter(str(row.get("issue_type") or "unknown") for row in quality_issues)
     module_issue_counts: collections.Counter[str] = collections.Counter(str(row.get("module") or "unknown") for row in quality_issues)
+    reflection_rows = [
+        row
+        for row in quality_issues
+        if int(row.get("reflection_schema_version") or 0) == 1 and _in_range(row, start, end)
+    ]
+    repeated_reflections: collections.Counter[str] = collections.Counter(
+        str(row.get("issue_type") or "unknown")
+        for row in reflection_rows
+        if _safe_int(row.get("recurrence_count")) > 1
+    )
+    promoted_reflections: collections.Counter[str] = collections.Counter(_promoted_value(row) for row in reflection_rows)
 
     good_added = _count_knowledge_items(knowledge_dir / "weekly_log.md", week, "Good Examples")
     bad_added = _count_knowledge_items(knowledge_dir / "weekly_log.md", week, "Bad Examples")
@@ -225,6 +250,11 @@ def build_weekly_review(
             "weekly_bad_examples": bad_added,
             "weekly_patterns_updated": patterns_added,
         },
+        "quality_reflections": {
+            "new_reflections_total": len(reflection_rows),
+            "repeated_issue_types": _top(repeated_reflections),
+            "promoted_counts": _top(promoted_reflections),
+        },
         "next_week_harness_upgrade": next_week,
     }
 
@@ -281,6 +311,12 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Weekly patterns updated: {report['knowledge_conversion']['weekly_patterns_updated']}",
         "- Top issue types: " + json.dumps(report["knowledge_conversion"]["top_issue_types"], ensure_ascii=False),
         "- Top modules: " + json.dumps(report["knowledge_conversion"]["top_modules"], ensure_ascii=False),
+        "",
+        "## Quality Reflections",
+        "",
+        f"- New reflections this week: {report['quality_reflections']['new_reflections_total']}",
+        "- Repeated issue types: " + json.dumps(report["quality_reflections"]["repeated_issue_types"], ensure_ascii=False),
+        "- Promoted to rule/checker/example: " + json.dumps(report["quality_reflections"]["promoted_counts"], ensure_ascii=False),
         "",
         "## Next Week Harness Upgrade",
         "",
