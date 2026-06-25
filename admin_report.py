@@ -550,7 +550,7 @@ def build_admin_quality_report(candidate: dict[str, Any], candidate_save_result:
     reflection_lines = render_reflection_lines(reflections)
     plain_lines.extend(["", "发送前质量卡：", quality_card])
 
-    plain_lines.extend(["", "鏈璐ㄩ噺鍙嶆€濓細", *reflection_lines])
+    plain_lines.extend(["", "本次质量反思：", *reflection_lines])
 
     html_body = f"""<!doctype html>
 <html>
@@ -586,7 +586,7 @@ def build_admin_quality_report(candidate: dict[str, Any], candidate_save_result:
             f"{_reflection_html(reflections)}</div>\n</body>"
         ),
     )
-    plain_text = "\n".join(plain_lines).replace("\u93c8\ue101\ue0bc\u7490\u3129\u567a\u9359\u5d86\u20ac\u6fd3\u7d30", "本次质量反思：")
+    plain_text = "\n".join(plain_lines)
     return admin_subject, plain_text, html_body
 
 
