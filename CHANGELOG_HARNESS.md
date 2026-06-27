@@ -99,6 +99,21 @@ Follow-ups:
 
 1. This stage only improves input quality and observability; it does not yet make `policy_profile` a hard decision layer for final display.
 2. If full-text input later introduces noisy recall, tune query composition and keyword deduplication before changing backend display thresholds.
+## 2026-06-27 - Harness Phase 3 rule registry and field impact map
+
+### Changed
+
+- Added `content_harness/rule_registry.md` to separate L1 red lines, L2 module rules, and L3 memory/regression rules.
+- Added `content_harness/field_impact_map.json` for high-risk fields, including render targets, quality modules, must-validate checks, and risk level.
+- Added `scripts/audit_prompt_rules.py` to audit prompt rule drift across `prompt_templates.py`, `llm_client.py`, `content_harness/*.md`, and `CHANGELOG_HARNESS.md`.
+- Added `tests/test_audit_prompt_rules.py` to cover field limit conflicts, duplicate runtime rules, archived rule leakage, and field impact map coverage.
+- Updated `content_harness/00_index.md` with a Stage 3 governance entry and the recommended audit command.
+
+### Notes
+
+- This stage only adds rule governance artifacts and auditing; it does not change generation logic or sending logic.
+- The audit script now surfaces an existing `answer_framework` limit drift where some sources still say `35` and others say `45`. That normalization should be handled in a later focused PR.
+
 ## 2026-06-02 - Add reading guide review checks
 
 Reason:
