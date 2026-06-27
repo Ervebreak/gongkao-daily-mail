@@ -1,0 +1,208 @@
+{
+  "daily_question.answer_framework": {
+    "renders_to": [
+      "full email 今日一题",
+      "lite email 先想几个点",
+      "candidate/latest.json",
+      "admin quality report"
+    ],
+    "quality_modules": [
+      "question_quality",
+      "content_quality",
+      "pre_send_cleanliness",
+      "quality_gate"
+    ],
+    "must_validate": [
+      "题型与作答框架是否匹配",
+      "每点长度约束与完整句约束",
+      "是否与 candidate_answer 逐句重复",
+      "lite email 是否只展示骨架而不泄露完整答案"
+    ],
+    "risk_level": "P0"
+  },
+  "daily_question.thirty_second_answer": {
+    "renders_to": [
+      "candidate/latest.json",
+      "quality rewrites / fallback",
+      "admin quality artifacts"
+    ],
+    "quality_modules": [
+      "question_quality",
+      "content_quality",
+      "pre_send_cleanliness",
+      "quality_gate"
+    ],
+    "must_validate": [
+      "是否为完整句而非半截压缩语",
+      "是否与 output_sentence_template 语义一致",
+      "是否没有省略号和尾部残句"
+    ],
+    "risk_level": "P1"
+  },
+  "policy_coordinate": {
+    "renders_to": [
+      "full email 政策坐标 / 考场转化卡",
+      "plain_text",
+      "candidate/latest.json",
+      "weekly report source fields"
+    ],
+    "quality_modules": [
+      "policy_coordinate_quality",
+      "policy_coordinate_semantic_fit",
+      "content_quality",
+      "quality_gate"
+    ],
+    "must_validate": [
+      "弱匹配是否隐藏",
+      "evidence/source 是否与文章核心矛盾贴合",
+      "是否没有泛泛治理套话强行展示"
+    ],
+    "risk_level": "P0"
+  },
+  "golden_sentences": {
+    "renders_to": [
+      "full email 今日可带走",
+      "weekly full PDF 金句表达库",
+      "candidate/latest.json"
+    ],
+    "quality_modules": [
+      "takeaway_quality",
+      "expression_quality",
+      "content_quality",
+      "quality_gate"
+    ],
+    "must_validate": [
+      "句子是否完整且可背",
+      "scenario 是否完整说明适用场景",
+      "是否没有截断和空泛套话"
+    ],
+    "risk_level": "P1"
+  },
+  "rewritable_expression": {
+    "renders_to": [
+      "full email 今日精读文章",
+      "lite email 一句可用表达",
+      "candidate/latest.json"
+    ],
+    "quality_modules": [
+      "takeaway_quality",
+      "expression_quality",
+      "lite_email_quality",
+      "quality_gate"
+    ],
+    "must_validate": [
+      "不得泄漏栏目标签",
+      "必须完整、短句、可复述",
+      "不要与 exam_transfer_card 连续复用同一套话术"
+    ],
+    "risk_level": "P1"
+  },
+  "lite_paid_cta": {
+    "renders_to": [
+      "lite email 尾部 CTA",
+      "candidate/latest.json",
+      "admin preview artifacts"
+    ],
+    "quality_modules": [
+      "lite_email_quality",
+      "content_quality",
+      "quality_gate"
+    ],
+    "must_validate": [
+      "今天完整版亮点是否具体",
+      "不得泄露完整 candidate_answer",
+      "不得出现过强销售话术或内部说明"
+    ],
+    "risk_level": "P1"
+  },
+  "lite_paid_highlight": {
+    "renders_to": [
+      "lite email 尾部 CTA fallback",
+      "candidate/latest.json"
+    ],
+    "quality_modules": [
+      "lite_email_quality",
+      "content_quality",
+      "quality_gate"
+    ],
+    "must_validate": [
+      "字段缺失时是否安全兜底",
+      "hook 是否完整、不过长、无违规词"
+    ],
+    "risk_level": "P1"
+  },
+  "speed_reads": {
+    "renders_to": [
+      "full email 今日速读",
+      "lite email 今日速读",
+      "weekly PDF 延伸阅读索引 / 周回看",
+      "candidate/latest.json"
+    ],
+    "quality_modules": [
+      "quick_reads_quality",
+      "content_quality",
+      "lite_email_quality",
+      "weekly_pdf_quality",
+      "quality_gate"
+    ],
+    "must_validate": [
+      "标题、来源、主题、one_sentence 完整",
+      "不得挤成半句或空泛 exam_value",
+      "lite preview 不得泄露完整版延伸内容"
+    ],
+    "risk_level": "P1"
+  },
+  "weekly_pdf_url / oss_pdf_path": {
+    "renders_to": [
+      "weekly full PDF attachment lookup",
+      "weekly lite preview attachment lookup",
+      "candidate/latest.json",
+      "admin / harness logs"
+    ],
+    "quality_modules": [
+      "weekly_pdf_quality",
+      "quality_gate"
+    ],
+    "must_validate": [
+      "full 与 lite preview 路径都稳定填充",
+      "日期区间一致",
+      "lite 路径文件名包含 lite-preview，full 路径不包含"
+    ],
+    "risk_level": "P0"
+  },
+  "subscription.end_date / reminder_sent / plan": {
+    "renders_to": [
+      "variant assignment",
+      "full_trial_d3/d1/d0 reminder banner",
+      "OSS subscribers.csv"
+    ],
+    "quality_modules": [
+      "subscriber variant assignment",
+      "send audit",
+      "trial reminder sync"
+    ],
+    "must_validate": [
+      "Asia/Shanghai 日期计算正确",
+      "已提醒用户不会重复提醒",
+      "try / free / paid_trial / paid_monthly 语义不被破坏"
+    ],
+    "risk_level": "P0"
+  },
+  "referral_code / referred_by": {
+    "renders_to": [
+      "full email referral footer",
+      "lite email referral footer",
+      "OSS subscribers.csv"
+    ],
+    "quality_modules": [
+      "referral footer rendering",
+      "subscriber persistence checks"
+    ],
+    "must_validate": [
+      "仅发送阶段按收件人个性化追加",
+      "REFERRAL_ENTRY_URL 为空时不展示",
+      "推荐码补全不覆盖已有 referral_code"
+    ],
+    "risk_level": "P1"
+  }
+}

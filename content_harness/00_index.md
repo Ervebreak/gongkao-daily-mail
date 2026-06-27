@@ -374,3 +374,28 @@
 - 管理员报告发送成功率和早晨发送成功率。
 - 重复问题是否已转为规则、脚本或样例。
 - 下一周 Harness 升级清单。
+
+## Stage 3 规则治理入口
+
+新增规则治理入口文件：
+
+- `rule_registry.md`
+- `field_impact_map.json`
+
+修改以下高风险字段前，先查这两个文件：
+
+- `daily_question.answer_framework`
+- `daily_question.thirty_second_answer`
+- `policy_coordinate`
+- `golden_sentences`
+- `rewritable_expression`
+- `lite_paid_cta`
+- `lite_paid_highlight`
+- `speed_reads`
+- `weekly_pdf_url / oss_pdf_path`
+- `subscription.end_date / reminder_sent / plan`
+- `referral_code / referred_by`
+
+需要核对运行时 Prompt 规则漂移时，先运行：
+
+- `python scripts/audit_prompt_rules.py --json`
