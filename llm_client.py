@@ -562,7 +562,7 @@ def build_daily_question_rewrite_prompt(brief: dict[str, Any], article: Article 
 
 请基于以下文章与当前内容，只重写 daily_question。
 输出字段必须包含：question_type、question、exam_focus、breaking_hint、answer_framework、candidate_answer、thirty_second_answer、output_prompt、output_sentence_template。
-question 控制在80-180字；answer_framework 应为 3-4 条关键词式骨架，每点不超过35字，格式为“动词短语：简短解释。”；candidate_answer 应是 280-450 字、自然稳重、可复述的考生版参考答案，负责完整展开；answer_framework 不得与 candidate_answer 逐句重复，不得连续12字以上照搬答案表达；thirty_second_answer 控制在40-100字；output_sentence_template 控制在60-120字。
+question 控制在80-180字；answer_framework 应为 3-4 条关键词式骨架，每点不超过45字，格式为“动词短语：简短解释。”；candidate_answer 应是 280-450 字、自然稳重、可复述的考生版参考答案，负责完整展开；answer_framework 不得与 candidate_answer 逐句重复，不得连续12字以上照搬答案表达；thirty_second_answer 控制在40-100字；output_sentence_template 控制在60-120字。
 不得另起炉灶，必须与 featured_article 直接相关。
 
 输入数据：

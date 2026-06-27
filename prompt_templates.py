@@ -598,7 +598,7 @@ def build_user_prompt(articles: list[Article], today: str, question_bank_context
 今日一题答案要求：
 1. daily_question 总量控制在500-800字，必要时可略低，但不要低于420字，不要超过900字。
 2. answer_framework 一般为3-4条；不强制必须4点，如果3点更清楚，可以写3点。
-3. answer_framework 每条不超过35字，只写关键词式骨架，格式为“动词短语：简短解释。”，不要写成长句或完整答案段落。
+3. answer_framework 每条不超过45字，只写关键词式骨架，格式为“动词短语：简短解释。”，不要写成长句或完整答案段落。
 4. 必须额外输出 candidate_answer：280-450字的考生版参考答案，能让普通考生直接模仿。
 5. 必须额外输出 thirty_second_answer：40-100字的内部30秒压缩表达，必须像高水平考生能直接说出口。
 6. 答案必须像高水平普通考生在申论/面试中能写出来、说出来、记住的话；不要像政策报告、理论文章、评论员文章、领导讲话或教研讲义，也不要太口语化。
@@ -619,7 +619,7 @@ def build_user_prompt(articles: list[Article], today: str, question_bank_context
 今日一题输出字段要求：
 1. exam_focus：1句话审题关键，指出真正考什么。
 2. breaking_hint：1-2句破题提示，说明本题核心考察什么、按什么逻辑切入；例如“本题核心考察基层应急处置+群众工作能力，答题可按「事前防范→事中处置→事后长效」展开。”；不要写成第二套答题框架。
-3. answer_framework：3-4条关键词式骨架，每条不超过35字，匹配题型结构。
+3. answer_framework：3-4条关键词式骨架，每条不超过45字，匹配题型结构。
 4. candidate_answer：280-450字，考生版参考答案。
 5. thirty_second_answer：40-100字，内部30秒压缩表达，用于质检和兜底。
 6. output_prompt：给用户的30秒输出任务，可简短，优先要求“用一句话写开头表态/核心判断/一条具体对策”。

@@ -1,5 +1,28 @@
 # Harness Change Log
 
+## 2026-06-27 - Unify daily question answer framework limit to 45 chars
+
+Reason:
+
+- `daily_question.answer_framework` had drifted across prompt sources: some generation prompts still used `35` while the runtime rules, Skill docs, and quality checks were already aligned to `45`.
+- This inconsistency increased the risk of generation-side under-specification and made rule audits noisy.
+
+Files changed:
+
+- `prompt_templates.py`
+- `llm_client.py`
+- `CHANGELOG_HARNESS.md`
+
+Latest behavior:
+
+- All current generation-side instructions for `daily_question.answer_framework` now use `45` as the per-item upper bound.
+- The limit is again aligned across:
+  - generation prompts
+  - runtime prompt rules
+  - Skill/docs
+  - quality checks
+- This change only unifies rule wording; it does not change rendering logic, send logic, or question quality gate behavior.
+
 ## 2026-06-19 - Clarify quality card gate vs residual risk counts
 
 Reason:
