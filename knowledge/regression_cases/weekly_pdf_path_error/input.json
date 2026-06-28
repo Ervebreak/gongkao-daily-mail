@@ -1,0 +1,14 @@
+{
+  "case_id": "weekly_pdf_missing_full_oss_path",
+  "checker": "weekly_pdf_quality",
+  "delivery_date": "2026-06-29",
+  "candidate_or_weekly_pdf": {
+    "weekly_pdf": {
+      "start_date": "2026-06-23",
+      "end_date": "2026-06-29",
+      "local_pdf": "output/gongkao-weekly-2026-06-23_to_2026-06-29.pdf",
+      "oss_pdf_path": "",
+      "lite_preview": {}
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "must_include_issue_codes": [
+    "policy_coordinate_weak_match"
+  ],
+  "expected_status": "skipped",
+  "expected_ok": false
+}

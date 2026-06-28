@@ -1,0 +1,7 @@
+{
+  "must_include_issue_codes": [
+    "label_leaked_in_expression"
+  ],
+  "expected_status": "ok",
+  "expected_ok": true
+}

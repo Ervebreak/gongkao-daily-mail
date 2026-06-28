@@ -73,3 +73,4 @@ def test_generate_quality_reflections_writes_latest_payload_and_knowledge(tmp_pa
     assert all("root_cause" in row for row in rows)
     assert all("detector" in row for row in rows)
     assert all("auto_fix" in row for row in rows)
+    assert all(row["regression_case"] is False for row in rows)

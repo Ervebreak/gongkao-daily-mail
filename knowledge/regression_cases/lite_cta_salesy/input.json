@@ -1,0 +1,11 @@
+{
+  "case_id": "lite_cta_over_sales_words",
+  "checker": "lite_cta_regression",
+  "latest_json": {
+    "brief": {
+      "lite_paid_cta": {
+        "hook": "今天这部分属于内部资料级拆解，适合冲刺上岸，几乎就是保过思路。"
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "case_id": "label_leak_rewritable_expression",
+  "checker": "expression_quality",
+  "brief": {
+    "featured_article": {
+      "rewritable_expression": "可用表达：把群众诉求转化为闭环办理机制，关键在于前台受理和后端协同同步到位。"
+    }
+  }
+}
