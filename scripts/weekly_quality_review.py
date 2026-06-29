@@ -89,6 +89,22 @@ def _top(counter: collections.Counter[str], limit: int = 8) -> list[dict[str, An
     return [{"name": key, "count": value} for key, value in counter.most_common(limit)]
 
 
+def _top_stage_totals(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    totals = {
+        "selection_tokens": sum(_safe_int(row.get("selection_tokens")) for row in rows),
+        "writing_tokens": sum(_safe_int(row.get("writing_tokens")) for row in rows),
+        "rewrite_tokens": sum(_safe_int(row.get("rewrite_tokens")) for row in rows),
+        "policy_rerank_tokens": sum(_safe_int(row.get("policy_rerank_tokens")) for row in rows),
+        "lite_cta_tokens": sum(_safe_int(row.get("lite_cta_tokens")) for row in rows),
+    }
+    ranked = sorted(
+        ({"name": key, "count": value} for key, value in totals.items() if value > 0),
+        key=lambda item: item["count"],
+        reverse=True,
+    )
+    return ranked
+
+
 def _count_regression_cases(regression_root: Path, start: dt.date, end: dt.date) -> dict[str, int]:
     if not regression_root.exists():
         return {"total": 0, "new_this_week": 0}
@@ -200,6 +216,21 @@ def build_weekly_review(
     good_added = _count_knowledge_items(knowledge_dir / "weekly_log.md", week, "Good Examples")
     bad_added = _count_knowledge_items(knowledge_dir / "weekly_log.md", week, "Bad Examples")
     patterns_added = _count_knowledge_items(knowledge_dir / "weekly_log.md", week, "Patterns Updated")
+    token_rows = [row for row in nightly if _safe_int(row.get("estimated_total_tokens")) > 0]
+    total_tokens = sum(_safe_int(row.get("estimated_total_tokens")) for row in token_rows)
+    total_calls = sum(_safe_int(row.get("llm_call_count")) for row in token_rows)
+    total_fallbacks = sum(_safe_int(row.get("fallback_count")) for row in token_rows)
+    stage_totals = _top_stage_totals(token_rows)
+    selection_share = (
+        sum(_safe_int(row.get("selection_tokens")) for row in token_rows) / total_tokens
+        if total_tokens > 0
+        else 0
+    )
+    multi_candidate_cost_note = (
+        "selection cost is noticeable this week; review whether multi-candidate gains justify the added tokens."
+        if selection_share >= 0.18
+        else "selection cost remains controlled; lightweight multi-candidate did not dominate total token usage."
+    )
 
     avg_scores = {
         module: round(module_score_sum[module] / module_score_count[module], 1)
@@ -278,6 +309,16 @@ def build_weekly_review(
             "new_reflections_total": len(reflection_rows),
             "repeated_issue_types": _top(repeated_reflections),
             "promoted_counts": _top(promoted_reflections),
+        },
+        "token_review": {
+            "nightly_rows_with_tokens": len(token_rows),
+            "estimated_total_tokens": total_tokens,
+            "average_tokens_per_email": round(total_tokens / len(token_rows), 1) if token_rows else 0,
+            "llm_call_count": total_calls,
+            "fallback_count": total_fallbacks,
+            "stage_totals": stage_totals,
+            "most_expensive_stage": stage_totals[0]["name"] if stage_totals else "",
+            "multi_candidate_cost_note": multi_candidate_cost_note,
         },
         "regression_cases": {
             "total_cases": regression_counts["total"],
@@ -359,6 +400,17 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- New regression cases this week: {report['regression_cases']['new_cases_this_week']}",
         f"- Latest run: {report['regression_cases']['latest_run_passed']} passed / {report['regression_cases']['latest_run_case_count']} total ({report['regression_cases']['latest_run_pass_rate']})",
         f"- Latest run failed: {report['regression_cases']['latest_run_failed']}",
+        "",
+        "## Token / Cost Review",
+        "",
+        f"- Nightly rows with token stats: {report['token_review']['nightly_rows_with_tokens']}",
+        f"- Estimated total tokens: {report['token_review']['estimated_total_tokens']}",
+        f"- Average tokens per email: {report['token_review']['average_tokens_per_email']}",
+        f"- LLM call count: {report['token_review']['llm_call_count']}",
+        f"- Fallback count: {report['token_review']['fallback_count']}",
+        f"- Most expensive stage: {report['token_review']['most_expensive_stage'] or 'N/A'}",
+        "- Stage totals: " + json.dumps(report["token_review"]["stage_totals"], ensure_ascii=False),
+        f"- Multi-candidate cost note: {report['token_review']['multi_candidate_cost_note']}",
         "",
         "## Next Week Harness Upgrade",
         "",

@@ -29,6 +29,7 @@ from quality_gate import (
     evaluate_weekly_pdf_quality as shared_evaluate_weekly_pdf_quality,
     looks_like_gate_drift,
 )
+from token_economics import summarize_token_usage
 
 
 TZ = dt.timezone(dt.timedelta(hours=8))
@@ -135,6 +136,9 @@ def summarize_llm_trace(events: list[dict[str, Any]]) -> dict[str, Any]:
                 "failed_models": [],
                 "final_model": "",
                 "attempt_count": 0,
+                "llm_call_count": 0,
+                "estimated_total_tokens": 0,
+                "fallback_count": 0,
             },
         )
         model = str(event.get("model") or "").strip()
@@ -149,6 +153,12 @@ def summarize_llm_trace(events: list[dict[str, Any]]) -> dict[str, Any]:
                 item["final_model"] = model
         if event.get("event") == "llm_stage_attempt_failed" and model and model not in item["failed_models"]:
             item["failed_models"].append(model)
+        if event.get("event") == "llm_token_usage":
+            item["llm_call_count"] += 1
+            item["estimated_total_tokens"] += int(event.get("estimated_prompt_tokens") or 0) + int(event.get("estimated_response_tokens") or 0)
+            if event.get("fallback_used"):
+                item["fallback_count"] += 1
+    stage_summary["_token_economics"] = summarize_token_usage(events)
     return stage_summary
 
 
@@ -3818,6 +3828,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
             quality_gate=quality_gate,
             article_stats=compact_article_stats(article_stats),
             final_selection=final_selection,
+            llm_trace_summary=llm_trace_summary,
         )
         candidate_payload["rewrite_comparison"] = rewrite_comparison
         candidate_payload["quality_card_markdown"] = quality_card_markdown
@@ -4043,6 +4054,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
                 history_result=history_result,
                 archive_result=archive_result,
                 final_selection=final_selection,
+                llm_trace_summary=llm_trace_summary,
             )
             logger.info("harness metrics", **metrics_result)
         except Exception as exc:

@@ -346,6 +346,48 @@ def _material_candidate_score(article: dict[str, Any]) -> int:
     return score
 
 
+def _material_mode_candidates(article: dict[str, Any]) -> list[dict[str, Any]]:
+    text = _article_candidate_text(article)
+    case_score = min(sum(1 for word in MATERIAL_SCENE_KEYWORDS | MATERIAL_PROBLEM_KEYWORDS if word in text) * 5, 45)
+    mechanism_score = min(sum(1 for word in MATERIAL_MECHANISM_KEYWORDS if word in text) * 7, 49)
+    expression_score = min(sum(1 for word in MATERIAL_TRANSFER_KEYWORDS | MATERIAL_TOPIC_KEYWORDS if word in text) * 4, 36)
+    candidates = [
+        {
+            "mode": "case",
+            "label": "具体案例型",
+            "score": case_score + (8 if article.get("role") == "featured" else 0),
+            "reason": "优先提炼具体场景、矛盾和对象，适合素材论证和综合分析。",
+        },
+        {
+            "mode": "mechanism",
+            "label": "治理路径型",
+            "score": mechanism_score + (4 if any(word in text for word in MATERIAL_PROBLEM_KEYWORDS) else 0),
+            "reason": "优先提炼机制做法、闭环动作和责任链条，适合对策题和治理路径表达。",
+        },
+        {
+            "mode": "expression",
+            "label": "可迁移表达型",
+            "score": expression_score + (4 if article.get("role") == "quick_read" else 0),
+            "reason": "优先提炼母题表达和治理逻辑，适合分论点、结尾升华和表达积累。",
+        },
+    ]
+    ranked = [item for item in candidates if int(item.get("score") or 0) > 0]
+    ranked.sort(key=lambda item: int(item.get("score") or 0), reverse=True)
+    return ranked[:3]
+
+
+def _preferred_material_mode(article: dict[str, Any]) -> dict[str, Any]:
+    modes = _material_mode_candidates(article)
+    if not modes:
+        return {
+            "mode": "mechanism",
+            "label": "治理路径型",
+            "score": 0,
+            "reason": "信息较少时默认优先提炼治理动作，避免把窄场景硬写成大案例。",
+        }
+    return modes[0]
+
+
 def select_material_candidate_articles(days: list[dict[str, Any]], max_candidates: int = 6) -> list[dict[str, Any]]:
     """Select a small article set suitable for material-card evidence reading."""
     max_candidates = min(max(1, max_candidates), 6)
@@ -475,6 +517,13 @@ def build_candidate_evidence(days: list[dict[str, Any]], max_candidates: int = 6
     evidence_rows: list[dict[str, Any]] = []
     for article in candidates:
         evidence_text, warning = _fetch_article_text_with_warning(_clean(article.get("url")), max_chars=1800)
+        preferred_mode = _preferred_material_mode(article) if settings.weekly_material_multi_candidate_enabled else {
+            "mode": "mechanism",
+            "label": "治理路径型",
+            "score": 0,
+            "reason": "weekly material multi candidate disabled",
+        }
+        mode_candidates = _material_mode_candidates(article) if settings.weekly_material_multi_candidate_enabled else []
         existing_summary = "；".join(
             item
             for item in [
@@ -492,6 +541,10 @@ def build_candidate_evidence(days: list[dict[str, Any]], max_candidates: int = 6
             "url": _clean(article.get("url")),
             "material_score": article.get("material_score"),
             "selection_reason": _clean(article.get("selection_reason")),
+            "preferred_material_mode": preferred_mode.get("mode"),
+            "preferred_material_mode_label": preferred_mode.get("label"),
+            "preferred_material_mode_reason": preferred_mode.get("reason"),
+            "material_mode_candidates": mode_candidates,
             "existing_summary": _clip_text(existing_summary, 500),
             "evidence_text": evidence_text,
         }
@@ -513,6 +566,7 @@ def _build_prompt(days: list[dict[str, Any]], candidate_evidence: list[dict[str,
 硬性规则：
 1. 只使用输入 JSON 中已有信息，不得编造外部事实、政策、案例、数字、地名、部门名。
 2. material_cards 只能从 candidate_evidence 中提炼，优先使用 evidence_text 中出现的事实锚点或机制做法。
+2.1 如果 candidate_evidence 提供 preferred_material_mode 或 material_mode_candidates，请优先沿着最适合考场迁移的那条线提炼，不要把同一篇文章同时写成冗长案例、机制和表达三种版本。
 3. 不要推测未提供的文章全文；输入中没有的事实不要补。
 4. 对策建议题不要硬塞外部案例。
 5. 所有句子必须完整，不得出现省略号、半截句、悬空动词或未完成判断。

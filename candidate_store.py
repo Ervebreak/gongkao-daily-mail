@@ -141,6 +141,7 @@ def build_candidate_payload(
     quality_gate: dict[str, Any],
     article_stats: dict[str, Any],
     final_selection: dict[str, Any],
+    llm_trace_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     lite_paid_cta = brief.get("lite_paid_cta") if isinstance(brief.get("lite_paid_cta"), dict) else {}
     lite_paid_highlight = str(
@@ -162,6 +163,7 @@ def build_candidate_payload(
         "quality_gate": quality_gate,
         "article_stats": article_stats,
         "final_selection": final_selection,
+        "llm_trace_summary": llm_trace_summary or {},
     }
     return normalize_candidate_quality_state(payload)
 

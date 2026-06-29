@@ -1,5 +1,60 @@
 # Harness Change Log
 
+## 2026-06-29 - Harness Phase 5 lightweight candidate selection and token review
+
+Reason:
+
+- The project already tracks LLM traces and harness metrics, but high-risk modules such as `daily_question` and weekly PDF material selection still rely on single-pass generation with limited cost visibility.
+- This stage adds lightweight multi-candidate selection only where quality gains are most likely, while keeping the rest of the generation and sending flow unchanged.
+- Because this can change formal generation output and token spend, the new behavior is default-off and intended for controlled rollout.
+
+Files changed:
+
+- `config.py`
+- `token_economics.py`
+- `llm_client.py`
+- `main.py`
+- `candidate_store.py`
+- `harness_metrics.py`
+- `weekly_material_curator.py`
+- `scripts/weekly_quality_review.py`
+- `tests/test_token_economics.py`
+- `tests/test_daily_question_multi_candidate.py`
+- `tests/test_weekly_material_curator_quality.py`
+- `tests/test_weekly_quality_review_reflections.py`
+- `CHANGELOG_HARNESS.md`
+
+Latest behavior:
+
+- Added lightweight daily-question multi-candidate selection:
+  - generate 2 candidate directions on top of the original result
+  - score them with existing question quality checks plus overlap/style heuristics
+  - keep fallback to the original single-candidate result if selection fails
+- Added weekly material mode candidate selection metadata so each source article can prefer:
+  - `case`
+  - `mechanism`
+  - `expression`
+- Added `token_economics.py` and trace summarization for estimated prompt/response tokens by stage.
+- Extended harness metrics and weekly review with token/cost visibility:
+  - `llm_call_count`
+  - `estimated_total_tokens`
+  - `selection_tokens`
+  - `writing_tokens`
+  - `rewrite_tokens`
+  - `policy_rerank_tokens`
+  - `lite_cta_tokens`
+  - `fallback_count`
+- Added `Token / Cost Review` to weekly harness review output.
+- New environment toggles:
+  - `DAILY_QUESTION_MULTI_CANDIDATE_ENABLED`
+  - `WEEKLY_MATERIAL_MULTI_CANDIDATE_ENABLED`
+- Both toggles are now default-off and must be explicitly enabled by environment variable for production rollout.
+- This stage does not change:
+  - morning send behavior
+  - subscriber plan logic
+  - unsubscribe logic
+  - referral logic
+
 ## 2026-06-29 - Harness Phase 4 regression case runner
 
 Reason:

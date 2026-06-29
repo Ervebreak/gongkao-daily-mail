@@ -31,6 +31,7 @@ from prompt_templates import (
     build_user_prompt,
     full_article_for_generation,
 )
+from token_economics import estimate_text_tokens
 
 
 LlmTraceHook = Callable[[dict[str, Any]], None]
@@ -77,21 +78,25 @@ def chat_completion(
         raise RuntimeError("DASHSCOPE_API_KEY is required in prod mode.")
     url = f"{settings.dashscope_base_url}/chat/completions"
     effective_timeout = timeout or settings.llm_timeout
+    effective_system_prompt = system_prompt or SYSTEM_PROMPT
     payload = {
         "model": model,
         "temperature": settings.llm_temperature,
         "response_format": {"type": "json_object"},
         "messages": [
-            {"role": "system", "content": system_prompt or SYSTEM_PROMPT},
+            {"role": "system", "content": effective_system_prompt},
             {"role": "user", "content": user_prompt},
         ],
     }
+    prompt_chars = len((effective_system_prompt or "") + (user_prompt or ""))
+    estimated_prompt_tokens = estimate_text_tokens((effective_system_prompt or "") + "\n" + (user_prompt or ""))
     trace_payload = dict(trace or {})
     trace_payload.update(
         {
             "model": model,
             "timeout_seconds": effective_timeout,
-            "prompt_chars": len(user_prompt or ""),
+            "prompt_chars": prompt_chars,
+            "estimated_prompt_tokens": estimated_prompt_tokens,
             "base_url": settings.dashscope_base_url,
             "custom_system_prompt": bool(system_prompt),
         }
@@ -112,18 +117,38 @@ def chat_completion(
         data = response.json()
         content = data["choices"][0]["message"]["content"]
         parsed = extract_json_object(content)
+        elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+        response_chars = len(content or "")
+        estimated_response_tokens = estimate_text_tokens(content or "")
+        _emit_llm_trace(
+            "llm_token_usage",
+            **trace_payload,
+            elapsed_ms=elapsed_ms,
+            response_chars=response_chars,
+            estimated_response_tokens=estimated_response_tokens,
+        )
         _emit_llm_trace(
             "llm_request_success",
             **trace_payload,
-            elapsed_ms=int((time.perf_counter() - started_at) * 1000),
-            response_chars=len(content or ""),
+            elapsed_ms=elapsed_ms,
+            response_chars=response_chars,
         )
         return parsed
     except Exception as exc:
+        elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+        _emit_llm_trace(
+            "llm_token_usage",
+            **trace_payload,
+            elapsed_ms=elapsed_ms,
+            response_chars=0,
+            estimated_response_tokens=0,
+            error_type=type(exc).__name__,
+            error=str(exc),
+        )
         _emit_llm_trace(
             "llm_request_error",
             **trace_payload,
-            elapsed_ms=int((time.perf_counter() - started_at) * 1000),
+            elapsed_ms=elapsed_ms,
             error_type=type(exc).__name__,
             error=str(exc),
         )
@@ -506,6 +531,202 @@ def _rewrite_context_payload(article: Article | None, brief: dict[str, Any]) -> 
     }
 
 
+def _daily_question_candidate_styles() -> list[dict[str, str]]:
+    return [
+        {
+            "name": "shenlun_policy",
+            "label": "申论综合分析/对策题",
+            "rules": "优先生成更像申论综合分析题或对策题的题干，可以不强制设置身份，但要有明确场景、矛盾和任务，便于展开具体作答。",
+        },
+        {
+            "name": "practical_scene",
+            "label": "机关实务/面试场景题",
+            "rules": "优先生成更像机关实务或面试场景题的题干，必须有明确身份、场景、矛盾和任务，能自然引出工作思路或沟通协调作答。",
+        },
+    ]
+
+
+def build_daily_question_candidate_prompt(brief: dict[str, Any], article: Article | None, style: dict[str, str]) -> str:
+    payload = _rewrite_context_payload(article, brief)
+    payload["candidate_style"] = style.get("label")
+    payload["style_rules"] = style.get("rules")
+    question_bank_meta = brief.get("_question_bank") if isinstance(brief.get("_question_bank"), dict) else {}
+    payload["question_bank_refs"] = question_bank_meta.get("question_bank_refs") or []
+    return f"""
+请只生成一个 daily_question 候选，不要改写其他字段。
+只输出合法 JSON，不要输出解释。
+
+{GLOBAL_RULES_V1}
+
+{DAILY_QUESTION_RULES_V1}
+
+{STRUCTURED_FIELD_RULES_V1}
+
+候选方向：{style.get("label")}
+风格要求：{style.get("rules")}
+
+请基于下方文章与当前 brief，输出一个更适合作为今天题目的 daily_question。
+输出字段必须包含：question_type、question、exam_focus、breaking_hint、answer_framework、candidate_answer、thirty_second_answer、output_prompt、output_sentence_template。
+要求：
+1. 只做 1 个候选。
+2. 题目必须贴合 featured_article，不得另起炉灶。
+3. 题目要像真题，不能空泛，也不能只是复述文章标题。
+4. answer_framework 要能和 candidate_answer 配套，但不能逐句照抄。
+5. 不得和 today_takeaway、featured_article.rewritable_expression、考场转化内容重复堆叠同一组套话。
+
+输入数据：
+{json.dumps(payload, ensure_ascii=False)}
+""".strip()
+
+
+def _daily_question_overlap_penalty(brief: dict[str, Any], module: dict[str, Any]) -> int:
+    target_text = " ".join(
+        str(part or "")
+        for part in [
+            module.get("question"),
+            " ".join(str(item or "") for item in (module.get("answer_framework") or [])),
+            module.get("candidate_answer"),
+            module.get("thirty_second_answer"),
+        ]
+    )
+    support_texts = [
+        ((brief.get("today_takeaway") if isinstance(brief.get("today_takeaway"), dict) else {}) or {}).get("framework"),
+        ((brief.get("featured_article") if isinstance(brief.get("featured_article"), dict) else {}) or {}).get("rewritable_expression"),
+        ((brief.get("exam_transfer_card") if isinstance(brief.get("exam_transfer_card"), dict) else {}) or {}).get("exam_transfer"),
+        ((brief.get("exam_transfer_card") if isinstance(brief.get("exam_transfer_card"), dict) else {}) or {}).get("exam_expression"),
+    ]
+    penalty = 0
+    compact_target = re.sub(r"\s+", "", target_text)
+    for source in support_texts:
+        compact_source = re.sub(r"\s+", "", str(source or ""))
+        if len(compact_source) < 8 or len(compact_target) < 12:
+            continue
+        if compact_source in compact_target or compact_target in compact_source:
+            penalty += 8
+        elif len(set(re.findall(r"[\u4e00-\u9fff]{2,6}", compact_source)) & set(re.findall(r"[\u4e00-\u9fff]{2,6}", compact_target))) >= 3:
+            penalty += 4
+    return penalty
+
+
+def _daily_question_style_bonus(module: dict[str, Any], style_name: str) -> int:
+    question_type = str(module.get("question_type") or "")
+    question_text = str(module.get("question") or "")
+    if style_name == "shenlun_policy":
+        bonus = 0
+        if any(keyword in question_type for keyword in ("申论", "对策", "综合")):
+            bonus += 4
+        if "你是" not in question_text and "作为" not in question_text:
+            bonus += 2
+        return bonus
+    if style_name == "practical_scene":
+        bonus = 0
+        if any(keyword in question_type for keyword in ("面试", "实务", "机关")):
+            bonus += 4
+        if "你是" in question_text or "作为" in question_text:
+            bonus += 2
+        return bonus
+    return 0
+
+
+def _daily_question_candidate_score(brief: dict[str, Any], module: dict[str, Any], style_name: str) -> dict[str, Any]:
+    candidate_brief = json.loads(json.dumps(brief, ensure_ascii=False))
+    candidate_brief["daily_question"] = module
+    question_report = evaluate_daily_question(candidate_brief)
+    base_score = int(question_report.get("score") or 0)
+    overlap_penalty = _daily_question_overlap_penalty(candidate_brief, module)
+    style_bonus = _daily_question_style_bonus(module, style_name)
+    final_score = base_score + style_bonus - overlap_penalty
+    return {
+        "final_score": final_score,
+        "base_score": base_score,
+        "style_bonus": style_bonus,
+        "overlap_penalty": overlap_penalty,
+        "quality": question_report,
+    }
+
+
+def select_best_daily_question_candidate(brief: dict[str, Any], articles: list[Article], test_mode: bool = False) -> dict[str, Any]:
+    if not settings.daily_question_multi_candidate_enabled:
+        return {"brief": brief, "selected_source": "disabled", "candidates": [], "fallback_used": True}
+    if test_mode and any((model or "").lower() == "mock" for model in _stage_model_candidates("writing", test_mode)):
+        return {"brief": brief, "selected_source": "mock_skip", "candidates": [], "fallback_used": True}
+
+    article = _find_featured_article_for_rewrite(articles, brief)
+    current_module = brief.get("daily_question") if isinstance(brief.get("daily_question"), dict) else {}
+    candidates: list[dict[str, Any]] = []
+    if current_module:
+        candidates.append(
+            {
+                "source": "original",
+                "style": "original",
+                "module": current_module,
+                **_daily_question_candidate_score(brief, current_module, "original"),
+            }
+        )
+
+    errors: list[str] = []
+    for style in _daily_question_candidate_styles():
+        prompt = build_daily_question_candidate_prompt(brief, article, style)
+        try:
+            response = _call_with_fallback(prompt, test_mode, stage="question_candidate_selection", contract=False)
+            module = response.get("daily_question") if isinstance(response.get("daily_question"), dict) else response
+            if not isinstance(module, dict) or not module.get("question"):
+                raise ValueError("daily question candidate payload missing question")
+            candidates.append(
+                {
+                    "source": "generated",
+                    "style": style["name"],
+                    "module": module,
+                    **_daily_question_candidate_score(brief, module, style["name"]),
+                }
+            )
+        except Exception as exc:
+            errors.append(f"{style.get('name')}: {type(exc).__name__}: {exc}")
+
+    if not candidates:
+        return {
+            "brief": brief,
+            "selected_source": "fallback_original",
+            "candidates": [],
+            "errors": errors,
+            "fallback_used": True,
+        }
+
+    ranked = sorted(
+        candidates,
+        key=lambda item: (
+            int(item.get("final_score") or 0),
+            int((item.get("quality") or {}).get("score") or 0),
+            1 if item.get("source") == "generated" else 0,
+        ),
+        reverse=True,
+    )
+    winner = ranked[0]
+    updated = json.loads(json.dumps(brief, ensure_ascii=False))
+    updated["daily_question"] = json.loads(json.dumps(winner["module"], ensure_ascii=False))
+    three = updated.setdefault("today_three_things", {})
+    if isinstance(three, dict):
+        three["daily_question"] = str(winner["module"].get("question") or three.get("daily_question") or "")
+    updated["_daily_question_candidates"] = [
+        {
+            "source": item["source"],
+            "style": item["style"],
+            "final_score": item["final_score"],
+            "base_score": item["base_score"],
+            "style_bonus": item["style_bonus"],
+            "overlap_penalty": item["overlap_penalty"],
+        }
+        for item in ranked
+    ]
+    return {
+        "brief": updated,
+        "selected_source": str(winner.get("style") or winner.get("source") or ""),
+        "candidates": updated["_daily_question_candidates"],
+        "errors": errors,
+        "fallback_used": winner.get("source") == "original",
+    }
+
+
 def _issue_messages(report: dict[str, Any]) -> list[str]:
     messages: list[str] = []
     for item in (report.get("issues") or []):
@@ -823,6 +1044,14 @@ def generate_brief_two_stage(articles: list[Article], today: str, test_mode: boo
         **question_bank_meta,
         "question_bank_refs": question_bank_refs,
     }
+    question_selection_result = select_best_daily_question_candidate(brief, selected_articles, test_mode=test_mode)
+    brief = question_selection_result.get("brief") if isinstance(question_selection_result.get("brief"), dict) else brief
+    brief["_daily_question_selection"] = {
+        "selected_source": question_selection_result.get("selected_source"),
+        "candidate_count": len(question_selection_result.get("candidates") or []),
+        "fallback_used": bool(question_selection_result.get("fallback_used")),
+        "errors": question_selection_result.get("errors") or [],
+    }
     return refine_high_risk_modules(brief, selected_articles, test_mode=test_mode)
 
 
@@ -858,5 +1087,13 @@ def generate_brief(articles: list[Article], today: str, test_mode: bool = False,
     brief["_question_bank"] = {
         **question_bank_meta,
         "question_bank_refs": question_bank_refs,
+    }
+    question_selection_result = select_best_daily_question_candidate(brief, articles, test_mode=test_mode)
+    brief = question_selection_result.get("brief") if isinstance(question_selection_result.get("brief"), dict) else brief
+    brief["_daily_question_selection"] = {
+        "selected_source": question_selection_result.get("selected_source"),
+        "candidate_count": len(question_selection_result.get("candidates") or []),
+        "fallback_used": bool(question_selection_result.get("fallback_used")),
+        "errors": question_selection_result.get("errors") or [],
     }
     return brief
