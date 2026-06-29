@@ -71,6 +71,24 @@ def _p0_repair_attempted(rewrite_result: dict[str, Any] | None) -> bool:
     return False
 
 
+def _llm_metrics(llm_trace_summary: dict[str, Any] | None) -> dict[str, int]:
+    token_summary = (
+        llm_trace_summary.get("_token_economics")
+        if isinstance(llm_trace_summary, dict) and isinstance(llm_trace_summary.get("_token_economics"), dict)
+        else {}
+    )
+    return {
+        "llm_call_count": _safe_int(token_summary.get("llm_call_count")),
+        "estimated_total_tokens": _safe_int(token_summary.get("estimated_total_tokens")),
+        "selection_tokens": _safe_int(token_summary.get("selection_tokens")),
+        "writing_tokens": _safe_int(token_summary.get("writing_tokens")),
+        "rewrite_tokens": _safe_int(token_summary.get("rewrite_tokens")),
+        "policy_rerank_tokens": _safe_int(token_summary.get("policy_rerank_tokens")),
+        "lite_cta_tokens": _safe_int(token_summary.get("lite_cta_tokens")),
+        "fallback_count": _safe_int(token_summary.get("fallback_count")),
+    }
+
+
 def append_metrics(record: dict[str, Any]) -> dict[str, Any]:
     if not settings.harness_metrics_enabled:
         return {"metrics_appended": False, "metrics_skip_reason": "HARNESS_METRICS_ENABLED=false"}
@@ -95,9 +113,11 @@ def append_nightly_metrics(
     history_result: dict[str, Any] | None,
     archive_result: dict[str, Any] | None,
     final_selection: dict[str, Any] | None,
+    llm_trace_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     gate = quality_payload.get("gate") if isinstance(quality_payload.get("gate"), dict) else {}
     p0_repair_attempted = _p0_repair_attempted(rewrite_result)
+    llm_metrics = _llm_metrics(llm_trace_summary)
     record = {
         "date": delivery_date,
         "mode": "nightly_candidate",
@@ -124,6 +144,7 @@ def append_nightly_metrics(
         "source_candidate_counts": article_stats.get("source_candidate_counts") or {},
         "featured_title": ((final_selection or {}).get("featured") or {}).get("title") if isinstance((final_selection or {}).get("featured"), dict) else None,
         "send_status": "blocked" if gate.get("overall") == "fail" else "pending_morning_send",
+        **llm_metrics,
     }
     return append_metrics(record)
 
@@ -143,6 +164,7 @@ def append_morning_metrics(
     candidate = candidate or {}
     gate = candidate.get("quality_gate") if isinstance(candidate.get("quality_gate"), dict) else {}
     quality_payload = candidate.get("quality") if isinstance(candidate.get("quality"), dict) else {}
+    llm_metrics = _llm_metrics(candidate.get("llm_trace_summary") if isinstance(candidate.get("llm_trace_summary"), dict) else None)
     record = {
         "date": delivery_date,
         "mode": "morning_send",
@@ -162,5 +184,6 @@ def append_morning_metrics(
         "send_status": "sent" if _safe_int((send_result or {}).get("success_count")) > 0 else ("blocked" if status == "blocked" else "skipped"),
         "history_write_ok": bool(history_result and history_result.get("history_write_ok")),
         "archive_saved": bool(archive_result and archive_result.get("daily_archive_saved")),
+        **llm_metrics,
     }
     return append_metrics(record)

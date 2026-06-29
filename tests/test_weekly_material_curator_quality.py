@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from weekly_material_curator import _build_prompt, _validate_enrichment, _validate_usage_examples, select_material_candidate_articles
+from weekly_material_curator import (
+    _build_prompt,
+    _validate_enrichment,
+    _validate_usage_examples,
+    build_candidate_evidence,
+    select_material_candidate_articles,
+)
 
 
 GOLDEN_SENTENCE = "把问题解决在基层一线，关键是让治理动作能被群众真实感知。"
@@ -215,3 +221,34 @@ def test_quick_reads_compete_by_material_usability_score() -> None:
 
     assert candidates[0]["role"] == "quick_read"
     assert candidates[0]["material_score"] > candidates[1]["material_score"]
+
+
+def test_build_candidate_evidence_adds_preferred_material_mode(monkeypatch) -> None:
+    days = [
+        {
+            "date": "2026-06-01",
+            "theme": "基层治理",
+            "focus": "把群众诉求办成闭环",
+            "featured": {
+                "title": "平台投诉治理机制",
+                "source": "权威媒体",
+                "url": "https://example.com/featured",
+                "one_sentence": "围绕群众投诉、责任链条和闭环反馈展开。",
+                "exam_use": ["可迁移到申论治理路径题"],
+            },
+            "quick_reads": [],
+        }
+    ]
+
+    monkeypatch.setattr(
+        "weekly_material_curator._fetch_article_text_with_warning",
+        lambda url, max_chars=1800: ("平台设置投诉入口，部门按类别转办并公开反馈结果。", ""),
+    )
+
+    rows = build_candidate_evidence(days, max_candidates=1)
+
+    assert len(rows) == 1
+    assert rows[0]["preferred_material_mode"] in {"case", "mechanism", "expression"}
+    assert rows[0]["preferred_material_mode_label"]
+    assert isinstance(rows[0]["material_mode_candidates"], list)
+    assert rows[0]["material_mode_candidates"]
