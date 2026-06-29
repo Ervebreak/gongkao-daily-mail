@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import llm_client
 
@@ -33,6 +34,11 @@ def _brief() -> dict:
 
 def test_select_best_daily_question_candidate_prefers_higher_scoring_generated_option(monkeypatch) -> None:
     brief = _brief()
+    monkeypatch.setattr(
+        llm_client,
+        "settings",
+        SimpleNamespace(daily_question_multi_candidate_enabled=True),
+    )
 
     def fake_call(prompt, test_mode, stage="writing", contract=True):
         if "申论综合分析/对策题" in prompt:

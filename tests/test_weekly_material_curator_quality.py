@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from types import SimpleNamespace
 
 from weekly_material_curator import (
     _build_prompt,
@@ -224,6 +225,10 @@ def test_quick_reads_compete_by_material_usability_score() -> None:
 
 
 def test_build_candidate_evidence_adds_preferred_material_mode(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "weekly_material_curator.settings",
+        SimpleNamespace(weekly_material_multi_candidate_enabled=True),
+    )
     days = [
         {
             "date": "2026-06-01",
