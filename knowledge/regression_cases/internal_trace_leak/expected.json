@@ -1,0 +1,7 @@
+{
+  "must_include_issue_codes": [
+    "weekly_pdf_internal_marker_leaked"
+  ],
+  "expected_status": "fail",
+  "expected_ok": false
+}

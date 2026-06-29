@@ -105,6 +105,28 @@ def _top_stage_totals(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return ranked
 
 
+def _count_regression_cases(regression_root: Path, start: dt.date, end: dt.date) -> dict[str, int]:
+    if not regression_root.exists():
+        return {"total": 0, "new_this_week": 0}
+    case_files = list(regression_root.glob("*/input.json")) + list(regression_root.glob("*/*/input.json"))
+    new_this_week = 0
+    for path in case_files:
+        modified = dt.datetime.fromtimestamp(path.stat().st_mtime, tz=TZ).date()
+        if start <= modified <= end:
+            new_this_week += 1
+    return {"total": len(case_files), "new_this_week": new_this_week}
+
+
+def _read_regression_report(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def _promoted_value(row: dict[str, Any]) -> str:
     promoted = str(row.get("promoted_to") or "").strip()
     if promoted:
@@ -188,6 +210,8 @@ def build_weekly_review(
         if _safe_int(row.get("recurrence_count")) > 1
     )
     promoted_reflections: collections.Counter[str] = collections.Counter(_promoted_value(row) for row in reflection_rows)
+    regression_counts = _count_regression_cases(knowledge_dir / "regression_cases", start, end)
+    regression_report = _read_regression_report(metrics_path.parent / "latest_regression_cases.json")
 
     good_added = _count_knowledge_items(knowledge_dir / "weekly_log.md", week, "Good Examples")
     bad_added = _count_knowledge_items(knowledge_dir / "weekly_log.md", week, "Bad Examples")
@@ -296,6 +320,17 @@ def build_weekly_review(
             "most_expensive_stage": stage_totals[0]["name"] if stage_totals else "",
             "multi_candidate_cost_note": multi_candidate_cost_note,
         },
+        "regression_cases": {
+            "total_cases": regression_counts["total"],
+            "new_cases_this_week": regression_counts["new_this_week"],
+            "latest_run_passed": _safe_int(regression_report.get("passed")),
+            "latest_run_failed": _safe_int(regression_report.get("failed")),
+            "latest_run_case_count": _safe_int(regression_report.get("case_count")),
+            "latest_run_pass_rate": _pct(
+                _safe_int(regression_report.get("passed")),
+                _safe_int(regression_report.get("case_count")),
+            ),
+        },
         "next_week_harness_upgrade": next_week,
     }
 
@@ -358,6 +393,13 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- New reflections this week: {report['quality_reflections']['new_reflections_total']}",
         "- Repeated issue types: " + json.dumps(report["quality_reflections"]["repeated_issue_types"], ensure_ascii=False),
         "- Promoted to rule/checker/example: " + json.dumps(report["quality_reflections"]["promoted_counts"], ensure_ascii=False),
+        "",
+        "## Regression Cases",
+        "",
+        f"- Total regression cases: {report['regression_cases']['total_cases']}",
+        f"- New regression cases this week: {report['regression_cases']['new_cases_this_week']}",
+        f"- Latest run: {report['regression_cases']['latest_run_passed']} passed / {report['regression_cases']['latest_run_case_count']} total ({report['regression_cases']['latest_run_pass_rate']})",
+        f"- Latest run failed: {report['regression_cases']['latest_run_failed']}",
         "",
         "## Token / Cost Review",
         "",

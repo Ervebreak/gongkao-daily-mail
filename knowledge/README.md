@@ -9,6 +9,14 @@ knowledge/
   README.md
   weekly_log.md
   quality_issues.jsonl
+  regression_cases/
+    half_sentence/
+    label_leak/
+    policy_weak_match/
+    lite_cta_salesy/
+    weekly_pdf_path_error/
+    internal_trace_leak/
+    daily_question_mismatch/
   good_examples/
     daily_question.md
     framework_map.md
@@ -44,6 +52,12 @@ python scripts\check_knowledge_base.py
 
 ```powershell
 python scripts\weekly_quality_review.py --metrics output\harness_metrics.jsonl
+```
+
+可用以下命令运行历史问题回归样例：
+
+```powershell
+python scripts\run_regression_cases.py
 ```
 
 ## 使用方式

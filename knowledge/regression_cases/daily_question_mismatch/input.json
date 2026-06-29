@@ -1,0 +1,19 @@
+{
+  "case_id": "daily_question_missing_identity_and_task",
+  "checker": "question_quality",
+  "brief": {
+    "today_theme": "基层治理",
+    "daily_question": {
+      "question": "面对群众对老旧小区改造的质疑和担心，你怎么看？",
+      "question_type": "申论综合分析题",
+      "answer_framework": [
+        "理解群众顾虑",
+        "公开协商方案"
+      ],
+      "candidate_answer": "这类题不能只谈态度，而要把群众顾虑、项目推进和协商反馈结合起来。"
+    },
+    "featured_article": {
+      "title": "把群众诉求转化为治理闭环"
+    }
+  }
+}

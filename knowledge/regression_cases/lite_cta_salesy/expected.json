@@ -1,0 +1,7 @@
+{
+  "must_include_issue_codes": [
+    "lite_cta_over_sales"
+  ],
+  "expected_status": "review",
+  "expected_ok": false
+}
