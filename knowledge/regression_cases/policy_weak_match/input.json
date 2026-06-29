@@ -1,0 +1,7 @@
+{
+  "case_id": "policy_coordinate_disabled_by_weak_match",
+  "checker": "policy_coordinate_quality",
+  "brief": {
+    "_policy_coordinate_disabled_reason": "weak_match: semantic_fit weak and article_connection generic."
+  }
+}

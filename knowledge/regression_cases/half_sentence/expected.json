@@ -1,0 +1,7 @@
+{
+  "must_include_issue_codes": [
+    "expression_truncated"
+  ],
+  "expected_status": "review",
+  "expected_ok": false
+}

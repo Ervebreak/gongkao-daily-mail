@@ -1,0 +1,7 @@
+{
+  "must_include_issue_codes": [
+    "weekly_pdf_missing_oss_path"
+  ],
+  "expected_status": "fail",
+  "expected_ok": false
+}

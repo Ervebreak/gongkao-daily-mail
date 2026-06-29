@@ -1,0 +1,16 @@
+{
+  "case_id": "weekly_pdf_internal_marker_debug",
+  "checker": "weekly_pdf_quality",
+  "delivery_date": "2026-06-29",
+  "candidate_or_weekly_pdf": {
+    "plain_text": "本周资料包 debug candidate 仅供内部测试。",
+    "weekly_pdf": {
+      "start_date": "2026-06-23",
+      "end_date": "2026-06-29",
+      "oss_pdf_path": "oss://bucket/gongkao-weekly-2026-06-23_to_2026-06-29.pdf",
+      "lite_preview": {
+        "oss_pdf_path": "oss://bucket/gongkao-weekly-2026-06-23_to_2026-06-29-lite-preview.pdf"
+      }
+    }
+  }
+}

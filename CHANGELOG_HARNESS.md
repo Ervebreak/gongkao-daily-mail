@@ -1,5 +1,38 @@
 # Harness Change Log
 
+## 2026-06-29 - Harness Phase 4 regression case runner
+
+Reason:
+
+- `knowledge/quality_issues.jsonl`、`good_examples`、`bad_examples` already capture historical quality learnings, but they were not yet executable as lightweight regression cases.
+- This stage adds a small runnable regression layer so recurring issues can be checked automatically without changing formal generation or sending flow.
+
+Files changed:
+
+- `knowledge/README.md`
+- `knowledge/regression_cases/**`
+- `scripts/run_regression_cases.py`
+- `scripts/weekly_quality_review.py`
+- `tests/test_run_regression_cases.py`
+- `tests/test_quality_reflections.py`
+- `tests/test_weekly_quality_review_reflections.py`
+- `CHANGELOG_HARNESS.md`
+
+Latest behavior:
+
+- Added 7 minimal historical regression case categories:
+  - `half_sentence`
+  - `label_leak`
+  - `policy_weak_match`
+  - `lite_cta_salesy`
+  - `weekly_pdf_path_error`
+  - `internal_trace_leak`
+  - `daily_question_mismatch`
+- Added `scripts/run_regression_cases.py` to traverse `knowledge/regression_cases/`, call existing quality checkers, and write `output/latest_regression_cases.json`.
+- `weekly_quality_review.py` now reports regression-case totals, new cases this week, and the latest run pass/fail summary when `latest_regression_cases.json` is available.
+- `quality_reflections` remains reflection-only in this stage; new reflections still default to `regression_case=false` until a sample is deliberately promoted into `knowledge/regression_cases/`.
+- This phase does not change formal daily generation, rendering, sending, or paid/free/try subscriber behavior.
+
 ## 2026-06-27 - Unify daily question answer framework limit to 45 chars
 
 Reason:

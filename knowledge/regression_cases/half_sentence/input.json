@@ -1,0 +1,9 @@
+{
+  "case_id": "half_sentence_rewritable_expression",
+  "checker": "expression_quality",
+  "brief": {
+    "featured_article": {
+      "rewritable_expression": "这些细节是申论对策题拿高分的关键，真正要把问题解决，需要通过"
+    }
+  }
+}
