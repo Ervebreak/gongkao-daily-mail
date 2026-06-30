@@ -240,44 +240,6 @@ def evaluate_selection_quality(brief: dict[str, Any]) -> dict[str, Any]:
         "issues": issues,
     }
 
-    if expression_hits:
-        issues.append({
-            "severity": "high",
-            "code": "gender_sensitive_expression",
-            "message": f"正文含性别/婚育敏感表达：{"、".join(expression_hits[:5])}，需改写为中性治理表达。",
-        })
-    if featured.get("risk_note"):
-        issues.append({
-            "severity": "medium",
-            "code": "selection_risk_note",
-            "message": str(featured.get("risk_note")),
-        })
-
-    high_count = sum(1 for issue in issues if issue.get("severity") == "high")
-    if selection_metadata_missing and final_selection_present:
-        score_source = "final_selection_fallback"
-    elif selection_metadata_missing:
-        score_source = "missing_metadata"
-    else:
-        score_source = "llm_selection"
-
-    return {
-        "ok": high_count == 0,
-        "status": "fail" if high_count else ("review" if issues else "ok"),
-        "score": 100 if not issues else (60 if high_count else 82),
-        "checks": {
-            "featured_total_score": total_score,
-            "selection_metadata_missing": selection_metadata_missing,
-            "final_selection_present": final_selection_present,
-            "featured_metadata_present": featured_metadata_present,
-            "effective_featured_title": effective_featured_title,
-            "effective_featured_url": effective_featured_url,
-            "effective_selection_score": (total_score if total_score >= 0 else None),
-            "score_source": score_source,
-            "featured_title": effective_featured_title,
-        },
-        "issues": issues,
-    }
 
 def _collect_visible_truncation_gate_issues(
     quality_map: dict[str, Any],
