@@ -110,59 +110,133 @@ def _selection_sensitive_surface(brief: dict[str, Any], featured: dict[str, Any]
     return _stringify_for_quality(values)
 
 
+
+def _selection_title_url(entry: dict[str, Any]) -> tuple[str, str]:
+    if not isinstance(entry, dict):
+        return "", ""
+    return str(entry.get("title") or "").strip(), str(entry.get("url") or "").strip()
+
+
+def _same_featured_article(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    left_title, left_url = _selection_title_url(left)
+    right_title, right_url = _selection_title_url(right)
+    if not left_title or not right_title:
+        return False
+    if left_url and right_url:
+        return left_title == right_title and left_url == right_url
+    return left_title == right_title
+
+
 def evaluate_selection_quality(brief: dict[str, Any]) -> dict[str, Any]:
     two_stage = brief.get("_llm_two_stage") if isinstance(brief.get("_llm_two_stage"), dict) else {}
     selection = two_stage.get("selection") if isinstance(two_stage.get("selection"), dict) else {}
     featured = selection.get("featured") if isinstance(selection.get("featured"), dict) else {}
+    final_selection = brief.get("final_selection") if isinstance(brief.get("final_selection"), dict) else {}
+    final_featured = final_selection.get("featured") if isinstance(final_selection.get("featured"), dict) else {}
     article = brief.get("featured_article") if isinstance(brief.get("featured_article"), dict) else {}
+    content_quality = brief.get("content_quality") if isinstance(brief.get("content_quality"), dict) else {}
     issues: list[dict[str, str]] = []
     score = featured.get("total_score")
     try:
         total_score = int(score)
     except Exception:
         total_score = -1
-    if total_score >= 0 and total_score < 75:
-        issues.append(
-            {
-                "severity": "high",
-                "code": "weak_featured_selection",
-                "message": f"主线文章选题分过低：{total_score}，应重新选题或进入人工复核。",
-            }
-        )
-    sensitive_surface = _selection_sensitive_surface(brief, featured, article)
+
+    featured_title, featured_url = _selection_title_url(featured)
+    featured_metadata_present = bool(featured_title and featured_url)
+    score_valid = total_score > 0
+    selection_metadata_missing = (not featured_metadata_present) or (not score_valid)
+
+    final_featured_title, final_featured_url = _selection_title_url(final_featured)
+    article_title, article_url = _selection_title_url(article)
+    explicit_final_selection_present = bool(final_featured_title and final_featured_url)
+    article_present = bool(article_title and article_url)
+    final_selection_present = explicit_final_selection_present or article_present
+    effective_featured = final_featured if explicit_final_selection_present else article
+    effective_featured_title, effective_featured_url = _selection_title_url(effective_featured)
+    brief_matches_final = _same_featured_article(article, final_featured) if explicit_final_selection_present else article_present
+
+    content_can_send = content_quality.get("can_send") is True or str(content_quality.get("status") or "").lower() == "ok"
+    content_risk_level = str(content_quality.get("risk_level") or "").lower()
+    content_safe_for_selection_fallback = content_can_send and content_risk_level != "high"
+    joiner = "\u3001"
+
+    if selection_metadata_missing and not final_selection_present:
+        issues.append({
+            "severity": "high",
+            "code": "missing_final_selection",
+            "message": "selection \u5143\u6570\u636e\u7f3a\u5931\uff0c\u4e14\u672a\u627e\u5230\u6709\u6548 final_selection \u4e3b\u7ebf\u6587\u7ae0\uff0c\u9700\u56de\u5230\u9009\u6587\u9636\u6bb5\u91cd\u65b0\u786e\u8ba4\u4e3b\u7ebf\u6587\u7ae0\u3002",
+        })
+    elif selection_metadata_missing and final_selection_present and brief_matches_final:
+        issues.append({
+            "severity": "medium",
+            "code": "selection_metadata_missing",
+            "message": (
+                "selection \u5143\u6570\u636e\u7f3a\u5931\uff0c\u4f46 final_selection \u5df2\u5b58\u5728\u6709\u6548\u4e3b\u7ebf\u6587\u7ae0\uff0c\u4e14\u5185\u5bb9\u5ba1\u7a3f\u901a\u8fc7\u3002\u672c\u6b21\u964d\u7ea7\u4e3a review\uff0c\u4e0d\u963b\u65ad\u53d1\u9001\u3002"
+                if content_safe_for_selection_fallback
+                else "selection \u5143\u6570\u636e\u7f3a\u5931\uff0c\u4f46\u5df2\u56de\u9000\u5230\u6709\u6548\u4e3b\u7ebf\u6587\u7ae0\uff0c\u8bf7\u4eba\u5de5\u590d\u6838\u9009\u6587\u5143\u6570\u636e\u5199\u5165\u3002"
+            ),
+        })
+    elif total_score >= 0 and total_score < 75:
+        issues.append({
+            "severity": "high",
+            "code": "weak_featured_selection",
+            "message": f"\u4e3b\u7ebf\u6587\u7ae0\u9009\u9898\u5206\u8fc7\u4f4e\uff1a{total_score}\uff0c\u5e94\u91cd\u65b0\u9009\u9898\u6216\u8fdb\u5165\u4eba\u5de5\u590d\u6838\u3002",
+        })
+
+    sensitive_surface = _selection_sensitive_surface(brief, effective_featured, article)
     sensitive_hits = [term for term in SENSITIVE_TOPIC_TERMS if term in sensitive_surface]
-    if sensitive_hits and total_score >= 0 and total_score < 85:
-        issues.append(
-            {
-                "severity": "high",
-                "code": "sensitive_topic_needs_review",
-                "message": f"敏感主题选题分低于 85（{total_score}），命中：{'、'.join(sensitive_hits[:5])}，需人工复核或重选。",
-            }
-        )
+    if sensitive_hits and not selection_metadata_missing and total_score >= 0 and total_score < 85:
+        issues.append({
+            "severity": "high",
+            "code": "sensitive_topic_needs_review",
+            "message": f"\u654f\u611f\u4e3b\u9898\u9009\u9898\u5206\u4f4e\u4e8e 85\uff08{total_score}\uff09\uff0c\u547d\u4e2d\uff1a{joiner.join(sensitive_hits[:5])}\uff0c\u9700\u4eba\u5de5\u590d\u6838\u6216\u91cd\u9009\u3002",
+        })
+    elif sensitive_hits and selection_metadata_missing and final_selection_present and brief_matches_final:
+        issues.append({
+            "severity": "medium",
+            "code": "sensitive_topic_needs_review",
+            "message": f"\u4e3b\u9898\u547d\u4e2d\u654f\u611f\u9879\uff1a{joiner.join(sensitive_hits[:5])}\u3002\u5f53\u524d selection \u5143\u6570\u636e\u7f3a\u5931\uff0c\u4f46\u4e3b\u7ebf\u6587\u7ae0\u6709\u6548\uff0c\u5efa\u8bae\u4eba\u5de5\u590d\u6838\u3002",
+        })
+
     body_text = _stringify_for_quality(brief)
     expression_hits = [term for term in GENDER_SENSITIVE_EXPRESSIONS if term in body_text]
     if expression_hits:
-        issues.append(
-            {
-                "severity": "high",
-                "code": "gender_sensitive_expression",
-                "message": f"正文含性别/婚育敏感表达：{'、'.join(expression_hits[:5])}，需改写为中性治理表达。",
-            }
-        )
+        issues.append({
+            "severity": "high",
+            "code": "gender_sensitive_expression",
+            "message": f"\u6b63\u6587\u542b\u6027\u522b/\u5a5a\u80b2\u654f\u611f\u8868\u8fbe\uff1a{joiner.join(expression_hits[:5])}\uff0c\u9700\u6539\u5199\u4e3a\u4e2d\u6027\u6cbb\u7406\u8868\u8fbe\u3002",
+        })
     if featured.get("risk_note"):
-        issues.append(
-            {
-                "severity": "medium",
-                "code": "selection_risk_note",
-                "message": str(featured.get("risk_note")),
-            }
-        )
+        issues.append({
+            "severity": "medium",
+            "code": "selection_risk_note",
+            "message": str(featured.get("risk_note")),
+        })
+
     high_count = sum(1 for issue in issues if issue.get("severity") == "high")
+    if selection_metadata_missing and final_selection_present:
+        score_source = "final_selection_fallback"
+    elif selection_metadata_missing:
+        score_source = "missing_metadata"
+    else:
+        score_source = "llm_selection"
+
     return {
         "ok": high_count == 0,
         "status": "fail" if high_count else ("review" if issues else "ok"),
         "score": 100 if not issues else (60 if high_count else 82),
-        "checks": {"featured_total_score": total_score, "featured_title": featured.get("title") or article.get("title")},
+        "checks": {
+            "featured_total_score": total_score,
+            "selection_metadata_missing": selection_metadata_missing,
+            "final_selection_present": final_selection_present,
+            "featured_metadata_present": featured_metadata_present,
+            "effective_featured_title": effective_featured_title,
+            "effective_featured_url": effective_featured_url,
+            "effective_selection_score": (total_score if total_score >= 0 else None),
+            "score_source": score_source,
+            "featured_title": effective_featured_title,
+        },
         "issues": issues,
     }
 
@@ -250,6 +324,7 @@ def build_quality_gate(
         "quick_read_url_not_valid",
         "quick_reads_all_news_summary",
         "weak_featured_selection",
+        "missing_final_selection",
         "sensitive_topic_needs_review",
         "dev_marker_repeated",
         "abnormal_copy_duplication",

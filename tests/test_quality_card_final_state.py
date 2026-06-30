@@ -140,3 +140,34 @@ def test_quality_card_marks_gate_p0_as_blocking() -> None:
     assert "门禁P0：1" in card
     assert "答案疑似截断（影响发送）" in card
     assert "发送前质量卡结论：阻断发送" in card
+
+
+def test_quality_card_uses_selection_metadata_missing_message_instead_of_fake_zero_score() -> None:
+    candidate = {
+        "delivery_date": "2026-06-01",
+        "subject": "【公考晨读】测试",
+        "quality_gate": {"overall": "ok", "p0_count": 0, "p0_issues": []},
+        "quality": {
+            "final": {
+                "selection": {
+                    "ok": False,
+                    "status": "review",
+                    "score": 82,
+                    "issues": [
+                        {
+                            "severity": "medium",
+                            "code": "selection_metadata_missing",
+                            "message": "selection 元数据缺失，但 final_selection 已存在有效主线文章，且内容审稿通过。本次降级为 review，不阻断发送。",
+                        }
+                    ],
+                },
+                "content_quality": {"ok": True, "status": "ok", "score": 90, "issues": []},
+                "content_risk": {"ok": True, "status": "ok", "score": 100, "issues": []},
+            }
+        },
+    }
+
+    card = build_quality_card_markdown(candidate)
+
+    assert "selection 元数据缺失，但 final_selection 已存在有效主线文章，且内容审稿通过。本次降级为 review，不阻断发送。" in card
+    assert "主线文章选题分过低：0" not in card
