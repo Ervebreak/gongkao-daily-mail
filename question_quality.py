@@ -57,6 +57,22 @@ INTERVIEW_STYLE_MARKERS = [
     "工作人员", "负责人", "接到通知", "安排你",
 ]
 
+PRACTICAL_QUESTION_MARKERS = [
+    "你是", "假如你是", "作为", "领导让你", "请你牵头",
+    "牵头", "工作人员", "负责人", "接到通知", "安排你",
+]
+
+PRACTICAL_TYPE_MARKERS = ["机关实务", "实务", "面试", "沟通协调", "推进落实"]
+SHENLUN_TYPE_MARKERS = ["申论", "对策", "综合分析", "贯彻执行"]
+
+
+MATERIAL_DEPENDENCY_PATTERNS = [
+    r"请?根据(?:给定)?资料(?:指出|反映|谈到|显示)?",
+    r"结合(?:给定)?资料(?:指出|反映|谈到|显示)?",
+    r"给定资料指出",
+    r"给定资料",
+]
+
 POLICY_REPORT_PHRASES = [
     "持续完善", "切实提升", "不断夯实", "形成合力", "强化保障", "推动形成",
     "建立健全", "扎实推进", "全面提升", "系统推进", "长效机制",
@@ -161,6 +177,22 @@ def _keyword_hits(text: str, keywords: list[str], limit: int = 8) -> list[str]:
     return [keyword for keyword in keywords if keyword and keyword in text][:limit]
 
 
+def _issue(
+    severity: str,
+    code: str,
+    message: str,
+    *,
+    target_field: str | None = None,
+    auto_fix: str | None = None,
+) -> dict[str, str]:
+    issue = {"severity": severity, "code": code, "message": message}
+    if target_field:
+        issue["target_field"] = target_field
+    if auto_fix:
+        issue["auto_fix"] = auto_fix
+    return issue
+
+
 def _last_clause(text: str) -> str:
     parts = [part.strip() for part in re.split(r"[，,；;。！？]", text) if part.strip()]
     return parts[-1] if parts else text.strip()
@@ -189,6 +221,129 @@ def _is_too_broad(question: str) -> bool:
     if len(compact) < 42 and any(word in compact for word in GENERIC_BIG_WORDS):
         return True
     return any(re.search(pattern, compact) for pattern in BROAD_PATTERNS)
+
+
+def detect_daily_question_type_mode(question_type: Any) -> str:
+    text = _text(question_type)
+    if any(marker in text for marker in PRACTICAL_TYPE_MARKERS):
+        return "practical"
+    if any(marker in text for marker in SHENLUN_TYPE_MARKERS):
+        return "shenlun"
+    return "unknown"
+
+
+def material_dependency_hits(question: Any) -> list[str]:
+    text = _text(question)
+    if not text:
+        return []
+    hits = _keyword_hits(text, MATERIAL_DEPENDENCY_TERMS, limit=8)
+    for pattern in MATERIAL_DEPENDENCY_PATTERNS:
+        match = re.search(pattern, text)
+        if match:
+            phrase = match.group(0)
+            if phrase not in hits:
+                hits.append(phrase)
+    return hits[:8]
+
+
+def detect_daily_question_wording_mode(question: Any) -> str:
+    text = _text(question)
+    if not text:
+        return "unknown"
+    if any(marker in text for marker in PRACTICAL_QUESTION_MARKERS):
+        return "practical"
+    if material_dependency_hits(text):
+        return "shenlun"
+    if "某地" in text and any(task in text for task in ("请提出对策", "请谈谈对策", "请提出建议")):
+        return "shenlun"
+    return "neutral"
+
+
+def question_requires_identity(question_type: Any, question: Any) -> bool:
+    return detect_daily_question_type_mode(question_type) == "practical" or detect_daily_question_wording_mode(question) == "practical"
+
+
+def strip_daily_question_material_dependency(question: Any) -> str:
+    text = _text(question)
+    if not text:
+        return ""
+    updated = text
+    for pattern in MATERIAL_DEPENDENCY_PATTERNS:
+        updated = re.sub(pattern, "", updated)
+    for term in MATERIAL_DEPENDENCY_TERMS:
+        updated = updated.replace(term, "")
+    updated = re.sub(r"^[，、；：:\s]+", "", updated)
+    updated = re.sub(r"[ \t]+", " ", updated)
+    updated = re.sub(r"\s*([，。！？；])", r"\1", updated)
+    updated = re.sub(r"([，。！？；])\s*", r"\1", updated)
+    return updated.strip()
+
+
+def compress_daily_question_breaking_hint(breaking_hint: Any, framework_items: list[Any] | None = None) -> str:
+    text = _text(breaking_hint)
+    steps = [_text(item) for item in (framework_items or []) if _text(item)]
+    if not text and not steps:
+        return ""
+
+    labels: list[str] = []
+    for item in steps[:4]:
+        label = item
+        for sep in ("：", ":"):
+            if sep in label:
+                label = label.split(sep, 1)[0]
+                break
+        label = re.split(r"[，。；、]", label, maxsplit=1)[0].strip()
+        label = re.sub(r"^(首先|其次|再次|最后|第一|第二|第三|一是|二是|三是)[、，:\s]*", "", label).strip()
+        label = label[:10].strip()
+        if label and label not in labels:
+            labels.append(label)
+
+    if not labels:
+        for part in [part.strip() for part in re.split(r"[，。；]", text) if part.strip()]:
+            cleaned = re.sub(r"^(首先|其次|再次|最后|第一|第二|第三|一是|二是|三是|先|再|最后要?)", "", part).strip(" ：:，、")
+            cleaned = cleaned[:10].strip()
+            if cleaned and cleaned not in labels:
+                labels.append(cleaned)
+            if len(labels) >= 3:
+                break
+
+    if not labels:
+        return text
+    return f"作答时可按“{'—'.join(labels[:3])}”这条路线展开。"
+
+
+def skeletonize_daily_question_framework(answer_framework: Any, candidate_answer: Any = "") -> list[str]:
+    raw_items = answer_framework if isinstance(answer_framework, list) else []
+    answer_text = _text(candidate_answer)
+    normalized: list[str] = []
+    for item in raw_items:
+        text = _text(item)
+        if not text:
+            continue
+        label = text
+        detail = ""
+        for sep in ("：", ":"):
+            if sep in text:
+                label, detail = text.split(sep, 1)
+                break
+        label = re.split(r"[，。；、]", label.strip(), maxsplit=1)[0].strip()
+        label = re.sub(r"^(首先|其次|再次|最后|第一|第二|第三|一是|二是|三是)[、，:\s]*", "", label).strip()
+        if not label:
+            label = re.split(r"[，。；、]", text, maxsplit=1)[0].strip()
+        if _has_long_overlap(text, answer_text, min_chars=12) or len(text) > 45:
+            text = label[:14].strip()
+        elif detail:
+            detail = re.split(r"[。；]", detail.strip(), maxsplit=1)[0].strip()
+            detail = detail[:18].strip()
+            text = f"{label[:12]}：{detail}" if detail else label[:14]
+        else:
+            text = text[:24].strip()
+        text = text.strip("：:，、；。")
+        if text and text not in normalized:
+            normalized.append(text)
+        if len(normalized) >= 4:
+            break
+    return normalized
 
 
 def _extract_relevance_tokens(brief: dict[str, Any]) -> list[str]:
@@ -460,3 +615,282 @@ def evaluate_daily_question(brief: dict[str, Any]) -> dict[str, Any]:
         "issues": issues,
         "hints": hints,
     }
+
+
+def evaluate_daily_question(brief: dict[str, Any]) -> dict[str, Any]:
+    """Return the active daily_question quality report."""
+    question_obj = brief.get("daily_question") or {}
+    if not isinstance(question_obj, dict):
+        question_obj = {}
+
+    question = _text(question_obj.get("question") or brief.get("today_question") or "")
+    question_type = _text(question_obj.get("question_type") or question_obj.get("type"))
+    answer_framework = question_obj.get("answer_framework") or question_obj.get("answer_frame") or []
+    exam_focus = _text(question_obj.get("exam_focus"))
+    breaking_hint = _text(question_obj.get("breaking_hint") or question_obj.get("breaking_direction"))
+    candidate_answer = _text(question_obj.get("candidate_answer"))
+    output_prompt = _text(question_obj.get("output_prompt"))
+    output_sentence_template = _text(question_obj.get("output_sentence_template"))
+    thirty_second_answer = _text(question_obj.get("thirty_second_answer") or output_sentence_template)
+
+    issues: list[dict[str, str]] = []
+    hints: list[str] = []
+
+    if not question:
+        issues.append(_issue("high", "missing_question", "今日一题为空"))
+        return {
+            "ok": False,
+            "status": "fail",
+            "score": 0,
+            "question": "",
+            "question_type": question_type,
+            "issues": issues,
+            "hints": ["需要让模型基于精读文章重新生成今日一题。"],
+        }
+
+    length = len(question)
+    type_mode = detect_daily_question_type_mode(question_type)
+    wording_mode = detect_daily_question_wording_mode(question)
+    requires_identity = question_requires_identity(question_type, question)
+    type_consistent = not (
+        (type_mode == "shenlun" and wording_mode == "practical")
+        or (type_mode == "practical" and wording_mode != "practical")
+    )
+    has_identity = _contains_any(question, IDENTITY_KEYWORDS)
+    has_scene = _contains_any(question, SCENE_KEYWORDS)
+    has_conflict = _contains_any(question, CONFLICT_KEYWORDS)
+    has_task = _contains_any(question, TASK_KEYWORDS)
+    too_broad = _is_too_broad(question)
+    dependency_hits = material_dependency_hits(question)
+    framework_items = [_text(x) for x in answer_framework if _text(x)] if isinstance(answer_framework, list) else []
+
+    if length < 45:
+        issues.append(_issue("medium", "too_short", "题干偏短，可能不够具体"))
+    if length > 260:
+        issues.append(_issue("low", "too_long", "题干偏长，手机阅读和考场复述成本较高"))
+    if requires_identity and not has_identity:
+        issues.append(_issue("medium", "missing_identity", "机关实务题缺少明确身份"))
+    if not has_scene:
+        issues.append(_issue("medium", "missing_scene", "题干缺少具体场景"))
+    if not has_conflict:
+        issues.append(_issue("medium", "missing_conflict", "题干缺少现实矛盾"))
+    if not has_task:
+        issues.append(_issue("high", "missing_task", "题干缺少明确作答任务"))
+    if too_broad:
+        issues.append(_issue("high", "too_broad", "题目过于宏观，更像议论而不像真题"))
+    if not type_consistent:
+        issues.append(
+            _issue(
+                "medium",
+                "question_type_tone_mismatch",
+                "题型与题干口吻不一致。申论对策题不应带强身份口吻，机关实务题则需要明确身份。",
+                target_field="daily_question",
+                auto_fix="align_question_type_and_tone",
+            )
+        )
+    if dependency_hits:
+        issues.append(
+            _issue(
+                "medium",
+                "daily_question_material_dependency",
+                "题干含“根据资料/给定资料”一类材料依赖表达，最终应能脱离原材料独立作答。",
+                target_field="question",
+                auto_fix="remove_material_dependency",
+            )
+        )
+
+    if len(framework_items) < 2:
+        issues.append(_issue("medium", "weak_answer_framework", "作答框架少于2条，可能不够可操作"))
+    if any(len(item) > 45 for item in framework_items):
+        issues.append(
+            _issue(
+                "medium",
+                "answer_framework_too_long",
+                "作答框架应是关键词骨架，不应过长。",
+                target_field="answer_framework",
+                auto_fix="compress_framework",
+            )
+        )
+    if candidate_answer and any(_has_long_overlap(item, candidate_answer, min_chars=12) for item in framework_items):
+        issues.append(
+            _issue(
+                "medium",
+                "answer_framework_duplicates_candidate_answer",
+                "作答框架与考生版参考答案重复过多，应压缩成骨架。",
+                target_field="answer_framework",
+                auto_fix="skeletonize_framework",
+            )
+        )
+    issues.extend(_grassroots_authority_overreach_issues(question, framework_items, candidate_answer))
+
+    if not exam_focus:
+        issues.append(_issue("low", "missing_exam_focus", "缺少审题关键"))
+    elif len(_keyword_hits(exam_focus, ANSWER_ROUTE_TERMS, limit=12)) >= 2:
+        issues.append(_issue("medium", "exam_focus_too_answer_like", "审题关键不应写成完整作答路线"))
+
+    if not breaking_hint:
+        issues.append(_issue("low", "missing_breaking_hint", "缺少作答主线"))
+    else:
+        if any(_has_long_overlap(breaking_hint, item, min_chars=8) for item in framework_items):
+            issues.append(
+                _issue(
+                    "medium",
+                    "breaking_hint_duplicates_framework",
+                    "作答主线与作答框架重复，应压缩为一句总路线。",
+                    target_field="breaking_hint",
+                    auto_fix="compress_breaking_hint",
+                )
+            )
+        breaking_route_hits = _keyword_hits(breaking_hint, ANSWER_ROUTE_TERMS, limit=12)
+        route_markers = ["先", "再", "最后", "首先", "其次", "再次", "第一", "第二", "第三", "一是", "二是", "三是"]
+        route_marker_count = sum(1 for marker in route_markers if marker in breaking_hint)
+        semicolon_count = breaking_hint.count("；") + breaking_hint.count(";")
+        if semicolon_count >= 2 or route_marker_count >= 2 or (len(breaking_hint) > 80 and (semicolon_count >= 1 or len(breaking_route_hits) >= 2)):
+            issues.append(
+                _issue(
+                    "medium",
+                    "breaking_hint_too_framework_like",
+                    "作答主线过长，容易变成第二套框架。",
+                    target_field="breaking_hint",
+                    auto_fix="compress_breaking_hint",
+                )
+            )
+
+    if not candidate_answer:
+        issues.append(_issue("high", "missing_candidate_answer", "缺少考生版参考答案"))
+    elif len(candidate_answer) < 180:
+        issues.append(_issue("medium", "candidate_answer_too_short", "考生版参考答案偏短，可能不够可模仿"))
+    if not thirty_second_answer and not output_sentence_template:
+        issues.append(_issue("medium", "missing_thirty_second_answer", "缺少30秒输出参考句式"))
+
+    output_joined = " ".join([output_prompt, output_sentence_template, thirty_second_answer])
+    instruction_hits = _keyword_hits(output_joined, INSTRUCTION_STYLE_PATTERNS, limit=6)
+    if instruction_hits:
+        issues.append(_issue("medium", "thirty_second_output_too_instructional", "30秒输出偏教研指令，建议改成考生可模仿的表态句"))
+
+    shenlun_like_type = any(word in question_type for word in ["申论", "对策", "综合分析", "贯彻执行"])
+    interview_hits = _keyword_hits(question, INTERVIEW_STYLE_MARKERS, limit=8)
+    if shenlun_like_type and len(interview_hits) >= 2:
+        issues.append(
+            _issue(
+                "low",
+                "question_too_interview_like",
+                "申论题题干口吻偏机关实务，可改成“某地出现……请提出对策”的材料题形式。",
+                target_field="question",
+                auto_fix="rewrite_to_shenlun_tone",
+            )
+        )
+
+    policy_hits = _keyword_hits(candidate_answer, POLICY_REPORT_PHRASES, limit=8)
+    if len(policy_hits) >= 4:
+        issues.append(_issue("low", "candidate_answer_policy_tone", "参考答案偏政策材料腔，建议改得更自然"))
+
+    relevance_tokens = _extract_relevance_tokens(brief)
+    relevance_hits = [token for token in relevance_tokens if token and token in question][:8]
+    if relevance_tokens and not relevance_hits:
+        issues.append(_issue("medium", "weak_article_relevance", "题干与精读文章关键词命中较少，需要人工关注是否跑题"))
+
+    truncation_scope = [question, exam_focus, breaking_hint, candidate_answer, output_prompt, output_sentence_template, thirty_second_answer]
+    truncation_scope.extend(framework_items)
+    if any(_looks_incomplete(item) for item in truncation_scope):
+        issues.append(_issue("high", "truncated_answer", "今日一题存在截断或半句话风险"))
+
+    score = 100
+    for issue in issues:
+        severity = issue.get("severity")
+        if severity == "high":
+            score -= 24
+        elif severity == "medium":
+            score -= 14
+        else:
+            score -= 6
+    score = max(0, min(100, score))
+
+    high_count = sum(1 for item in issues if item.get("severity") == "high")
+    medium_count = sum(1 for item in issues if item.get("severity") == "medium")
+    ok = score >= 72 and high_count == 0 and medium_count <= 2
+    status = "ok" if ok else ("review" if score >= 55 else "fail")
+
+    if not ok:
+        hints.append("后续可只重写 daily_question 模块，不必重写整封邮件。")
+    if requires_identity and (not has_identity or not has_scene or not has_conflict or not has_task):
+        hints.append("机关实务题理想题干应同时具备：身份、场景、矛盾、任务。")
+    elif not has_scene or not has_conflict or not has_task:
+        hints.append("材料型题干至少要把场景、矛盾和任务说清楚。")
+    if too_broad:
+        hints.append("避免直接问“你怎么看待X”，建议改成可执行场景题。")
+
+    return {
+        "ok": ok,
+        "status": status,
+        "score": score,
+        "question": question,
+        "question_type": question_type,
+        "length": length,
+        "candidate_answer": candidate_answer,
+        "breaking_hint": breaking_hint,
+        "thirty_second_answer": thirty_second_answer,
+        "checks": {
+            "has_identity": has_identity,
+            "has_scene": has_scene,
+            "has_conflict": has_conflict,
+            "has_task": has_task,
+            "too_broad": too_broad,
+            "material_dependency_hits": dependency_hits,
+            "answer_framework_count": len(framework_items),
+            "candidate_answer_length": len(candidate_answer),
+            "output_prompt_length": len(output_prompt),
+            "output_sentence_template_length": len(output_sentence_template),
+            "thirty_second_answer_length": len(thirty_second_answer),
+            "instruction_style_hits": instruction_hits,
+            "interview_style_hits": interview_hits,
+            "policy_tone_hits": policy_hits,
+            "relevance_hits": relevance_hits,
+            "type_mode": type_mode,
+            "wording_mode": wording_mode,
+            "requires_identity": requires_identity,
+            "type_consistent": type_consistent,
+        },
+        "keyword_hits": {
+            "identity": _keyword_hits(question, IDENTITY_KEYWORDS),
+            "scene": _keyword_hits(question, SCENE_KEYWORDS),
+            "conflict": _keyword_hits(question, CONFLICT_KEYWORDS),
+            "task": _keyword_hits(question, TASK_KEYWORDS),
+        },
+        "issues": issues,
+        "hints": hints,
+    }
+
+
+# Override matcher constants with unicode-safe literals to avoid local encoding drift.
+PRACTICAL_QUESTION_MARKERS = [
+    "\u4f60\u662f",
+    "\u5047\u5982\u4f60\u662f",
+    "\u4f5c\u4e3a",
+    "\u9886\u5bfc\u8ba9\u4f60",
+    "\u8bf7\u4f60\u7275\u5934",
+    "\u7275\u5934",
+    "\u5de5\u4f5c\u4eba\u5458",
+    "\u8d1f\u8d23\u4eba",
+    "\u63a5\u5230\u901a\u77e5",
+    "\u5b89\u6392\u4f60",
+]
+PRACTICAL_TYPE_MARKERS = [
+    "\u673a\u5173\u5b9e\u52a1",
+    "\u5b9e\u52a1",
+    "\u9762\u8bd5",
+    "\u6c9f\u901a\u534f\u8c03",
+    "\u63a8\u8fdb\u843d\u5b9e",
+]
+SHENLUN_TYPE_MARKERS = [
+    "\u7533\u8bba",
+    "\u5bf9\u7b56",
+    "\u7efc\u5408\u5206\u6790",
+    "\u8d2f\u5f7b\u6267\u884c",
+]
+MATERIAL_DEPENDENCY_PATTERNS = [
+    r"\u8bf7?\u6839\u636e(?:\u7ed9\u5b9a)?\u8d44\u6599(?:\u6307\u51fa|\u53cd\u6620|\u8c08\u5230|\u663e\u793a)?",
+    r"\u7ed3\u5408(?:\u7ed9\u5b9a)?\u8d44\u6599(?:\u6307\u51fa|\u53cd\u6620|\u8c08\u5230|\u663e\u793a)?",
+    r"\u7ed9\u5b9a\u8d44\u6599\u6307\u51fa",
+    r"\u7ed9\u5b9a\u8d44\u6599",
+]

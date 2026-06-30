@@ -16,7 +16,15 @@ from article_filter import Article
 from config import settings
 from lite_paid_cta import build_lite_paid_cta_prompt, fallback_lite_paid_cta_payload, finalize_lite_paid_cta_payload
 from quick_reads_quality import evaluate_quick_reads
-from question_quality import evaluate_daily_question
+from question_quality import (
+    compress_daily_question_breaking_hint,
+    detect_daily_question_type_mode,
+    detect_daily_question_wording_mode,
+    evaluate_daily_question,
+    material_dependency_hits,
+    skeletonize_daily_question_framework,
+    strip_daily_question_material_dependency,
+)
 from takeaway_quality import evaluate_takeaway
 from question_bank import build_question_bank_context, match_question_examples
 from prompt_templates import (
@@ -531,6 +539,68 @@ def _rewrite_context_payload(article: Article | None, brief: dict[str, Any]) -> 
     }
 
 
+def _infer_practical_question_type(question: str, current_type: str) -> str:
+    if any(keyword in question for keyword in ("解释", "说明", "回应", "沟通", "答复", "协调")):
+        return "机关实务题｜沟通协调类"
+    if any(keyword in question for keyword in ("牵头", "推进", "落实", "整改", "统筹")):
+        return "机关实务题｜推进落实类"
+    if current_type and "机关实务题" in current_type:
+        return current_type
+    return "机关实务题｜处置应对类"
+
+
+def _normalize_shenlun_question_text(question: str) -> str:
+    text = strip_daily_question_material_dependency(question)
+    text = re.sub(r"^(你是|假如你是|作为)[^，。；]{0,24}[，，、]", "", text).strip()
+    text = re.sub(r"^领导让你[^，。；]{0,24}[，，、]", "", text).strip()
+    text = re.sub(r"^(工作人员|负责人)[^，。；]{0,18}[，，、]", "", text).strip()
+    text = re.sub(r"你会(怎么做|如何做|如何处理|怎么处理)[。？]?$", "请提出对策。", text)
+    text = re.sub(r"请(谈谈|说明)(你的)?工作思路[。？]?$", "请提出对策。", text)
+    text = re.sub(r"请(结合实际)?谈谈(你的)?对策[。？]?$", "请提出对策。", text)
+    if "请" not in text:
+        text = f"{text}请提出对策。"
+    if not text.startswith(("某地", "当地", "某市", "某县", "某社区")):
+        text = f"某地{text}"
+    text = re.sub(r"[，,]{2,}", "，", text)
+    text = re.sub(r"\s+", "", text)
+    return text.rstrip("，；") if text.endswith(("。", "？")) else f"{text.rstrip('，；')}。"
+
+
+def _normalize_daily_question_module(module: dict[str, Any]) -> dict[str, Any]:
+    updated = json.loads(json.dumps(module or {}, ensure_ascii=False))
+    question = str(updated.get("question") or "").strip()
+    question_type = str(updated.get("question_type") or updated.get("type") or "").strip()
+    candidate_answer = str(updated.get("candidate_answer") or "").strip()
+    answer_framework = updated.get("answer_framework") or updated.get("answer_frame") or []
+    framework_items = skeletonize_daily_question_framework(answer_framework, candidate_answer)
+    if framework_items:
+        updated["answer_framework"] = framework_items
+    if material_dependency_hits(question):
+        question = strip_daily_question_material_dependency(question)
+
+    type_mode = detect_daily_question_type_mode(question_type)
+    wording_mode = detect_daily_question_wording_mode(question)
+    if wording_mode == "practical":
+        updated["question_type"] = _infer_practical_question_type(question, question_type)
+    elif type_mode == "shenlun":
+        updated["question_type"] = question_type or "申论对策题"
+        question = _normalize_shenlun_question_text(question)
+
+    if detect_daily_question_type_mode(updated.get("question_type")) == "shenlun":
+        question = _normalize_shenlun_question_text(question)
+    updated["question"] = question
+
+    breaking_hint = str(updated.get("breaking_hint") or updated.get("breaking_direction") or "").strip()
+    if breaking_hint:
+        route_terms = ["先", "再", "最后", "首先", "其次", "再次", "第一", "第二", "第三", "一是", "二是", "三是"]
+        if len(breaking_hint) > 80 or breaking_hint.count("；") + breaking_hint.count(";") >= 2 or sum(term in breaking_hint for term in route_terms) >= 2:
+            breaking_hint = compress_daily_question_breaking_hint(breaking_hint, updated.get("answer_framework") or framework_items)
+    if breaking_hint:
+        updated["breaking_hint"] = breaking_hint
+
+    return updated
+
+
 def _daily_question_candidate_styles() -> list[dict[str, str]]:
     return [
         {
@@ -628,6 +698,24 @@ def _daily_question_style_bonus(module: dict[str, Any], style_name: str) -> int:
     return 0
 
 
+def _daily_question_consistency_bonus(module: dict[str, Any]) -> int:
+    question_type = str(module.get("question_type") or "")
+    question_text = str(module.get("question") or "")
+    type_mode = detect_daily_question_type_mode(question_type)
+    wording_mode = detect_daily_question_wording_mode(question_text)
+    if type_mode == "unknown" or wording_mode == "unknown":
+        return 0
+    if type_mode == "practical" and wording_mode == "practical":
+        return 4
+    if type_mode == "shenlun" and wording_mode != "practical":
+        return 4
+    if type_mode == "practical" and wording_mode != "practical":
+        return -8
+    if type_mode == "shenlun" and wording_mode == "practical":
+        return -8
+    return 0
+
+
 def _daily_question_candidate_score(brief: dict[str, Any], module: dict[str, Any], style_name: str) -> dict[str, Any]:
     candidate_brief = json.loads(json.dumps(brief, ensure_ascii=False))
     candidate_brief["daily_question"] = module
@@ -635,11 +723,13 @@ def _daily_question_candidate_score(brief: dict[str, Any], module: dict[str, Any
     base_score = int(question_report.get("score") or 0)
     overlap_penalty = _daily_question_overlap_penalty(candidate_brief, module)
     style_bonus = _daily_question_style_bonus(module, style_name)
-    final_score = base_score + style_bonus - overlap_penalty
+    consistency_bonus = _daily_question_consistency_bonus(module)
+    final_score = base_score + style_bonus + consistency_bonus - overlap_penalty
     return {
         "final_score": final_score,
         "base_score": base_score,
         "style_bonus": style_bonus,
+        "consistency_bonus": consistency_bonus,
         "overlap_penalty": overlap_penalty,
         "quality": question_report,
     }
@@ -655,12 +745,13 @@ def select_best_daily_question_candidate(brief: dict[str, Any], articles: list[A
     current_module = brief.get("daily_question") if isinstance(brief.get("daily_question"), dict) else {}
     candidates: list[dict[str, Any]] = []
     if current_module:
+        normalized_current = _normalize_daily_question_module(current_module)
         candidates.append(
             {
                 "source": "original",
                 "style": "original",
-                "module": current_module,
-                **_daily_question_candidate_score(brief, current_module, "original"),
+                "module": normalized_current,
+                **_daily_question_candidate_score(brief, normalized_current, "original"),
             }
         )
 
@@ -672,6 +763,13 @@ def select_best_daily_question_candidate(brief: dict[str, Any], articles: list[A
             module = response.get("daily_question") if isinstance(response.get("daily_question"), dict) else response
             if not isinstance(module, dict) or not module.get("question"):
                 raise ValueError("daily question candidate payload missing question")
+            if style["name"] == "shenlun_policy":
+                module = {
+                    **module,
+                    "question_type": "申论对策题",
+                    "question": _normalize_shenlun_question_text(str(module.get("question") or "")),
+                }
+            module = _normalize_daily_question_module(module)
             candidates.append(
                 {
                     "source": "generated",
@@ -714,7 +812,10 @@ def select_best_daily_question_candidate(brief: dict[str, Any], articles: list[A
             "final_score": item["final_score"],
             "base_score": item["base_score"],
             "style_bonus": item["style_bonus"],
+            "consistency_bonus": item["consistency_bonus"],
             "overlap_penalty": item["overlap_penalty"],
+            "quality_score": int((item.get("quality") or {}).get("score") or 0),
+            "type_consistent": bool(((item.get("quality") or {}).get("checks") or {}).get("type_consistent")),
         }
         for item in ranked
     ]
@@ -994,10 +1095,10 @@ def rewrite_failed_modules_once(
         response = _call_with_fallback(prompt, test_mode, stage="writing")
         module = response.get("daily_question") if isinstance(response.get("daily_question"), dict) else response
         if isinstance(module, dict):
-            updated["daily_question"] = module
+            updated["daily_question"] = _normalize_daily_question_module(module)
             three = updated.setdefault("today_three_things", {})
             if isinstance(three, dict):
-                three["daily_question"] = str(module.get("question") or three.get("daily_question") or "")
+                three["daily_question"] = str(updated["daily_question"].get("question") or three.get("daily_question") or "")
             rewritten_modules.append("daily_question")
             details["daily_question"] = {"issues": _issue_messages(question_quality)}
 
@@ -1044,6 +1145,8 @@ def generate_brief_two_stage(articles: list[Article], today: str, test_mode: boo
         **question_bank_meta,
         "question_bank_refs": question_bank_refs,
     }
+    if isinstance(brief.get("daily_question"), dict):
+        brief["daily_question"] = _normalize_daily_question_module(brief["daily_question"])
     question_selection_result = select_best_daily_question_candidate(brief, selected_articles, test_mode=test_mode)
     brief = question_selection_result.get("brief") if isinstance(question_selection_result.get("brief"), dict) else brief
     brief["_daily_question_selection"] = {
@@ -1088,6 +1191,8 @@ def generate_brief(articles: list[Article], today: str, test_mode: bool = False,
         **question_bank_meta,
         "question_bank_refs": question_bank_refs,
     }
+    if isinstance(brief.get("daily_question"), dict):
+        brief["daily_question"] = _normalize_daily_question_module(brief["daily_question"])
     question_selection_result = select_best_daily_question_candidate(brief, articles, test_mode=test_mode)
     brief = question_selection_result.get("brief") if isinstance(question_selection_result.get("brief"), dict) else brief
     brief["_daily_question_selection"] = {

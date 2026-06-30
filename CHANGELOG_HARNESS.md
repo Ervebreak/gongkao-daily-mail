@@ -1,5 +1,28 @@
 # Harness Change Log
 
+## 2026-06-30 - Daily question stability fixes for PR #58
+
+Reason:
+
+- Recent review showed `daily_question` still had unstable type-versus-wording behavior, material-dependent prompts, over-expanded breaking hints, and mobile-unfriendly long answer rendering.
+- This patch keeps the existing gate and selection structure, but stabilizes the daily-question module itself so the same issues stop recurring in generation and rendering.
+
+Files changed:
+
+- `question_quality.py`
+- `llm_client.py`
+- `email_renderer.py`
+- `tests/test_daily_question_multi_candidate.py`
+- `CHANGELOG_HARNESS.md`
+
+Latest behavior:
+
+- Stabilized `daily_question` question-type and question-wording consistency.
+- Cleans material-dependent phrasing such as `根据资料` / `给定资料` from standalone prompts.
+- Keeps `answer_framework` as a skeleton instead of echoing `candidate_answer`.
+- Compresses over-framework-like `breaking_hint` into a single route sentence.
+- Splits long `candidate_answer` content into multiple paragraphs in rendered plain text / HTML.
+
 ## 2026-06-29 - Harness Phase 5 lightweight candidate selection and token review
 
 Reason:

@@ -190,6 +190,32 @@ def numbered_items(items: list[Any], limit: int | None = None) -> str:
     return "".join(f'<li style="margin:0 0 8px;">{h(item)}</li>' for item in values)
 
 
+def split_candidate_answer_paragraphs(value: Any, limit: int = 450) -> list[str]:
+    text = clip_text(value, limit)
+    if not text:
+        return []
+    normalized = re.sub(r"(第一|第二|第三|第四|首先|其次|再次|最后|一是|二是|三是)", r"\n\1", text)
+    parts = [part.strip() for part in normalized.splitlines() if part.strip()]
+    if len(parts) >= 2:
+        return parts[:4]
+
+    sentences = [part.strip() for part in re.split(r"(?<=[。！？])", text) if part.strip()]
+    if len(sentences) <= 1:
+        return [text]
+
+    paragraphs: list[str] = []
+    current = ""
+    for sentence in sentences:
+        if current and len(current) + len(sentence) > 120:
+            paragraphs.append(current.strip())
+            current = sentence
+        else:
+            current += sentence
+    if current.strip():
+        paragraphs.append(current.strip())
+    return paragraphs[:4] or [text]
+
+
 def inline_tags(items: list[Any], limit: int | None = None) -> str:
     values = [item for item in items if str(item).strip()]
     if limit is not None:
@@ -1194,6 +1220,10 @@ def render_plain_text(brief: dict[str, Any]) -> str:
         question.get("output_sentence_template") or question.get("thirty_second_answer") or "",
         "参考句式",
     )
+    candidate_answer_paragraphs = split_candidate_answer_paragraphs(
+        question.get("candidate_answer") or "附上考生版参考答案，方便对照作答。",
+        450,
+    )
     lines = [
         str(brief["email_subject"]),
         f"日期：{brief['date']}",
@@ -1221,7 +1251,8 @@ def render_plain_text(brief: dict[str, Any]) -> str:
         "题目：" + str(question.get("question", today_question_text(brief))),
         "审题关键：" + exam_focus,
         "作答框架：" + "；".join(clip_text(item, 95) for item in (as_list(question.get("answer_framework")) or as_list(question.get("answer_frame")))[:4]),
-        "考生版参考答案：" + clip_text(question.get("candidate_answer") or "", 450),
+        "考生版参考答案：",
+        *candidate_answer_paragraphs,
         "30秒输出任务：" + clip_text(question.get("output_prompt") or "请用一句话写出这道题的开头表态。", 80),
         "我的一句话：________________",
         "参考句式：" + clip_text(reference_sentence, 120),
@@ -1269,6 +1300,13 @@ def render_email_html(brief: dict[str, Any]) -> str:
     exam_focus = strip_display_prefix(
         question.get("exam_focus") or question.get("review_key") or question.get("breaking_direction"),
         "审题关键",
+    )
+    candidate_answer_html = "".join(
+        f'<p style="margin:0 0 10px;line-height:1.78;">{h(paragraph)}</p>'
+        for paragraph in split_candidate_answer_paragraphs(
+            question.get("candidate_answer") or "我认为，解决这类问题，关键是把文章中的判断转成具体场景里的执行办法。",
+            450,
+        )
     )
 
     return f"""<!doctype html>
@@ -1327,7 +1365,7 @@ def render_email_html(brief: dict[str, Any]) -> str:
       <ol style="padding-left:21px;line-height:1.72;font-size:14px;margin:0;">{render_question_frame(question)}</ol>
       <div style="font-size:14px;color:#b45309;font-weight:900;margin:11px 0 5px;">考生版参考答案</div>
       <div style="font-size:14px;line-height:1.78;color:#334155;background:#f8fafc;border-radius:10px;padding:10px 11px;">
-        {h(clip_text(question.get('candidate_answer') or '我认为，解决这类问题，关键是把文章中的判断转成具体场景里的执行办法。', 450))}
+        {candidate_answer_html}
       </div>
       <div style="font-size:14px;color:#b45309;font-weight:900;margin:11px 0 5px;">30秒输出</div>
       <div style="font-size:14px;line-height:1.72;color:#334155;background:#fff8e8;border-radius:10px;padding:10px 11px;">
