@@ -1,5 +1,26 @@
 # Harness Change Log
 
+## 2026-06-30 - Phase 2 selection metadata false P0 fix
+
+Reason:
+
+- Recent candidate runs were blocked by `weak_featured_selection` even when the actual featured article and `final_selection.featured` were valid.
+- The root cause was missing `_llm_two_stage.selection.featured` metadata such as empty title/url or `total_score=0`, which was being treated the same as a truly low-scoring featured selection.
+
+Files changed:
+
+- `quality_gate.py`
+- `tests/test_selection_quality.py`
+- `tests/test_quality_card_final_state.py`
+- `CHANGELOG_HARNESS.md`
+
+Latest behavior:
+
+- `weak_featured_selection` remains as a true P0 only for real low-score featured selections with intact metadata.
+- If selection metadata is missing but `final_selection` or `featured_article` still resolves to a valid featured article, the issue is downgraded to `selection_metadata_missing` review instead of a blocking P0.
+- If no valid featured article can be resolved at all, `missing_final_selection` remains blocking.
+- Quality card copy now reports metadata-missing fallback explicitly instead of claiming `主线文章选题分过低：0`.
+
 ## 2026-06-30 - Daily question stability fixes for PR #58
 
 Reason:
