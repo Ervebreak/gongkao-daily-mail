@@ -1,5 +1,40 @@
 # Harness Change Log
 
+## 2026-06-30 - Phase 3A weekly PDF material card structure stabilization
+
+Reason:
+
+- Weekly PDF manual review showed material cards were still structurally inconsistent: some cards had narrow applicability, some only exposed source fields without clear usage, and lite preview could surface a material title without a stable full-card structure behind it.
+- This phase stabilizes the reusable material-card schema without changing daily mail generation, weekly send routing, or selection gate behavior.
+
+Files changed:
+
+- `weekly_material_curator.py`
+- `weekly_typst_export.py`
+- `tests/test_weekly_pdf_quality.py`
+- `CHANGELOG_HARNESS.md`
+
+Latest behavior:
+
+- `material_cards` are normalized toward a stable full-card shape with required fields such as:
+  - `title`
+  - `source_article`
+  - `source_date`
+  - `material_type`
+  - `usable_themes`
+  - `suitable_question_types`
+  - `material_summary`
+  - `usage_examples`
+  - `usage_boundary`
+- Each accepted card must provide at least 2 reusable themes and at least 2 usage examples.
+- Placeholder copy such as `暂无` / `材料不足` / `可展示` / `TODO` / `debug` / `fallback` is filtered from user-visible material-card content.
+- Weekly preview material fragments continue to derive from the full material-card list, so preview titles correspond to a real full-card source.
+- This phase does not change:
+  - daily question generation
+  - weekly send logic
+  - subscriber segmentation
+  - selection quality gate
+
 ## 2026-06-30 - Phase 2 selection metadata false P0 fix
 
 Reason:
