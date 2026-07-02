@@ -575,7 +575,7 @@ def _build_prompt(days: list[dict[str, Any]], candidate_evidence: list[dict[str,
 6. 只输出合法 JSON 对象，不要输出解释。
 7. 如果候选文章证据不足，material_cards 可以少于 3 条或为空。
 8. 如果某篇 candidate_evidence 没有 evidence_text，不得基于它生成“案例型”素材；只有 existing_summary 或 selection_reason 中有明确机制做法时，才可生成“机制型”素材。
-9. material_cards 的 source_articles 和 source_urls 必须能对应到 candidate_evidence 中的 title 和 url。
+9. material_cards 的 source_article / source_date / source_urls 必须能对应到 candidate_evidence 中的 title、date 和 url；如需兼容旧结构，可同时补 source_articles / source_dates。
 10. material_cards 不能只写成某一篇文章专属案例，必须从具体事实中抽象出可迁移的公考母题、治理逻辑和通用考场写法。
 11. training_questions 固定输出 3 道训练题；如素材确实不足，可少于 3 道，但不得硬编或输出“暂无题目/待补充/材料不足”等用户可见兜底词。
 12. training_questions 是唯一的训练题输出容器，不要额外生成“金句小练习”“表达练习”等字段或结构。
@@ -592,7 +592,7 @@ def _build_prompt(days: list[dict[str, Any]], candidate_evidence: list[dict[str,
     {{"date": "日期", "theme": "主题", "sentence": "精选金句或可用表达", "scenario": "适用场景"}}
   ],
   "material_cards": [
-    {{"title": "素材卡标题", "material_type": "案例型 / 机制型 / 案例型+机制型", "source_dates": ["日期"], "source_articles": ["来源文章标题"], "source_urls": ["来源文章URL"], "target_topics": ["适用考点"], "core_topic": "抽象母题，如公共服务从有到优", "generalizable_logic": "可迁移治理逻辑", "factual_anchor": "事实锚点或机制做法", "material_summary": "100到180字的素材简介，要说明来源、基本事实和事实边界", "usage_examples": [{{"theme": "具体申论/面试主题", "example": "120到220字的考场表达示例"}}, {{"theme": "另一具体主题", "example": "120到220字的考场表达示例"}}], "exam_paragraph": "默认考场表达，可与具体写法一致", "exam_paragraph_specific": "保留具体事实的考场写法", "exam_paragraph_general": "脱离具体案例也能迁移使用的通用写法", "can_use_for": ["3到5个具体适用场景"], "suggested_question_types": ["适用题型"], "not_suitable_for": ["不适合使用的场景"], "memory_sentence": "一句话记忆", "use_tip": "用法提示", "use_boundary": "使用边界"}}
+    {{"title": "素材卡标题", "material_type": "案例型 / 机制型 / 案例型+机制型", "source_article": "来源文章标题", "source_date": "日期", "source_urls": ["来源文章URL"], "usable_themes": ["适用考点A", "适用考点B"], "core_topic": "抽象母题，如公共服务从有到优", "generalizable_logic": "可迁移治理逻辑", "factual_anchor": "事实锚点或机制做法", "material_summary": "100到180字的素材简介，要说明来源、基本事实和事实边界", "usage_examples": [{{"theme": "具体申论/面试主题", "paragraph": "120到220字的考场表达示例"}}, {{"theme": "另一具体主题", "paragraph": "120到220字的考场表达示例"}}], "exam_paragraph": "默认考场表达，可与具体写法一致", "exam_paragraph_specific": "保留具体事实的考场写法", "exam_paragraph_general": "脱离具体案例也能迁移使用的通用写法", "can_use_for": ["3到5个具体适用场景"], "suitable_question_types": ["适用题型"], "not_suitable_for": ["不适合使用的场景"], "memory_sentence": "一句话记忆", "use_tip": "用法提示", "usage_boundary": "使用边界"}}
   ],
   "training_questions": [
     {{"title": "题目标题", "question_type": "面试综合分析题", "question": "有具体场景、矛盾和任务的题目", "linked_materials": ["至少1条素材卡标题"], "linked_expressions": ["至少1条精选表达原句"], "review_key": "一句话写清审题关键", "answer_outline": ["关键词提示1", "关键词提示2", "关键词提示3"], "reference_direction": "说明如何调用本周素材或金句"}},
@@ -606,8 +606,8 @@ def _build_prompt(days: list[dict[str, Any]], candidate_evidence: list[dict[str,
 - exam_map_cards：4到6个。
 - selected_expression_rows：8到15条。
 - material_cards：目标 2 到 3 条，最多 3 条；如果只有 1 个合格素材就只输出 1 条；如果没有合格素材就输出空数组；不要为了凑数强行补齐。
-- material_cards 每条必须尽量补全 core_topic、generalizable_logic、exam_paragraph_specific、exam_paragraph_general、can_use_for、suggested_question_types、not_suitable_for。
-- material_cards 每条必须明确包含 material_summary 和 usage_examples；usage_examples 每条都必须包含 theme 和 example，每个素材 2 到 3 个 usage_examples。
+- material_cards 每条必须尽量补全 core_topic、generalizable_logic、exam_paragraph_specific、exam_paragraph_general、can_use_for、suitable_question_types、not_suitable_for。
+- material_cards 每条必须明确包含 material_summary 和 usage_examples；usage_examples 每条都必须包含 theme 和 paragraph，每个素材 2 到 3 个 usage_examples；兼容旧 example 字段，但新结构优先 paragraph。
 - can_use_for 填 3 到 5 个具体适用场景，不能只写“基层治理、公共服务、民生保障”这类大而空标签；exam_paragraph_general 必须能迁移到同类题目，不能依赖原文专属细节。
 - usage_examples[*].theme 不能只写“奋斗、担当、创新、基层治理、公共服务”等空泛词，必须是可用于申论/面试表达的具体主题。
 - usage_examples[*].example 必须像考场表达，不能写成小红书鸡汤文或营销文案。
@@ -743,7 +743,7 @@ def _normalize_usage_examples(item: dict[str, Any]) -> list[dict[str, str]]:
         if not isinstance(raw, dict):
             continue
         theme = _clean(raw.get("theme") or raw.get("title") or raw.get("topic"))
-        example = _clean(raw.get("example") or raw.get("content") or raw.get("body") or raw.get("sample"))
+        example = _clean(raw.get("paragraph") or raw.get("example") or raw.get("content") or raw.get("body") or raw.get("sample"))
         if not theme or not example:
             continue
         rows.append({"theme": theme, "example": example})
@@ -762,7 +762,7 @@ def _normalize_usage_examples(item: dict[str, Any]) -> list[dict[str, str]]:
 
     fallback_themes = _specific_use_cases([_clean(x) for x in _as_list(item.get("can_use_for")) if _clean(x)])
     if not fallback_themes:
-        fallback_themes = [_clean(x) for x in _as_list(item.get("target_topics") or item.get("theme")) if _clean(x)]
+        fallback_themes = [_clean(x) for x in _as_list(item.get("usable_themes") or item.get("target_topics") or item.get("theme")) if _clean(x)]
     anchor = _clean(item.get("factual_anchor") or item.get("anchor"))
     general = _clean(item.get("exam_paragraph_general") or item.get("exam_paragraph") or item.get("exam_value"))
     specific = _clean(item.get("exam_paragraph_specific"))
@@ -1163,15 +1163,16 @@ def _validate_enrichment(payload: dict[str, Any], candidate_evidence: list[dict[
         exam_paragraph = _clean(item.get("exam_paragraph") or item.get("exam_value") or exam_paragraph_specific or exam_paragraph_general)
         material_summary = _normalize_material_summary(item, factual_anchor, _clean(item.get("generalizable_logic")))
         source_title = _clean(item.get("source_title"))
-        source_articles = [_clean(x) for x in _as_list(item.get("source_articles") or source_title) if _clean(x)]
+        source_article = _clean(item.get("source_article"))
+        source_articles = [_clean(x) for x in _as_list(source_article or item.get("source_articles") or source_title) if _clean(x)]
         source_urls = [_clean(x) for x in _as_list(item.get("source_urls") or item.get("source_url") or item.get("url")) if _clean(x)]
-        source_dates = [_clean(x) for x in _as_list(item.get("source_dates") or item.get("date")) if _clean(x)]
-        target_topics = [_clean(x) for x in _as_list(item.get("target_topics") or item.get("theme") or item.get("usable_themes")) if _clean(x)]
+        source_dates = [_clean(x) for x in _as_list(item.get("source_date") or item.get("source_dates") or item.get("date")) if _clean(x)]
+        target_topics = [_clean(x) for x in _as_list(item.get("usable_themes") or item.get("target_topics") or item.get("theme")) if _clean(x)]
         usable_themes = target_topics[:5]
         core_topic = _clean(item.get("core_topic"))
         generalizable_logic = _clean(item.get("generalizable_logic"))
         can_use_for = _specific_use_cases([_clean(x) for x in _as_list(item.get("can_use_for")) if _clean(x)])
-        suggested_question_types = [_clean(x) for x in _as_list(item.get("suggested_question_types") or item.get("suitable_question_types")) if _clean(x)]
+        suggested_question_types = [_clean(x) for x in _as_list(item.get("suitable_question_types") or item.get("suggested_question_types")) if _clean(x)]
         not_suitable_for = [_clean(x) for x in _as_list(item.get("not_suitable_for")) if _clean(x)]
         use_boundary = _clean(item.get("usage_boundary") or item.get("use_boundary"))
 
@@ -1247,7 +1248,7 @@ def _validate_enrichment(payload: dict[str, Any], candidate_evidence: list[dict[
                 "generalizable_logic": generalizable_logic,
                 "factual_anchor": factual_anchor,
                 "material_summary": material_summary,
-                "usage_examples": [{"theme": row["theme"], "paragraph": row["example"]} for row in usage_examples],
+                "usage_examples": [{"theme": row["theme"], "paragraph": row["example"], "example": row["example"]} for row in usage_examples],
                 "exam_paragraph": exam_paragraph,
                 "exam_paragraph_specific": exam_paragraph_specific,
                 "exam_paragraph_general": exam_paragraph_general,

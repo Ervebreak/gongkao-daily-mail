@@ -612,7 +612,7 @@ def render_typst(data: dict[str, Any]) -> str:
             if not isinstance(example, dict):
                 continue
             theme = clean(example.get("theme"))
-            content = clean(example.get("example"))
+            content = clean(example.get("paragraph") or example.get("example"))
             if not theme or not content:
                 continue
             blocks.append(f'#material-example[{typst_text(theme)}][{typst_text(content)}]')
@@ -620,7 +620,7 @@ def render_typst(data: dict[str, Any]) -> str:
 
     def merged_material_boundary(row: dict[str, Any]) -> str:
         parts: list[str] = []
-        use_boundary = row_value(row, "use_boundary")
+        use_boundary = row_value(row, "usage_boundary", "use_boundary")
         not_suitable = row_list(row, "not_suitable_for")
         if use_boundary:
             parts.append(use_boundary)
@@ -636,12 +636,12 @@ def render_typst(data: dict[str, Any]) -> str:
             continue
         title = row_value(row, "title", "source_title", "theme") or f"素材卡 {idx:02d}"
         material_type = row_value(row, "material_type", "type")
-        source_dates = row_value(row, "source_dates", "date")
-        source_articles = row_value(row, "source_articles", "source_title")
-        target_topics = row_value(row, "target_topics", "theme")
+        source_dates = row_value(row, "source_date", "source_dates", "date")
+        source_articles = row_value(row, "source_article", "source_articles", "source_title")
+        target_topics = row_value(row, "usable_themes", "target_topics", "theme")
         material_summary = row_value(row, "material_summary")
         example_blocks = material_example_blocks(row)
-        suggested_question_types = row_value(row, "suggested_question_types")
+        suggested_question_types = row_value(row, "suitable_question_types", "suggested_question_types")
         use_boundary = merged_material_boundary(row)
         material_parts.append(
             f'#material-card[{typst_text(title)}][{typst_text(material_type)}][{typst_text(source_dates)}][{typst_text(source_articles)}]'

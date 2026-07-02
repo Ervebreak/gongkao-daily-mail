@@ -147,6 +147,7 @@ def test_material_card_structure_is_stable_and_complete() -> None:
     assert card["usage_boundary"]
     assert len(card["usage_examples"]) >= 2
     assert all(example["theme"] and example["paragraph"] for example in card["usage_examples"])
+    assert all(example["example"] == example["paragraph"] for example in card["usage_examples"])
 
 
 def test_material_card_rejects_user_visible_placeholder_copy() -> None:
@@ -177,6 +178,15 @@ def test_training_questions_bind_to_material_cards_and_expressions() -> None:
     assert linked_material_count >= 2
 
 
+def test_training_question_linked_materials_match_material_card_titles() -> None:
+    result = _validate_enrichment(_base_payload())
+
+    titles = {card["title"] for card in result["material_cards"]}
+    for row in result["training_questions"]:
+        for linked in row["linked_materials"]:
+            assert linked in titles
+
+
 def test_preview_material_title_comes_from_full_material_cards() -> None:
     preview = build_preview_data_from_full_data(_base_full_data())
     assert preview["material_preview"]["title"] == "平台投诉治理素材卡"
@@ -186,6 +196,12 @@ def test_render_typst_supports_training_question_binding_and_clean_copy() -> Non
     text = render_typst(_base_full_data())
 
     assert "平台投诉治理素材卡" in text
+    assert "2026-06-10" in text
+    assert "基层治理要把群众诉求转化为闭环办理机制" in text
+    assert "综合分析题" in text
+    assert "素材简介" in text
+    assert "作文示例" in text
+    assert "使用边界" in text
     assert "可调用素材" in text
     assert "审题关键" in text
     assert "作答提示" in text
@@ -195,3 +211,42 @@ def test_render_typst_supports_training_question_binding_and_clean_copy() -> Non
     assert "材料不足" not in text
     assert "TODO" not in text
     assert "debug" not in text
+
+
+def test_render_typst_with_new_material_fields_only() -> None:
+    payload = _base_payload()
+    card = payload["material_cards"][0]
+    card.pop("source_articles", None)
+    card.pop("source_dates", None)
+    card.pop("target_topics", None)
+    card.pop("suggested_question_types", None)
+    card.pop("use_boundary", None)
+    card["usage_examples"] = [
+        {
+            "theme": "基层治理要把群众诉求转化为闭环办理机制",
+            "paragraph": "这条示例强调诉求收集、分类转办和结果反馈要形成闭环，既要让群众知道问题由谁受理，也要让群众看到办理进度、责任部门和最终结果，避免事项在多个环节之间反复空转。",
+        },
+        {
+            "theme": "公共服务要从平均供给转向精准抵达",
+            "paragraph": "这条示例强调要把有限资源投向群众最急最盼的环节，通过分类分级办理、过程公开和结果反馈，让服务从平均供给转向精准抵达，也让群众感受到治理温度和服务效率。",
+        },
+    ]
+
+    validated = _validate_enrichment(payload)
+    assert validated["material_cards"][0]["usage_examples"][0]["paragraph"].startswith("这条示例强调诉求收集")
+    assert validated["material_cards"][0]["usage_examples"][1]["paragraph"].startswith("这条示例强调要把有限资源")
+    text = render_typst(
+        {
+            **_base_full_data(),
+            "material_cards": validated["material_cards"],
+            "training_questions": validated["training_questions"],
+            "practice_questions": validated["practice_questions"],
+        }
+    )
+
+    assert "平台投诉治理" in text
+    assert "2026-06-10" in text
+    assert "基层治理要把群众诉求转化为闭环办理机制" in text
+    assert "综合分析题" in text
+    assert "作文示例" in text
+    assert "适合公共问题治理场景，不适合替代专业执法结论。" in text
