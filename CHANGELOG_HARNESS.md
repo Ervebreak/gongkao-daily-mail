@@ -1,4 +1,46 @@
-# Harness Change Log
+﻿# Harness Change Log
+
+## 2026-07-01 - Phase 3B weekly PDF training question binding
+
+Reason:
+
+- Weekly PDF manual review showed the training section was still drifting away from the selected material cards and gold-sentence bank, so readers could not clearly see how this week's material should be migrated into actual answers.
+- This phase stabilizes the training-question structure and binds each question to reusable weekly materials or expressions without touching daily mail generation or send routing.
+
+Files changed:
+
+- `weekly_material_curator.py`
+- `weekly_typst_export.py`
+- `tests/test_weekly_pdf_quality.py`
+- `CHANGELOG_HARNESS.md`
+
+Latest behavior:
+
+- Weekly enrichment now normalizes `training_questions` with a stable structure:
+  - `question_type`
+  - `question`
+  - `linked_materials`
+  - `linked_expressions`
+  - `review_key`
+  - `answer_outline`
+  - `reference_direction`
+- The validator keeps backward compatibility with legacy `practice_questions`, but outputs `training_questions` and mirrors them back into `practice_questions` for older readers.
+- Each accepted training question must:
+  - include a concrete scene/conflict/task stem
+  - link to at least one material or expression
+  - contain at least 3 keyword-style outline points
+- If there are at least 2 material cards, the weekly training set is expected to bind at least 2 questions directly to those material cards.
+- The PDF training section now renders around:
+  - 可调用素材
+  - 审题关键
+  - 作答提示
+  - 参考迁移方向
+- This phase does not change:
+  - daily question generation
+  - selection quality gate
+  - subscriber segmentation
+  - weekly send routing
+  - OSS delivery logic
 
 ## 2026-06-30 - Phase 3A weekly PDF material card structure stabilization
 
@@ -27,7 +69,7 @@ Latest behavior:
   - `usage_examples`
   - `usage_boundary`
 - Each accepted card must provide at least 2 reusable themes and at least 2 usage examples.
-- Placeholder copy such as `暂无` / `材料不足` / `可展示` / `TODO` / `debug` / `fallback` is filtered from user-visible material-card content.
+- Placeholder copy such as `鏆傛棤` / `鏉愭枡涓嶈冻` / `鍙睍绀篳 / `TODO` / `debug` / `fallback` is filtered from user-visible material-card content.
 - Weekly preview material fragments continue to derive from the full material-card list, so preview titles correspond to a real full-card source.
 - This phase does not change:
   - daily question generation
@@ -54,7 +96,7 @@ Latest behavior:
 - `weak_featured_selection` remains as a true P0 only for real low-score featured selections with intact metadata.
 - If selection metadata is missing but `final_selection` or `featured_article` still resolves to a valid featured article, the issue is downgraded to `selection_metadata_missing` review instead of a blocking P0.
 - If no valid featured article can be resolved at all, `missing_final_selection` remains blocking.
-- Quality card copy now reports metadata-missing fallback explicitly instead of claiming `主线文章选题分过低：0`.
+- Quality card copy now reports metadata-missing fallback explicitly instead of claiming `涓荤嚎鏂囩珷閫夐鍒嗚繃浣庯細0`.
 
 ## 2026-06-30 - Daily question stability fixes for PR #58
 
@@ -74,7 +116,7 @@ Files changed:
 Latest behavior:
 
 - Stabilized `daily_question` question-type and question-wording consistency.
-- Cleans material-dependent phrasing such as `根据资料` / `给定资料` from standalone prompts.
+- Cleans material-dependent phrasing such as `鏍规嵁璧勬枡` / `缁欏畾璧勬枡` from standalone prompts.
 - Keeps `answer_framework` as a skeleton instead of echoing `candidate_answer`.
 - Compresses over-framework-like `breaking_hint` into a single route sentence.
 - Splits long `candidate_answer` content into multiple paragraphs in rendered plain text / HTML.
@@ -138,7 +180,7 @@ Latest behavior:
 
 Reason:
 
-- `knowledge/quality_issues.jsonl`、`good_examples`、`bad_examples` already capture historical quality learnings, but they were not yet executable as lightweight regression cases.
+- `knowledge/quality_issues.jsonl`銆乣good_examples`銆乣bad_examples` already capture historical quality learnings, but they were not yet executable as lightweight regression cases.
 - This stage adds a small runnable regression layer so recurring issues can be checked automatically without changing formal generation or sending flow.
 
 Files changed:
@@ -211,8 +253,8 @@ Files changed:
 
 Latest behavior:
 
-- Quality cards now show `门禁P0` from `quality_gate.p0_count` and separate `剩余风险` high/medium/low counts from final issues instead of the old `P0/P1/P2` summary.
-- Remaining-risk lines only say `影响发送` when the issue code is actually present in `quality_gate.p0_issues`; other high issues are labeled `高风险，建议修复`.
+- Quality cards now show `闂ㄧP0` from `quality_gate.p0_count` and separate `鍓╀綑椋庨櫓` high/medium/low counts from final issues instead of the old `P0/P1/P2` summary.
+- Remaining-risk lines only say `褰卞搷鍙戦€乣 when the issue code is actually present in `quality_gate.p0_issues`; other high issues are labeled `楂橀闄╋紝寤鸿淇`.
 - Visible truncation issues such as `text_truncation`, `truncated_takeaway`, and `expression_truncated` are escalated into gate P0 only when their `bad_text` still appears in the final rendered `plain_text` or `html_body`.
 - Truncation findings now preserve `field` and `bad_text` metadata more consistently so existing rewrite/repair stages can target them before the final gate decision.
 
@@ -351,7 +393,7 @@ Current behavior:
 - Added `reading_guide` to the generation schema with `core_value`, `focus_path`, `learning_outcome`, and `anchor_module`.
 - Added runtime prompt rules that define `reading_guide` as a dynamic value guide instead of a static module introduction.
 - `ensure_brief_schema(...)` now fills `reading_guide` deterministically when the model omits it or leaves fields empty.
-- The renderer now shows `📌 今天这封怎么用` below the top theme card and above `今日 3 件事` in both HTML and plain text.
+- The renderer now shows `馃搶 浠婂ぉ杩欏皝鎬庝箞鐢╜ below the top theme card and above `浠婃棩 3 浠朵簨` in both HTML and plain text.
 - The module shows only the three reader-facing lines and does not expose `anchor_module`.
 - This round adds generation, fallback, and rendering only; it does not add P0 blocking or change send logic.
 
@@ -403,216 +445,216 @@ Files:
 Current behavior:
 
 - Added `subject_line.py` as a dedicated email-subject normalization helper.
-- The model can still generate `brief.email_subject` freely, but the program now strips prefixes such as `【公考晨读】`, `公考晨读`, and `Re:`.
+- The model can still generate `brief.email_subject` freely, but the program now strips prefixes such as `銆愬叕鑰冩櫒璇汇€慲, `鍏€冩櫒璇籤, and `Re:`.
 - Generic subjects, hype-word subjects, empty subjects, and subjects longer than 26 characters are replaced with a stable exam-benefit fallback built from existing brief fields.
 - Fallback generation prefers `daily_question.question_type`, `upper_exam_points`, `article_framework_map.exam_tags`, `featured_article.theme`, and related existing fields.
-- `brief.email_subject` continues to stay prefix-free; the sending layer still adds the unified `【公考晨读】` prefix.
+- `brief.email_subject` continues to stay prefix-free; the sending layer still adds the unified `銆愬叕鑰冩櫒璇汇€慲 prefix.
 
 Follow-up:
 
 - This is a normalization fallback only; it is not a new `subject_quality.py` module and does not change the sending pipeline.
 - Future title tuning should prefer adjusting `subject_line.py` rules and fallback wording instead of moving prefix logic into generation or delivery.
 
-本文件记录公考晨读邮件项目的重要规则、Prompt、质检、渲染和部署改动。以后 AI Coding / Codex / Cursor / OpenClaw 接手项目前，必须先读本文件，再读 `AGENTS.md` 和 `content_harness/00_index.md`。
+鏈枃浠惰褰曞叕鑰冩櫒璇婚偖浠堕」鐩殑閲嶈瑙勫垯銆丳rompt銆佽川妫€銆佹覆鏌撳拰閮ㄧ讲鏀瑰姩銆備互鍚?AI Coding / Codex / Cursor / OpenClaw 鎺ユ墜椤圭洰鍓嶏紝蹇呴』鍏堣鏈枃浠讹紝鍐嶈 `AGENTS.md` 鍜?`content_harness/00_index.md`銆?
 
-## 使用规则
+## 浣跨敤瑙勫垯
 
-1. 每次修改规则、Prompt、质检、渲染、发送链路、归档链路或部署配置后，都要在本文件新增一条记录。
-2. 记录要写清楚：改动日期、改动范围、涉及文件、为什么改、最新版行为是什么、后续要注意什么。
-3. 本文件只记录“项目行为变化”和“容易影响后续判断的决策”，不记录普通错别字和无行为影响的小排版。
-4. 新增记录放在“最新改动”下面，保持倒序。
-5. 如果某次改动同时影响 Prompt 和质检，必须同时说明生成侧和拦截侧分别改了什么。
+1. 姣忔淇敼瑙勫垯銆丳rompt銆佽川妫€銆佹覆鏌撱€佸彂閫侀摼璺€佸綊妗ｉ摼璺垨閮ㄧ讲閰嶇疆鍚庯紝閮借鍦ㄦ湰鏂囦欢鏂板涓€鏉¤褰曘€?
+2. 璁板綍瑕佸啓娓呮锛氭敼鍔ㄦ棩鏈熴€佹敼鍔ㄨ寖鍥淬€佹秹鍙婃枃浠躲€佷负浠€涔堟敼銆佹渶鏂扮増琛屼负鏄粈涔堛€佸悗缁娉ㄦ剰浠€涔堛€?
+3. 鏈枃浠跺彧璁板綍鈥滈」鐩涓哄彉鍖栤€濆拰鈥滃鏄撳奖鍝嶅悗缁垽鏂殑鍐崇瓥鈥濓紝涓嶈褰曟櫘閫氶敊鍒瓧鍜屾棤琛屼负褰卞搷鐨勫皬鎺掔増銆?
+4. 鏂板璁板綍鏀惧湪鈥滄渶鏂版敼鍔ㄢ€濅笅闈紝淇濇寔鍊掑簭銆?
+5. 濡傛灉鏌愭鏀瑰姩鍚屾椂褰卞搷 Prompt 鍜岃川妫€锛屽繀椤诲悓鏃惰鏄庣敓鎴愪晶鍜屾嫤鎴晶鍒嗗埆鏀逛簡浠€涔堛€?
 
-## 当前最新版状态
+## 褰撳墠鏈€鏂扮増鐘舵€?
 
-### 项目接手阅读顺序
+### 椤圭洰鎺ユ墜闃呰椤哄簭
 
-当前约定：
+褰撳墠绾﹀畾锛?
 
-1. 先读 `CHANGELOG_HARNESS.md`，确认最近改了什么、当前最新版行为是什么、还有哪些待补项。
-2. 再读 `AGENTS.md`，确认项目运行边界、禁止行为、核心文件地图和验证要求。
-3. 最后按修改类型读取 `content_harness/00_index.md` 指向的规则、Skill、质检和工作流文档。
+1. 鍏堣 `CHANGELOG_HARNESS.md`锛岀‘璁ゆ渶杩戞敼浜嗕粈涔堛€佸綋鍓嶆渶鏂扮増琛屼负鏄粈涔堛€佽繕鏈夊摢浜涘緟琛ラ」銆?
+2. 鍐嶈 `AGENTS.md`锛岀‘璁ら」鐩繍琛岃竟鐣屻€佺姝㈣涓恒€佹牳蹇冩枃浠跺湴鍥惧拰楠岃瘉瑕佹眰銆?
+3. 鏈€鍚庢寜淇敼绫诲瀷璇诲彇 `content_harness/00_index.md` 鎸囧悜鐨勮鍒欍€丼kill銆佽川妫€鍜屽伐浣滄祦鏂囨。銆?
 
-### 今日一题模块边界
+### 浠婃棩涓€棰樻ā鍧楄竟鐣?
 
-当前约定：
+褰撳墠绾﹀畾锛?
 
-- 审题关键：看清题。只拆题，说明题目真正问什么、涉及哪些对象、核心矛盾是什么、哪些作答方向不能漏。不得写完整对策路线。
-- 作答主线：打开题。底层字段仍使用 `breaking_hint`，展示语义是“作答主线”。只给一句总路线，例如“先释疑稳预期，再溯源查问题，最后建机制管长远”。不得列完整分点。
-- 作答框架：写成题。使用 `answer_framework` / `answer_frame`，只写 3-4 条正式分点骨架，每点不超过 45 字，格式为“动词短语：简短解释。”。
-- 考生版参考答案：完整展开，负责把作答框架转成自然、稳重、可复述的考场表达。
+- 瀹￠鍏抽敭锛氱湅娓呴銆傚彧鎷嗛锛岃鏄庨鐩湡姝ｉ棶浠€涔堛€佹秹鍙婂摢浜涘璞°€佹牳蹇冪煕鐩炬槸浠€涔堛€佸摢浜涗綔绛旀柟鍚戜笉鑳芥紡銆備笉寰楀啓瀹屾暣瀵圭瓥璺嚎銆?
+- 浣滅瓟涓荤嚎锛氭墦寮€棰樸€傚簳灞傚瓧娈典粛浣跨敤 `breaking_hint`锛屽睍绀鸿涔夋槸鈥滀綔绛斾富绾库€濄€傚彧缁欎竴鍙ユ€昏矾绾匡紝渚嬪鈥滃厛閲婄枒绋抽鏈燂紝鍐嶆函婧愭煡闂锛屾渶鍚庡缓鏈哄埗绠￠暱杩溾€濄€備笉寰楀垪瀹屾暣鍒嗙偣銆?
+- 浣滅瓟妗嗘灦锛氬啓鎴愰銆備娇鐢?`answer_framework` / `answer_frame`锛屽彧鍐?3-4 鏉℃寮忓垎鐐归鏋讹紝姣忕偣涓嶈秴杩?45 瀛楋紝鏍煎紡涓衡€滃姩璇嶇煭璇細绠€鐭В閲娿€傗€濄€?
+- 鑰冪敓鐗堝弬鑰冪瓟妗堬細瀹屾暣灞曞紑锛岃礋璐ｆ妸浣滅瓟妗嗘灦杞垚鑷劧銆佺ǔ閲嶃€佸彲澶嶈堪鐨勮€冨満琛ㄨ揪銆?
 
-一句话规则：
+涓€鍙ヨ瘽瑙勫垯锛?
 
-> 审题关键看清题，作答主线打开题，作答框架写成题。
+> 瀹￠鍏抽敭鐪嬫竻棰橈紝浣滅瓟涓荤嚎鎵撳紑棰橈紝浣滅瓟妗嗘灦鍐欐垚棰樸€?
 
-## 最新改动
+## 鏈€鏂版敼鍔?
 
-### 2026-06-02｜新增考试收益型邮件标题规则
+### 2026-06-02锝滄柊澧炶€冭瘯鏀剁泭鍨嬮偖浠舵爣棰樿鍒?
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-当前邮件标题偏“文章主题型”，用户在收件箱里看不出今天能学到什么、练什么、带走什么。为提升打开前的价值承诺感，本次把标题规则调整为“考试收益型标题”。
+褰撳墠閭欢鏍囬鍋忊€滄枃绔犱富棰樺瀷鈥濓紝鐢ㄦ埛鍦ㄦ敹浠剁閲岀湅涓嶅嚭浠婂ぉ鑳藉鍒颁粈涔堛€佺粌浠€涔堛€佸甫璧颁粈涔堛€備负鎻愬崌鎵撳紑鍓嶇殑浠峰€兼壙璇烘劅锛屾湰娆℃妸鏍囬瑙勫垯璋冩暣涓衡€滆€冭瘯鏀剁泭鍨嬫爣棰樷€濄€?
 
-**已改文件**
+**宸叉敼鏂囦欢**
 
 - `prompt_templates.py`
 - `content_harness/runtime_prompt_rules.md`
 - `CHANGELOG_HARNESS.md`
 
-**最新版行为**
+**鏈€鏂扮増琛屼负**
 
-- `brief.email_subject` 改为“不带【公考晨读】前缀的考试收益型标题”，前缀仍由发送层统一添加。
-- 标题必须体现常考感、考试收益和具体收获，不能只写文章主题。
-- 运行规则中新增 `Email Subject` 小节，明确标题应优先体现高频考点、常考场景、申论素材、面试常见题、机关实务题、今日带走、答题角度、政策坐标等打开价值。
-- 标题必须带具体对象或具体考点，禁止使用“必考、押题、上岸、不看后悔、一定会考”等夸张营销词。
-- 本次只改 Prompt 和规则文档，不改发送逻辑。
+- `brief.email_subject` 鏀逛负鈥滀笉甯︺€愬叕鑰冩櫒璇汇€戝墠缂€鐨勮€冭瘯鏀剁泭鍨嬫爣棰樷€濓紝鍓嶇紑浠嶇敱鍙戦€佸眰缁熶竴娣诲姞銆?
+- 鏍囬蹇呴』浣撶幇甯歌€冩劅銆佽€冭瘯鏀剁泭鍜屽叿浣撴敹鑾凤紝涓嶈兘鍙啓鏂囩珷涓婚銆?
+- 杩愯瑙勫垯涓柊澧?`Email Subject` 灏忚妭锛屾槑纭爣棰樺簲浼樺厛浣撶幇楂橀鑰冪偣銆佸父鑰冨満鏅€佺敵璁虹礌鏉愩€侀潰璇曞父瑙侀銆佹満鍏冲疄鍔￠銆佷粖鏃ュ甫璧般€佺瓟棰樿搴︺€佹斂绛栧潗鏍囩瓑鎵撳紑浠峰€笺€?
+- 鏍囬蹇呴』甯﹀叿浣撳璞℃垨鍏蜂綋鑰冪偣锛岀姝娇鐢ㄢ€滃繀鑰冦€佹娂棰樸€佷笂宀搞€佷笉鐪嬪悗鎮斻€佷竴瀹氫細鑰冣€濈瓑澶稿紶钀ラ攢璇嶃€?
+- 鏈鍙敼 Prompt 鍜岃鍒欐枃妗ｏ紝涓嶆敼鍙戦€侀€昏緫銆?
 
-**后续注意事项**
+**鍚庣画娉ㄦ剰浜嬮」**
 
-1. 如果后续需要对标题做自动质检，应另起任务，不要把这次最小 patch 扩展成新的标题模块。
-2. 发送层仍负责统一补 `【公考晨读】` 前缀，brief 生成侧不要重复添加。
+1. 濡傛灉鍚庣画闇€瑕佸鏍囬鍋氳嚜鍔ㄨ川妫€锛屽簲鍙﹁捣浠诲姟锛屼笉瑕佹妸杩欐鏈€灏?patch 鎵╁睍鎴愭柊鐨勬爣棰樻ā鍧椼€?
+2. 鍙戦€佸眰浠嶈礋璐ｇ粺涓€琛?`銆愬叕鑰冩櫒璇汇€慲 鍓嶇紑锛宐rief 鐢熸垚渚т笉瑕侀噸澶嶆坊鍔犮€?
 
-### 2026-05-31｜新增 policy_coordinate 质检与降级
+### 2026-05-31锝滄柊澧?policy_coordinate 璐ㄦ涓庨檷绾?
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-“今日政策坐标”已进入 JSON 和邮件渲染，需要在最终质量复检中校验政策原文、来源、转译、文章落点、考场迁移和《求是》权威论述，避免错误政策引用或空泛表达直接展示。
+鈥滀粖鏃ユ斂绛栧潗鏍団€濆凡杩涘叆 JSON 鍜岄偖浠舵覆鏌擄紝闇€瑕佸湪鏈€缁堣川閲忓妫€涓牎楠屾斂绛栧師鏂囥€佹潵婧愩€佽浆璇戙€佹枃绔犺惤鐐广€佽€冨満杩佺Щ鍜屻€婃眰鏄€嬫潈濞佽杩帮紝閬垮厤閿欒鏀跨瓥寮曠敤鎴栫┖娉涜〃杈剧洿鎺ュ睍绀恒€?
 
-**已改文件**
+**宸叉敼鏂囦欢**
 
 - `policy_coordinate_quality.py`
 - `main.py`
 - `admin_report.py`
 - `CHANGELOG_HARNESS.md`
 
-**最新版本行为**
+**鏈€鏂扮増鏈涓?*
 
-- 新增 `evaluate_policy_coordinate_quality(...)`，检查政策原文、政策来源、政策转译、文章落点、考场迁移、匹配 ID、半截句、空泛表达、跨模块重复和渲染误放。
-- 最终 `evaluate_all_quality(...)` 已接入 `policy_coordinate` 质检，`quality_payload["final"]` 和质量卡会展示最终剩余问题。
-- 渲染前会确保 `brief["policy_coordinate"]` 已生成，修正此前“字段写入晚于渲染”的时序问题。
-- 如果《求是》权威论述不合格，会删除权威论述，仅保留政策原文、文章落点、考场迁移。
-- 如果政策原文或来源不合格，会尝试重新匹配；仍不合格则隐藏政策坐标模块，并在质量结果中记录降级原因。
-- `policy_coordinate` 质检不进入 P0 阻断码，不会因为该模块影响其他模块正常生成或发送。
+- 鏂板 `evaluate_policy_coordinate_quality(...)`锛屾鏌ユ斂绛栧師鏂囥€佹斂绛栨潵婧愩€佹斂绛栬浆璇戙€佹枃绔犺惤鐐广€佽€冨満杩佺Щ銆佸尮閰?ID銆佸崐鎴彞銆佺┖娉涜〃杈俱€佽法妯″潡閲嶅鍜屾覆鏌撹鏀俱€?
+- 鏈€缁?`evaluate_all_quality(...)` 宸叉帴鍏?`policy_coordinate` 璐ㄦ锛宍quality_payload["final"]` 鍜岃川閲忓崱浼氬睍绀烘渶缁堝墿浣欓棶棰樸€?
+- 娓叉煋鍓嶄細纭繚 `brief["policy_coordinate"]` 宸茬敓鎴愶紝淇姝ゅ墠鈥滃瓧娈靛啓鍏ユ櫄浜庢覆鏌撯€濈殑鏃跺簭闂銆?
+- 濡傛灉銆婃眰鏄€嬫潈濞佽杩颁笉鍚堟牸锛屼細鍒犻櫎鏉冨▉璁鸿堪锛屼粎淇濈暀鏀跨瓥鍘熸枃銆佹枃绔犺惤鐐广€佽€冨満杩佺Щ銆?
+- 濡傛灉鏀跨瓥鍘熸枃鎴栨潵婧愪笉鍚堟牸锛屼細灏濊瘯閲嶆柊鍖归厤锛涗粛涓嶅悎鏍煎垯闅愯棌鏀跨瓥鍧愭爣妯″潡锛屽苟鍦ㄨ川閲忕粨鏋滀腑璁板綍闄嶇骇鍘熷洜銆?
+- `policy_coordinate` 璐ㄦ涓嶈繘鍏?P0 闃绘柇鐮侊紝涓嶄細鍥犱负璇ユā鍧楀奖鍝嶅叾浠栨ā鍧楁甯哥敓鎴愭垨鍙戦€併€?
 
-**后续注意事项**
+**鍚庣画娉ㄦ剰浜嬮」**
 
-1. 后续如需把政策坐标问题升级为发送阻断，应单独评估误伤率后再加入 P0 code。
-2. 当前 `quality_card` 展示的是修复/降级后的最终剩余问题，不展示已删除的权威论述问题。
+1. 鍚庣画濡傞渶鎶婃斂绛栧潗鏍囬棶棰樺崌绾т负鍙戦€侀樆鏂紝搴斿崟鐙瘎浼拌浼ょ巼鍚庡啀鍔犲叆 P0 code銆?
+2. 褰撳墠 `quality_card` 灞曠ず鐨勬槸淇/闄嶇骇鍚庣殑鏈€缁堝墿浣欓棶棰橈紝涓嶅睍绀哄凡鍒犻櫎鐨勬潈濞佽杩伴棶棰樸€?
 
-### 2026-05-31｜渲染今日政策坐标模块
+### 2026-05-31锝滄覆鏌撲粖鏃ユ斂绛栧潗鏍囨ā鍧?
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-在任务 4 已写入 `brief["policy_coordinate"]` 的基础上，把“今日政策坐标”展示到邮件正文，位置放在“今日精读”之后、“今日一题”之前。
+鍦ㄤ换鍔?4 宸插啓鍏?`brief["policy_coordinate"]` 鐨勫熀纭€涓婏紝鎶娾€滀粖鏃ユ斂绛栧潗鏍団€濆睍绀哄埌閭欢姝ｆ枃锛屼綅缃斁鍦ㄢ€滀粖鏃ョ簿璇烩€濅箣鍚庛€佲€滀粖鏃ヤ竴棰樷€濅箣鍓嶃€?
 
-**已改文件**
+**宸叉敼鏂囦欢**
 
 - `email_renderer.py`
 - `CHANGELOG_HARNESS.md`
 
-**最新版本行为**
+**鏈€鏂扮増鏈涓?*
 
-- HTML 和 plain_text 同步渲染 `policy_coordinate`。
-- `policy_coordinate` 缺少 `policy_source` 或 `policy_quote` 时，整个模块不展示。
-- 权威论述只有在 `authoritative_quote` 和 `authoritative_source` 同时存在时才展示，不会残留空标题。
-- 政策原文行只使用政策语库字段：`policy_source` + `policy_quote`。
-- 《求是》论述只展示在“权威论述”行，不会写成“政策原文”。
-- 本次不修改发送逻辑、不修改 `quality_gate`，也不把“今日政策坐标”标题写入 brief 字段。
+- HTML 鍜?plain_text 鍚屾娓叉煋 `policy_coordinate`銆?
+- `policy_coordinate` 缂哄皯 `policy_source` 鎴?`policy_quote` 鏃讹紝鏁翠釜妯″潡涓嶅睍绀恒€?
+- 鏉冨▉璁鸿堪鍙湁鍦?`authoritative_quote` 鍜?`authoritative_source` 鍚屾椂瀛樺湪鏃舵墠灞曠ず锛屼笉浼氭畫鐣欑┖鏍囬銆?
+- 鏀跨瓥鍘熸枃琛屽彧浣跨敤鏀跨瓥璇簱瀛楁锛歚policy_source` + `policy_quote`銆?
+- 銆婃眰鏄€嬭杩板彧灞曠ず鍦ㄢ€滄潈濞佽杩扳€濊锛屼笉浼氬啓鎴愨€滄斂绛栧師鏂団€濄€?
+- 鏈涓嶄慨鏀瑰彂閫侀€昏緫銆佷笉淇敼 `quality_gate`锛屼篃涓嶆妸鈥滀粖鏃ユ斂绛栧潗鏍団€濇爣棰樺啓鍏?brief 瀛楁銆?
 
-**后续注意事项**
+**鍚庣画娉ㄦ剰浜嬮」**
 
-1. 后续可基于实际邮件样式微调政策坐标卡片配色和间距。
-2. 如要把政策坐标纳入质量门禁，应另起任务单独设计检查项。
+1. 鍚庣画鍙熀浜庡疄闄呴偖浠舵牱寮忓井璋冩斂绛栧潗鏍囧崱鐗囬厤鑹插拰闂磋窛銆?
+2. 濡傝鎶婃斂绛栧潗鏍囩撼鍏ヨ川閲忛棬绂侊紝搴斿彟璧蜂换鍔″崟鐙璁℃鏌ラ」銆?
 
-### 2026-05-31｜daily JSON 写入 policy_coordinate 字段
+### 2026-05-31锝渄aily JSON 鍐欏叆 policy_coordinate 瀛楁
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-在不改邮件 HTML、发送逻辑和质量门禁的前提下，把政策坐标匹配结果写入每日 brief JSON，为后续渲染“今日政策坐标”模块做数据准备。
+鍦ㄤ笉鏀归偖浠?HTML銆佸彂閫侀€昏緫鍜岃川閲忛棬绂佺殑鍓嶆彁涓嬶紝鎶婃斂绛栧潗鏍囧尮閰嶇粨鏋滃啓鍏ユ瘡鏃?brief JSON锛屼负鍚庣画娓叉煋鈥滀粖鏃ユ斂绛栧潗鏍団€濇ā鍧楀仛鏁版嵁鍑嗗銆?
 
-**已改文件**
+**宸叉敼鏂囦欢**
 
 - `main.py`
 - `CHANGELOG_HARNESS.md`
 
-**最新版本行为**
+**鏈€鏂扮増鏈涓?*
 
-- 在最终保存 `latest_brief.json` 和候选 payload 前，为 `brief` 新增 `policy_coordinate` 字段。
-- `policy_quote` 只来自政策语库，优先使用 `short_quote`，不合适时使用 `policy_quote`，且控制在 90 字以内。
-- `policy_source` 使用政策条目的 `source_title`，`policy_source_type` 使用 `source_type`。
-- `authoritative_quote` 只来自《求是》权威论述库，可为空；存在时必须同时生成 `authoritative_source`。
-- `authoritative_source` 优先使用 `speech_date + speech_event`，否则回退到《求是》期刊文章标题。
-- `article_connection` 和 `exam_transfer` 由最终精选文章、政策解释和考试场景生成，只写入 JSON，不进入正文渲染。
-- `brief` 中不写入“今日政策坐标”标题，保持字段只存结构化正文数据。
+- 鍦ㄦ渶缁堜繚瀛?`latest_brief.json` 鍜屽€欓€?payload 鍓嶏紝涓?`brief` 鏂板 `policy_coordinate` 瀛楁銆?
+- `policy_quote` 鍙潵鑷斂绛栬搴擄紝浼樺厛浣跨敤 `short_quote`锛屼笉鍚堥€傛椂浣跨敤 `policy_quote`锛屼笖鎺у埗鍦?90 瀛椾互鍐呫€?
+- `policy_source` 浣跨敤鏀跨瓥鏉＄洰鐨?`source_title`锛宍policy_source_type` 浣跨敤 `source_type`銆?
+- `authoritative_quote` 鍙潵鑷€婃眰鏄€嬫潈濞佽杩板簱锛屽彲涓虹┖锛涘瓨鍦ㄦ椂蹇呴』鍚屾椂鐢熸垚 `authoritative_source`銆?
+- `authoritative_source` 浼樺厛浣跨敤 `speech_date + speech_event`锛屽惁鍒欏洖閫€鍒般€婃眰鏄€嬫湡鍒婃枃绔犳爣棰樸€?
+- `article_connection` 鍜?`exam_transfer` 鐢辨渶缁堢簿閫夋枃绔犮€佹斂绛栬В閲婂拰鑰冭瘯鍦烘櫙鐢熸垚锛屽彧鍐欏叆 JSON锛屼笉杩涘叆姝ｆ枃娓叉煋銆?
+- `brief` 涓笉鍐欏叆鈥滀粖鏃ユ斂绛栧潗鏍団€濇爣棰橈紝淇濇寔瀛楁鍙瓨缁撴瀯鍖栨鏂囨暟鎹€?
 
-**后续注意事项**
+**鍚庣画娉ㄦ剰浜嬮」**
 
-1. 下一步若接入 HTML renderer，应只读取 `brief["policy_coordinate"]`，不要重新在渲染层做匹配。
-2. 渲染前建议先人工检查几天 `latest_brief.json` 中 `policy_coordinate` 的匹配质量。
-3. 本阶段没有修改 `quality_gate`，因此政策坐标字段暂不参与拦截。
+1. 涓嬩竴姝ヨ嫢鎺ュ叆 HTML renderer锛屽簲鍙鍙?`brief["policy_coordinate"]`锛屼笉瑕侀噸鏂板湪娓叉煋灞傚仛鍖归厤銆?
+2. 娓叉煋鍓嶅缓璁厛浜哄伐妫€鏌ュ嚑澶?`latest_brief.json` 涓?`policy_coordinate` 鐨勫尮閰嶈川閲忋€?
+3. 鏈樁娈垫病鏈変慨鏀?`quality_gate`锛屽洜姝ゆ斂绛栧潗鏍囧瓧娈垫殏涓嶅弬涓庢嫤鎴€?
 
-### 2026-05-31｜政策坐标匹配器预接入
+### 2026-05-31锝滄斂绛栧潗鏍囧尮閰嶅櫒棰勬帴鍏?
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-为后续把“今日政策坐标”接入邮件正文，先新增独立匹配器，从政策原文库和《求是》专题知识库中召回当天文章可用的政策原文、权威论述、相关片段和专题框架。本阶段只返回候选对象，不写入 daily JSON、不修改 HTML、不修改发送逻辑。
+涓哄悗缁妸鈥滀粖鏃ユ斂绛栧潗鏍団€濇帴鍏ラ偖浠舵鏂囷紝鍏堟柊澧炵嫭绔嬪尮閰嶅櫒锛屼粠鏀跨瓥鍘熸枃搴撳拰銆婃眰鏄€嬩笓棰樼煡璇嗗簱涓彫鍥炲綋澶╂枃绔犲彲鐢ㄧ殑鏀跨瓥鍘熸枃銆佹潈濞佽杩般€佺浉鍏崇墖娈靛拰涓撻妗嗘灦銆傛湰闃舵鍙繑鍥炲€欓€夊璞★紝涓嶅啓鍏?daily JSON銆佷笉淇敼 HTML銆佷笉淇敼鍙戦€侀€昏緫銆?
 
-**已改文件**
+**宸叉敼鏂囦欢**
 
 - `policy_coordinate_matcher.py`
 - `scripts/check_policy_coordinate_matcher.py`
 - `CHANGELOG_HARNESS.md`
 
-**最新版本行为**
+**鏈€鏂扮増鏈涓?*
 
-- 新增 `match_policy_coordinate_candidates(...)`，输入标题、摘要/正文、主题、关键词和考试场景，输出 `matched_policy_coordinate_candidates`。
-- 政策原文优先匹配 `policy_statements_core.jsonl`；核心库无语义命中时，再从扩展库中筛选 `quote_status=clean`、`display_ready=true`、`theme_confidence=high`、`usage_tier` 非 `disabled/background` 的条目。
-- 《求是》权威论述优先匹配 `authoritative_quotes_core.jsonl`，候选库只在核心库无结果时兜底。
-- `article_chunks.jsonl` 最多召回 3 个片段，`topic_frameworks.jsonl` 最多返回 1 个框架。
-- 匹配打分综合主题、二级主题、关键词、考试场景、展示优先级、`usage_tier` 和 `freshness`；`historical_framework` 降权，`disabled` 不使用，`background` 不直接展示。
-- 当前不接入生成链路，脚本 `scripts/check_policy_coordinate_matcher.py` 仅用于本地验证。
+- 鏂板 `match_policy_coordinate_candidates(...)`锛岃緭鍏ユ爣棰樸€佹憳瑕?姝ｆ枃銆佷富棰樸€佸叧閿瘝鍜岃€冭瘯鍦烘櫙锛岃緭鍑?`matched_policy_coordinate_candidates`銆?
+- 鏀跨瓥鍘熸枃浼樺厛鍖归厤 `policy_statements_core.jsonl`锛涙牳蹇冨簱鏃犺涔夊懡涓椂锛屽啀浠庢墿灞曞簱涓瓫閫?`quote_status=clean`銆乣display_ready=true`銆乣theme_confidence=high`銆乣usage_tier` 闈?`disabled/background` 鐨勬潯鐩€?
+- 銆婃眰鏄€嬫潈濞佽杩颁紭鍏堝尮閰?`authoritative_quotes_core.jsonl`锛屽€欓€夊簱鍙湪鏍稿績搴撴棤缁撴灉鏃跺厹搴曘€?
+- `article_chunks.jsonl` 鏈€澶氬彫鍥?3 涓墖娈碉紝`topic_frameworks.jsonl` 鏈€澶氳繑鍥?1 涓鏋躲€?
+- 鍖归厤鎵撳垎缁煎悎涓婚銆佷簩绾т富棰樸€佸叧閿瘝銆佽€冭瘯鍦烘櫙銆佸睍绀轰紭鍏堢骇銆乣usage_tier` 鍜?`freshness`锛沗historical_framework` 闄嶆潈锛宍disabled` 涓嶄娇鐢紝`background` 涓嶇洿鎺ュ睍绀恒€?
+- 褰撳墠涓嶆帴鍏ョ敓鎴愰摼璺紝鑴氭湰 `scripts/check_policy_coordinate_matcher.py` 浠呯敤浜庢湰鍦伴獙璇併€?
 
-**后续注意事项**
+**鍚庣画娉ㄦ剰浜嬮」**
 
-1. 下一步接入邮件生成前，应先确认 `best_policy` 的展示质量和 `debug_scores` 是否符合人工预期。
-2. renderer 接入应单独提交，避免匹配逻辑和 HTML 展示逻辑混在一起。
-3. 如果后续切换 OSS 读取，需要先扩展 `knowledge_base_loader.py`，不要直接在匹配器里写 OSS 逻辑。
+1. 涓嬩竴姝ユ帴鍏ラ偖浠剁敓鎴愬墠锛屽簲鍏堢‘璁?`best_policy` 鐨勫睍绀鸿川閲忓拰 `debug_scores` 鏄惁绗﹀悎浜哄伐棰勬湡銆?
+2. renderer 鎺ュ叆搴斿崟鐙彁浜わ紝閬垮厤鍖归厤閫昏緫鍜?HTML 灞曠ず閫昏緫娣峰湪涓€璧枫€?
+3. 濡傛灉鍚庣画鍒囨崲 OSS 璇诲彇锛岄渶瑕佸厛鎵╁睍 `knowledge_base_loader.py`锛屼笉瑕佺洿鎺ュ湪鍖归厤鍣ㄩ噷鍐?OSS 閫昏緫銆?
 
-### 2026-05-31｜知识库 JSONL 加载器预接入
+### 2026-05-31锝滅煡璇嗗簱 JSONL 鍔犺浇鍣ㄩ鎺ュ叆
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-为后续接入“今日政策坐标”和《求是》专题知识库，先提供独立的 JSONL 读取能力。本阶段只新增加载模块和检查脚本，不把知识库接入 daily JSON、邮件生成、HTML 渲染、发送或质量门禁逻辑。
+涓哄悗缁帴鍏モ€滀粖鏃ユ斂绛栧潗鏍団€濆拰銆婃眰鏄€嬩笓棰樼煡璇嗗簱锛屽厛鎻愪緵鐙珛鐨?JSONL 璇诲彇鑳藉姏銆傛湰闃舵鍙柊澧炲姞杞芥ā鍧楀拰妫€鏌ヨ剼鏈紝涓嶆妸鐭ヨ瘑搴撴帴鍏?daily JSON銆侀偖浠剁敓鎴愩€丠TML 娓叉煋銆佸彂閫佹垨璐ㄩ噺闂ㄧ閫昏緫銆?
 
-**已改文件**
+**宸叉敼鏂囦欢**
 
 - `knowledge_base_loader.py`
 - `scripts/check_knowledge_base_loader.py`
 - `CHANGELOG_HARNESS.md`
 
-**最新版本行为**
+**鏈€鏂扮増鏈涓?*
 
-- 新增通用 `load_jsonl(path)`，支持读取 UTF-8/UTF-8 BOM JSONL。
-- JSONL 单行解析失败时记录错误并跳过坏行，不中断主流程。
-- 文件不存在时记录 warning 并返回空列表。
-- 同一次运行内按绝对路径缓存读取结果，避免重复读取大文件。
-- 新增加载函数：`load_policy_core`、`load_policy_all`、`load_qiushi_article_index`、`load_qiushi_chunks`、`load_qiushi_quotes_core`、`load_qiushi_quotes_candidates`、`load_topic_frameworks`。
-- 当前不读取 `raw_articles/qiushi/` 全文目录。
+- 鏂板閫氱敤 `load_jsonl(path)`锛屾敮鎸佽鍙?UTF-8/UTF-8 BOM JSONL銆?
+- JSONL 鍗曡瑙ｆ瀽澶辫触鏃惰褰曢敊璇苟璺宠繃鍧忚锛屼笉涓柇涓绘祦绋嬨€?
+- 鏂囦欢涓嶅瓨鍦ㄦ椂璁板綍 warning 骞惰繑鍥炵┖鍒楄〃銆?
+- 鍚屼竴娆¤繍琛屽唴鎸夌粷瀵硅矾寰勭紦瀛樿鍙栫粨鏋滐紝閬垮厤閲嶅璇诲彇澶ф枃浠躲€?
+- 鏂板鍔犺浇鍑芥暟锛歚load_policy_core`銆乣load_policy_all`銆乣load_qiushi_article_index`銆乣load_qiushi_chunks`銆乣load_qiushi_quotes_core`銆乣load_qiushi_quotes_candidates`銆乣load_topic_frameworks`銆?
+- 褰撳墠涓嶈鍙?`raw_articles/qiushi/` 鍏ㄦ枃鐩綍銆?
 
-**后续注意事项**
+**鍚庣画娉ㄦ剰浜嬮」**
 
-1. 正式接入邮件内容前，应优先使用 `load_policy_core()` 作为“今日政策坐标”的展示级政策原文来源。
-2. 扩展候选、切片和权威引用暂时只作为后续检索能力预留，不应在本阶段改变邮件正文。
-3. OSS 模式后续单独实现，当前加载器读取本地 `KNOWLEDGE_BASE_DIR`。
+1. 姝ｅ紡鎺ュ叆閭欢鍐呭鍓嶏紝搴斾紭鍏堜娇鐢?`load_policy_core()` 浣滀负鈥滀粖鏃ユ斂绛栧潗鏍団€濈殑灞曠ず绾ф斂绛栧師鏂囨潵婧愩€?
+2. 鎵╁睍鍊欓€夈€佸垏鐗囧拰鏉冨▉寮曠敤鏆傛椂鍙綔涓哄悗缁绱㈣兘鍔涢鐣欙紝涓嶅簲鍦ㄦ湰闃舵鏀瑰彉閭欢姝ｆ枃銆?
+3. OSS 妯″紡鍚庣画鍗曠嫭瀹炵幇锛屽綋鍓嶅姞杞藉櫒璇诲彇鏈湴 `KNOWLEDGE_BASE_DIR`銆?
 
-### 2026-05-31｜知识库目录与配置预接入
+### 2026-05-31锝滅煡璇嗗簱鐩綍涓庨厤缃鎺ュ叆
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-为后续接入“今日政策坐标”和《求是》专题知识库，先把已整理好的知识库文件放入仓库，并预留本地/OSS 两种读取模式。本阶段只做目录、配置和打包资产接入，不改变生成、渲染、发送和质量门禁逻辑。
+涓哄悗缁帴鍏モ€滀粖鏃ユ斂绛栧潗鏍団€濆拰銆婃眰鏄€嬩笓棰樼煡璇嗗簱锛屽厛鎶婂凡鏁寸悊濂界殑鐭ヨ瘑搴撴枃浠舵斁鍏ヤ粨搴擄紝骞堕鐣欐湰鍦?OSS 涓ょ璇诲彇妯″紡銆傛湰闃舵鍙仛鐩綍銆侀厤缃拰鎵撳寘璧勪骇鎺ュ叆锛屼笉鏀瑰彉鐢熸垚銆佹覆鏌撱€佸彂閫佸拰璐ㄩ噺闂ㄧ閫昏緫銆?
 
-**已改文件**
+**宸叉敼鏂囦欢**
 
 - `config.py`
 - `.env.example`
@@ -624,53 +666,53 @@ Follow-up:
 - `knowledge_base/topic_knowledge/`
 - `CHANGELOG_HARNESS.md`
 
-**最新版行为**
+**鏈€鏂扮増琛屼负**
 
-- 新增环境变量：`KNOWLEDGE_BASE_MODE=local`、`KNOWLEDGE_BASE_DIR=knowledge_base`、`KNOWLEDGE_OSS_PREFIX=`。
-- `config.Settings` 新增知识库配置和路径属性：`knowledge_base_path`、`policy_corpus_path`、`topic_knowledge_path`。
-- 仓库新增 `knowledge_base/policy_corpus/`，包含政策原文核心展示库和扩展候选库。
-- 仓库新增 `knowledge_base/topic_knowledge/`，包含《求是》专题索引、切片、权威引用、专题框架和 `raw_articles/qiushi/` 原文目录。
-- FC 打包脚本会复制 `knowledge_base/`，并检查核心政策库和专题索引文件存在。
-- 本阶段不读取知识库、不写入 daily JSON、不改 Prompt、不改 renderer、不改发送逻辑、不改 quality_gate。
+- 鏂板鐜鍙橀噺锛歚KNOWLEDGE_BASE_MODE=local`銆乣KNOWLEDGE_BASE_DIR=knowledge_base`銆乣KNOWLEDGE_OSS_PREFIX=`銆?
+- `config.Settings` 鏂板鐭ヨ瘑搴撻厤缃拰璺緞灞炴€э細`knowledge_base_path`銆乣policy_corpus_path`銆乣topic_knowledge_path`銆?
+- 浠撳簱鏂板 `knowledge_base/policy_corpus/`锛屽寘鍚斂绛栧師鏂囨牳蹇冨睍绀哄簱鍜屾墿灞曞€欓€夊簱銆?
+- 浠撳簱鏂板 `knowledge_base/topic_knowledge/`锛屽寘鍚€婃眰鏄€嬩笓棰樼储寮曘€佸垏鐗囥€佹潈濞佸紩鐢ㄣ€佷笓棰樻鏋跺拰 `raw_articles/qiushi/` 鍘熸枃鐩綍銆?
+- FC 鎵撳寘鑴氭湰浼氬鍒?`knowledge_base/`锛屽苟妫€鏌ユ牳蹇冩斂绛栧簱鍜屼笓棰樼储寮曟枃浠跺瓨鍦ㄣ€?
+- 鏈樁娈典笉璇诲彇鐭ヨ瘑搴撱€佷笉鍐欏叆 daily JSON銆佷笉鏀?Prompt銆佷笉鏀?renderer銆佷笉鏀瑰彂閫侀€昏緫銆佷笉鏀?quality_gate銆?
 
-**后续注意事项**
+**鍚庣画娉ㄦ剰浜嬮」**
 
-1. 正式接入“今日政策坐标”时，优先读取 `knowledge_base/policy_corpus/policy_statements_core.jsonl`。
-2. 切换 OSS 时，将 `KNOWLEDGE_BASE_MODE` 改为 `oss`，并设置 `KNOWLEDGE_OSS_PREFIX` 为 bucket 内对象前缀；OSS 鉴权继续复用现有 OSS 配置。
-3. 接入生成逻辑前，应单独增加读取失败兜底，避免知识库缺失影响候选邮件生成。
+1. 姝ｅ紡鎺ュ叆鈥滀粖鏃ユ斂绛栧潗鏍団€濇椂锛屼紭鍏堣鍙?`knowledge_base/policy_corpus/policy_statements_core.jsonl`銆?
+2. 鍒囨崲 OSS 鏃讹紝灏?`KNOWLEDGE_BASE_MODE` 鏀逛负 `oss`锛屽苟璁剧疆 `KNOWLEDGE_OSS_PREFIX` 涓?bucket 鍐呭璞″墠缂€锛汷SS 閴存潈缁х画澶嶇敤鐜版湁 OSS 閰嶇疆銆?
+3. 鎺ュ叆鐢熸垚閫昏緫鍓嶏紝搴斿崟鐙鍔犺鍙栧け璐ュ厹搴曪紝閬垮厤鐭ヨ瘑搴撶己澶卞奖鍝嶅€欓€夐偖浠剁敓鎴愩€?
 
-### 2026-05-28｜阶段 2 抽取统一质量计算 helper
+### 2026-05-28锝滈樁娈?2 鎶藉彇缁熶竴璐ㄩ噺璁＄畻 helper
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-`main.py` 中多处在 brief 被修复或重写后重复执行“渲染、各模块质检、content quality、quality gate 构造”逻辑。重复代码越多，后续修复字段同步、P0 repair、pre-send guard 时越容易出现“某一路径漏跑某个质检”的问题。
+`main.py` 涓澶勫湪 brief 琚慨澶嶆垨閲嶅啓鍚庨噸澶嶆墽琛屸€滄覆鏌撱€佸悇妯″潡璐ㄦ銆乧ontent quality銆乹uality gate 鏋勯€犫€濋€昏緫銆傞噸澶嶄唬鐮佽秺澶氾紝鍚庣画淇瀛楁鍚屾銆丳0 repair銆乸re-send guard 鏃惰秺瀹规槗鍑虹幇鈥滄煇涓€璺緞婕忚窇鏌愪釜璐ㄦ鈥濈殑闂銆?
 
-**已改文件**
+**宸叉敼鏂囦欢**
 
 - `main.py`
 - `CHANGELOG_HARNESS.md`
 
-**最新版行为**
+**鏈€鏂扮増琛屼负**
 
-- 新增 `render_brief_outputs`，统一从 brief 生成纯文本和 HTML。
-- 新增 `evaluate_all_quality`，统一计算今日一题、框架图、今日可带走、整封清洁度、速读、重复、表达质感、模块冗余、内容风险、选文质量、content quality 和 pre-send cleanliness。
-- 新增 `build_gate_from_quality_map`，统一把质量 map 转成 `build_quality_gate(...)` 参数，避免各处手写参数顺序。
-- 新增 `recompute_after_brief_change`，用于 brief 变更后统一执行 schema 校验、URL 标注、最终选文摘要、主题变化检查、subject 重算、渲染和质量复算。
-- 候选件复核、content quality minor fix、content issue rewrite、pre-send cleanliness guard、P0 repair 后的部分重复质检代码已改为使用统一 helper。
-- 本阶段只抽函数和替换机械重复块，不拆文件、不改事件模式、不改发送判断、不改质量字段名。
+- 鏂板 `render_brief_outputs`锛岀粺涓€浠?brief 鐢熸垚绾枃鏈拰 HTML銆?
+- 鏂板 `evaluate_all_quality`锛岀粺涓€璁＄畻浠婃棩涓€棰樸€佹鏋跺浘銆佷粖鏃ュ彲甯﹁蛋銆佹暣灏佹竻娲佸害銆侀€熻銆侀噸澶嶃€佽〃杈捐川鎰熴€佹ā鍧楀啑浣欍€佸唴瀹归闄┿€侀€夋枃璐ㄩ噺銆乧ontent quality 鍜?pre-send cleanliness銆?
+- 鏂板 `build_gate_from_quality_map`锛岀粺涓€鎶婅川閲?map 杞垚 `build_quality_gate(...)` 鍙傛暟锛岄伩鍏嶅悇澶勬墜鍐欏弬鏁伴『搴忋€?
+- 鏂板 `recompute_after_brief_change`锛岀敤浜?brief 鍙樻洿鍚庣粺涓€鎵ц schema 鏍￠獙銆乁RL 鏍囨敞銆佹渶缁堥€夋枃鎽樿銆佷富棰樺彉鍖栨鏌ャ€乻ubject 閲嶇畻銆佹覆鏌撳拰璐ㄩ噺澶嶇畻銆?
+- 鍊欓€変欢澶嶆牳銆乧ontent quality minor fix銆乧ontent issue rewrite銆乸re-send cleanliness guard銆丳0 repair 鍚庣殑閮ㄥ垎閲嶅璐ㄦ浠ｇ爜宸叉敼涓轰娇鐢ㄧ粺涓€ helper銆?
+- 鏈樁娈靛彧鎶藉嚱鏁板拰鏇挎崲鏈烘閲嶅鍧楋紝涓嶆媶鏂囦欢銆佷笉鏀逛簨浠舵ā寮忋€佷笉鏀瑰彂閫佸垽鏂€佷笉鏀硅川閲忓瓧娈靛悕銆?
 
-**后续注意事项**
+**鍚庣画娉ㄦ剰浜嬮」**
 
-1. 后续继续替换剩余质量重复块时，应优先使用 `evaluate_all_quality` 和 `recompute_after_brief_change`，不要继续复制整段质检调用。
-2. 第 3 阶段拆文件前，应先确认 `quality.final`、`quality_gate`、`latest_quality.json` 和管理员报告结构没有字段缺失。
+1. 鍚庣画缁х画鏇挎崲鍓╀綑璐ㄩ噺閲嶅鍧楁椂锛屽簲浼樺厛浣跨敤 `evaluate_all_quality` 鍜?`recompute_after_brief_change`锛屼笉瑕佺户缁鍒舵暣娈佃川妫€璋冪敤銆?
+2. 绗?3 闃舵鎷嗘枃浠跺墠锛屽簲鍏堢‘璁?`quality.final`銆乣quality_gate`銆乣latest_quality.json` 鍜岀鐞嗗憳鎶ュ憡缁撴瀯娌℃湁瀛楁缂哄け銆?
 
-### 2026-05-28｜阶段 1 部署文档与打包包名统一
+### 2026-05-28锝滈樁娈?1 閮ㄧ讲鏂囨。涓庢墦鍖呭寘鍚嶇粺涓€
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-代码优化第一阶段先处理低风险的部署和仓库卫生问题。此前 README 写上传 `gongkao-morning-mailer.zip`，Bash 打包脚本输出 `function.zip`，PowerShell 打包脚本默认输出 `_release\gongkao-morning-mailer.zip`，容易导致本地、GitHub 和阿里云 FC 上传说明不一致。
+浠ｇ爜浼樺寲绗竴闃舵鍏堝鐞嗕綆椋庨櫓鐨勯儴缃插拰浠撳簱鍗敓闂銆傛鍓?README 鍐欎笂浼?`gongkao-morning-mailer.zip`锛孊ash 鎵撳寘鑴氭湰杈撳嚭 `function.zip`锛孭owerShell 鎵撳寘鑴氭湰榛樿杈撳嚭 `_release\gongkao-morning-mailer.zip`锛屽鏄撳鑷存湰鍦般€丟itHub 鍜岄樋閲屼簯 FC 涓婁紶璇存槑涓嶄竴鑷淬€?
 
-**已改文件**
+**宸叉敼鏂囦欢**
 
 - `README.md`
 - `requirements.txt`
@@ -682,102 +724,102 @@ Follow-up:
 - `docs/code_optimization_execution_plan.md`
 - `docs/code_optimization_execution_plan.docx`
 
-**最新版行为**
+**鏈€鏂扮増琛屼负**
 
-- 部署包统一命名为 `function.zip`。
-- PowerShell 打包脚本默认在仓库根目录生成 `function.zip`；如果传入相对路径，会按仓库根目录解析。
-- README 和部署规则文档统一说明上传 `function.zip`。
-- 新增阿里云 FC 部署说明，明确本地检查、打包、上传、触发器和发布后验证步骤。
-- 新增当前运行架构文档，记录 `main.handler`、HTTP 阻断、feedback、夜间候选、早晨发送、周报 PDF 和质量门禁边界。
-- `reportlab` 依赖锁定为 `reportlab==4.5.1`，避免 FC 打包时安装不可预期版本。
-- `.gitignore` 补充 `chardet/`，防止依赖目录误入仓库。
+- 閮ㄧ讲鍖呯粺涓€鍛藉悕涓?`function.zip`銆?
+- PowerShell 鎵撳寘鑴氭湰榛樿鍦ㄤ粨搴撴牴鐩綍鐢熸垚 `function.zip`锛涘鏋滀紶鍏ョ浉瀵硅矾寰勶紝浼氭寜浠撳簱鏍圭洰褰曡В鏋愩€?
+- README 鍜岄儴缃茶鍒欐枃妗ｇ粺涓€璇存槑涓婁紶 `function.zip`銆?
+- 鏂板闃块噷浜?FC 閮ㄧ讲璇存槑锛屾槑纭湰鍦版鏌ャ€佹墦鍖呫€佷笂浼犮€佽Е鍙戝櫒鍜屽彂甯冨悗楠岃瘉姝ラ銆?
+- 鏂板褰撳墠杩愯鏋舵瀯鏂囨。锛岃褰?`main.handler`銆丠TTP 闃绘柇銆乫eedback銆佸闂村€欓€夈€佹棭鏅ㄥ彂閫併€佸懆鎶?PDF 鍜岃川閲忛棬绂佽竟鐣屻€?
+- `reportlab` 渚濊禆閿佸畾涓?`reportlab==4.5.1`锛岄伩鍏?FC 鎵撳寘鏃跺畨瑁呬笉鍙鏈熺増鏈€?
+- `.gitignore` 琛ュ厖 `chardet/`锛岄槻姝緷璧栫洰褰曡鍏ヤ粨搴撱€?
 
-**后续注意事项**
+**鍚庣画娉ㄦ剰浜嬮」**
 
-1. 本阶段不删除仓库中已跟踪的 `reportlab/` 目录，后续如要移除 vendored 目录，必须单独验证 PDF 生成和 FC 打包。
-2. 后续拆分 `main.py` 前，应先完成质量计算 helper 抽取，避免在多个文件之间复制重复质检代码。
+1. 鏈樁娈典笉鍒犻櫎浠撳簱涓凡璺熻釜鐨?`reportlab/` 鐩綍锛屽悗缁瑕佺Щ闄?vendored 鐩綍锛屽繀椤诲崟鐙獙璇?PDF 鐢熸垚鍜?FC 鎵撳寘銆?
+2. 鍚庣画鎷嗗垎 `main.py` 鍓嶏紝搴斿厛瀹屾垚璐ㄩ噺璁＄畻 helper 鎶藉彇锛岄伩鍏嶅湪澶氫釜鏂囦欢涔嬮棿澶嶅埗閲嶅璐ㄦ浠ｇ爜銆?
 
-### 2026-05-27｜渲染层与发送前清洗统一兜底去除展示标签泄漏
+### 2026-05-27锝滄覆鏌撳眰涓庡彂閫佸墠娓呮礂缁熶竴鍏滃簳鍘婚櫎灞曠ず鏍囩娉勬紡
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-用户继续反馈，最终 `candidate_email_*.html` 中仍反复出现“可用表达：可用表达：”“如果点原文，重点看：如果点原文，重点看：”“审题关键：审题关键：”“作答主线：作答主线：”等展示型小标题重复。单靠上游生成约束和早期渲染去重还不够，需要在渲染层和发送前清洗层同时做更稳的兜底。
+鐢ㄦ埛缁х画鍙嶉锛屾渶缁?`candidate_email_*.html` 涓粛鍙嶅鍑虹幇鈥滃彲鐢ㄨ〃杈撅細鍙敤琛ㄨ揪锛氣€濃€滃鏋滅偣鍘熸枃锛岄噸鐐圭湅锛氬鏋滅偣鍘熸枃锛岄噸鐐圭湅锛氣€濃€滃棰樺叧閿細瀹￠鍏抽敭锛氣€濃€滀綔绛斾富绾匡細浣滅瓟涓荤嚎锛氣€濈瓑灞曠ず鍨嬪皬鏍囬閲嶅銆傚崟闈犱笂娓哥敓鎴愮害鏉熷拰鏃╂湡娓叉煋鍘婚噸杩樹笉澶燂紝闇€瑕佸湪娓叉煋灞傚拰鍙戦€佸墠娓呮礂灞傚悓鏃跺仛鏇寸ǔ鐨勫厹搴曘€?
 
-**已改文件**
+**宸叉敼鏂囦欢**
 
 - `email_renderer.py`
 - `pre_send_cleanliness.py`
 - `CHANGELOG_HARNESS.md`
 
-**最新版行为**
+**鏈€鏂扮増琛屼负**
 
-- `email_renderer.py` 新增统一的展示前缀剥离逻辑，最终渲染 HTML / 纯文本时会重复剥离以下前缀，直到字段正文恢复为纯内容：
-  - `如果点原文，重点看`
-  - `可用表达`
-  - `作答主线`
-  - `审题关键`
-  - `换成考场话`
-  - `考场话`
-- 纯文本和 HTML 渲染层都会在 `original_reading_focus`、`rewritable_expression`、`exam_focus`、参考句式等展示型字段上应用这层兜底，而不是只依赖上游 brief 已经被修干净。
-- `pre_send_cleanliness.py` 补齐了 `usable_for_exam` 和 `exam_use[*]` 这两个字段别名的前缀清洗，避免质检命中一个字段名、最终渲染却走另一个字段名，导致“修了但邮件里还在”。
-- 这次改动只处理展示标签泄漏，不改模块结构、不改字段含义、不重写正文内容。
+- `email_renderer.py` 鏂板缁熶竴鐨勫睍绀哄墠缂€鍓ョ閫昏緫锛屾渶缁堟覆鏌?HTML / 绾枃鏈椂浼氶噸澶嶅墺绂讳互涓嬪墠缂€锛岀洿鍒板瓧娈垫鏂囨仮澶嶄负绾唴瀹癸細
+  - `濡傛灉鐐瑰師鏂囷紝閲嶇偣鐪媊
+  - `鍙敤琛ㄨ揪`
+  - `浣滅瓟涓荤嚎`
+  - `瀹￠鍏抽敭`
+  - `鎹㈡垚鑰冨満璇漙
+  - `鑰冨満璇漙
+- 绾枃鏈拰 HTML 娓叉煋灞傞兘浼氬湪 `original_reading_focus`銆乣rewritable_expression`銆乣exam_focus`銆佸弬鑰冨彞寮忕瓑灞曠ず鍨嬪瓧娈典笂搴旂敤杩欏眰鍏滃簳锛岃€屼笉鏄彧渚濊禆涓婃父 brief 宸茬粡琚慨骞插噣銆?
+- `pre_send_cleanliness.py` 琛ラ綈浜?`usable_for_exam` 鍜?`exam_use[*]` 杩欎袱涓瓧娈靛埆鍚嶇殑鍓嶇紑娓呮礂锛岄伩鍏嶈川妫€鍛戒腑涓€涓瓧娈靛悕銆佹渶缁堟覆鏌撳嵈璧板彟涓€涓瓧娈靛悕锛屽鑷粹€滀慨浜嗕絾閭欢閲岃繕鍦ㄢ€濄€?
+- 杩欐鏀瑰姩鍙鐞嗗睍绀烘爣绛炬硠婕忥紝涓嶆敼妯″潡缁撴瀯銆佷笉鏀瑰瓧娈靛惈涔夈€佷笉閲嶅啓姝ｆ枃鍐呭銆?
 
-**后续注意事项**
+**鍚庣画娉ㄦ剰浜嬮」**
 
-1. 如果后续新增新的“标题 + 正文”展示模块，且正文值也可能自带同名小标题，必须同步加入渲染层与 `pre_send_cleanliness.py` 的前缀剥离名单。
-2. 生成侧仍应尽量避免输出这些前缀；当前修复是展示层兜底，不代表可以放松上游 Prompt 约束。
+1. 濡傛灉鍚庣画鏂板鏂扮殑鈥滄爣棰?+ 姝ｆ枃鈥濆睍绀烘ā鍧楋紝涓旀鏂囧€间篃鍙兘鑷甫鍚屽悕灏忔爣棰橈紝蹇呴』鍚屾鍔犲叆娓叉煋灞備笌 `pre_send_cleanliness.py` 鐨勫墠缂€鍓ョ鍚嶅崟銆?
+2. 鐢熸垚渚т粛搴斿敖閲忛伩鍏嶈緭鍑鸿繖浜涘墠缂€锛涘綋鍓嶄慨澶嶆槸灞曠ず灞傚厹搴曪紝涓嶄唬琛ㄥ彲浠ユ斁鏉句笂娓?Prompt 绾︽潫銆?
 
-### 2026-05-26｜修复 rewrite 后候选件、HTML、纯文本与质量卡不一致
+### 2026-05-26锝滀慨澶?rewrite 鍚庡€欓€変欢銆丠TML銆佺函鏂囨湰涓庤川閲忓崱涓嶄竴鑷?
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-用户反馈 `latest_quality_card.md` 的“自动修复摘要”显示某些字段已经修好，但最终 `latest.json`、`candidate_email_*.html`、`plain_text` 里仍残留半截句、小标题前缀或分号结尾；同时质量卡里同一条修复摘要会重复出现。问题本质是 rewrite 后写回、复检、再渲染和质量卡摘要去重没有完全打通。
+鐢ㄦ埛鍙嶉 `latest_quality_card.md` 鐨勨€滆嚜鍔ㄤ慨澶嶆憳瑕佲€濇樉绀烘煇浜涘瓧娈靛凡缁忎慨濂斤紝浣嗘渶缁?`latest.json`銆乣candidate_email_*.html`銆乣plain_text` 閲屼粛娈嬬暀鍗婃埅鍙ャ€佸皬鏍囬鍓嶇紑鎴栧垎鍙风粨灏撅紱鍚屾椂璐ㄩ噺鍗￠噷鍚屼竴鏉′慨澶嶆憳瑕佷細閲嶅鍑虹幇銆傞棶棰樻湰璐ㄦ槸 rewrite 鍚庡啓鍥炪€佸妫€銆佸啀娓叉煋鍜岃川閲忓崱鎽樿鍘婚噸娌℃湁瀹屽叏鎵撻€氥€?
 
-**已改文件**
+**宸叉敼鏂囦欢**
 
 - `main.py`
 - `pre_send_cleanliness.py`
 - `admin_report.py`
 - `CHANGELOG_HARNESS.md`
 
-**最新版行为**
+**鏈€鏂扮増琛屼负**
 
-- `content_issue_rewrite` 或 `p0 repair` 之后，会重新同步：
+- `content_issue_rewrite` 鎴?`p0 repair` 涔嬪悗锛屼細閲嶆柊鍚屾锛?
   - `brief`
   - `plain_text`
   - `html_body`
   - `content_quality`
   - `quality_gate`
-  保证最终候选件里保存的是修复后的最终产物，而不是“摘要说修了，但正文还没换”。
-- 如果 `content_issue_rewrite` 导致内容质量分数明显下降，会整轮回滚，并把该轮 rewrite 标记为 `rolled_back`；被回滚的 rewrite 不再继续污染最终质量卡和候选件摘要。
-- `merge_rewrite_results` 会跳过已回滚轮次，`admin_report.py` 会对自动修复摘要去重，避免同一条修复在质量卡里重复展示两次。
-- `pre_send_cleanliness.py` 补充了字段级兜底：
-  - `today_takeaway.framework` 纳入正文型字段清洁范围
+  淇濊瘉鏈€缁堝€欓€変欢閲屼繚瀛樼殑鏄慨澶嶅悗鐨勬渶缁堜骇鐗╋紝鑰屼笉鏄€滄憳瑕佽淇簡锛屼絾姝ｆ枃杩樻病鎹⑩€濄€?
+- 濡傛灉 `content_issue_rewrite` 瀵艰嚧鍐呭璐ㄩ噺鍒嗘暟鏄庢樉涓嬮檷锛屼細鏁磋疆鍥炴粴锛屽苟鎶婅杞?rewrite 鏍囪涓?`rolled_back`锛涜鍥炴粴鐨?rewrite 涓嶅啀缁х画姹℃煋鏈€缁堣川閲忓崱鍜屽€欓€変欢鎽樿銆?
+- `merge_rewrite_results` 浼氳烦杩囧凡鍥炴粴杞锛宍admin_report.py` 浼氬鑷姩淇鎽樿鍘婚噸锛岄伩鍏嶅悓涓€鏉′慨澶嶅湪璐ㄩ噺鍗￠噷閲嶅灞曠ず涓ゆ銆?
+- `pre_send_cleanliness.py` 琛ュ厖浜嗗瓧娈电骇鍏滃簳锛?
+  - `today_takeaway.framework` 绾冲叆姝ｆ枃鍨嬪瓧娈垫竻娲佽寖鍥?
   - `daily_question.thirty_second_answer`
   - `daily_question.output_sentence_template`
-  如果只剩末尾分号，会直接字段级改成句号，而不是为这一个标点问题重写整个 `daily_question`
-- `main.py` 在发送前清洁度守卫之后也会重新评估 `content_quality`，避免质量门禁仍沿用清洁前的旧结果。
+  濡傛灉鍙墿鏈熬鍒嗗彿锛屼細鐩存帴瀛楁绾ф敼鎴愬彞鍙凤紝鑰屼笉鏄负杩欎竴涓爣鐐归棶棰橀噸鍐欐暣涓?`daily_question`
+- `main.py` 鍦ㄥ彂閫佸墠娓呮磥搴﹀畧鍗箣鍚庝篃浼氶噸鏂拌瘎浼?`content_quality`锛岄伩鍏嶈川閲忛棬绂佷粛娌跨敤娓呮磥鍓嶇殑鏃х粨鏋溿€?
 
-**后续注意事项**
+**鍚庣画娉ㄦ剰浜嬮」**
 
-1. 以后凡是新增“自动修复但不一定重写全文”的字段级清洁逻辑，都要确认 `latest.json`、`plain_text`、`html_body`、`quality_card` 四份产物是否同步更新。
-2. 如果后续再出现“质量卡说修了，但邮件里没修”的问题，优先排查写回顺序、回滚标记和摘要去重，而不是先怀疑单条 Prompt。
+1. 浠ュ悗鍑℃槸鏂板鈥滆嚜鍔ㄤ慨澶嶄絾涓嶄竴瀹氶噸鍐欏叏鏂団€濈殑瀛楁绾ф竻娲侀€昏緫锛岄兘瑕佺‘璁?`latest.json`銆乣plain_text`銆乣html_body`銆乣quality_card` 鍥涗唤浜х墿鏄惁鍚屾鏇存柊銆?
+2. 濡傛灉鍚庣画鍐嶅嚭鐜扳€滆川閲忓崱璇翠慨浜嗭紝浣嗛偖浠堕噷娌′慨鈥濈殑闂锛屼紭鍏堟帓鏌ュ啓鍥為『搴忋€佸洖婊氭爣璁板拰鎽樿鍘婚噸锛岃€屼笉鏄厛鎬€鐤戝崟鏉?Prompt銆?
 
-### 2026-05-25｜新增正文型字段句末标点守卫与半截句尾检测
+### 2026-05-25锝滄柊澧炴鏂囧瀷瀛楁鍙ユ湯鏍囩偣瀹堝崼涓庡崐鎴彞灏炬娴?
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-用户反馈生成邮件里经常出现“像字段拼接结果”的正文：有些展示型内容缺句号，有些句子停在“可落地”“有助于”“关键在于”“从而”等明显半截尾巴上，还有个别 30 秒参考句式只剩一个分号结尾。需要在发送前增加确定性的正文收口规则，先把成品感和截断风险稳住。
+鐢ㄦ埛鍙嶉鐢熸垚閭欢閲岀粡甯稿嚭鐜扳€滃儚瀛楁鎷兼帴缁撴灉鈥濈殑姝ｆ枃锛氭湁浜涘睍绀哄瀷鍐呭缂哄彞鍙凤紝鏈変簺鍙ュ瓙鍋滃湪鈥滃彲钀藉湴鈥濃€滄湁鍔╀簬鈥濃€滃叧閿湪浜庘€濃€滀粠鑰屸€濈瓑鏄庢樉鍗婃埅灏惧反涓婏紝杩樻湁涓埆 30 绉掑弬鑰冨彞寮忓彧鍓╀竴涓垎鍙风粨灏俱€傞渶瑕佸湪鍙戦€佸墠澧炲姞纭畾鎬х殑姝ｆ枃鏀跺彛瑙勫垯锛屽厛鎶婃垚鍝佹劅鍜屾埅鏂闄╃ǔ浣忋€?
 
-**已改文件**
+**宸叉敼鏂囦欢**
 
 - `pre_send_cleanliness.py`
 - `main.py`
 - `CHANGELOG_HARNESS.md`
 
-**最新版行为**
+**鏈€鏂扮増琛屼负**
 
-- 发送前清洁度守卫会对以下正文型字段自动补中文句号：只要字段结尾不是 `。！？；.!?」』）】》`，就补成完整句，覆盖范围包括：
+- 鍙戦€佸墠娓呮磥搴﹀畧鍗細瀵逛互涓嬫鏂囧瀷瀛楁鑷姩琛ヤ腑鏂囧彞鍙凤細鍙瀛楁缁撳熬涓嶆槸 `銆傦紒锛燂紱.!?銆嶃€忥級銆戙€媊锛屽氨琛ユ垚瀹屾暣鍙ワ紝瑕嗙洊鑼冨洿鍖呮嫭锛?
   - `today_focus`
   - `must_remember_sentence`
   - `featured_article.one_sentence`
@@ -795,222 +837,222 @@ Follow-up:
   - `today_takeaway.golden_sentences[*].sentence`
   - `quick_reads[*].one_sentence`
   - `quick_reads[*].exam_value`
-- 如果正文型字段以“可落地、可以用于、适合转化为、有助于、体现出、关键在于、主要包括、从而、进而、同时、并且”等高风险尾巴结束，会记为 `suspected_truncated_sentence`，并进入质量门禁。
-- 今日一题的 `thirty_second_answer` / `output_sentence_template` 如果只剩末尾分号，会在字段级直接改成句号，避免因为一个尾标点重写整个题目模块。
-- `main.py` 已把 `suspected_truncated_sentence` 纳入 `quality_gate` 的 P0 集合，确保这类明显半截句不会被放过。
+- 濡傛灉姝ｆ枃鍨嬪瓧娈典互鈥滃彲钀藉湴銆佸彲浠ョ敤浜庛€侀€傚悎杞寲涓恒€佹湁鍔╀簬銆佷綋鐜板嚭銆佸叧閿湪浜庛€佷富瑕佸寘鎷€佷粠鑰屻€佽繘鑰屻€佸悓鏃躲€佸苟涓斺€濈瓑楂橀闄╁熬宸寸粨鏉燂紝浼氳涓?`suspected_truncated_sentence`锛屽苟杩涘叆璐ㄩ噺闂ㄧ銆?
+- 浠婃棩涓€棰樼殑 `thirty_second_answer` / `output_sentence_template` 濡傛灉鍙墿鏈熬鍒嗗彿锛屼細鍦ㄥ瓧娈电骇鐩存帴鏀规垚鍙ュ彿锛岄伩鍏嶅洜涓轰竴涓熬鏍囩偣閲嶅啓鏁翠釜棰樼洰妯″潡銆?
+- `main.py` 宸叉妸 `suspected_truncated_sentence` 绾冲叆 `quality_gate` 鐨?P0 闆嗗悎锛岀‘淇濊繖绫绘槑鏄惧崐鎴彞涓嶄細琚斁杩囥€?
 
-**后续注意事项**
+**鍚庣画娉ㄦ剰浜嬮」**
 
-1. 这套规则只负责“收尾”和“识别明显半截句”，不代替内容重写；如果正文逻辑本身不通顺，仍要走原有 rewrite / 质量门禁链路。
-2. 后续如果新增正文型字段，需要同步加入 `BODY_TEXT_PATHS`，否则不会自动补句号或识别半截尾巴。
+1. 杩欏瑙勫垯鍙礋璐ｂ€滄敹灏锯€濆拰鈥滆瘑鍒槑鏄惧崐鎴彞鈥濓紝涓嶄唬鏇垮唴瀹归噸鍐欙紱濡傛灉姝ｆ枃閫昏緫鏈韩涓嶉€氶『锛屼粛瑕佽蛋鍘熸湁 rewrite / 璐ㄩ噺闂ㄧ閾捐矾銆?
+2. 鍚庣画濡傛灉鏂板姝ｆ枃鍨嬪瓧娈碉紝闇€瑕佸悓姝ュ姞鍏?`BODY_TEXT_PATHS`锛屽惁鍒欎笉浼氳嚜鍔ㄨˉ鍙ュ彿鎴栬瘑鍒崐鎴熬宸淬€?
 
-### 2026-05-25｜新增基层身份越权作答风险质检
+### 2026-05-25锝滄柊澧炲熀灞傝韩浠借秺鏉冧綔绛旈闄╄川妫€
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-用户指出，今日一题如果题干身份是基层、街道、社区、市场监管所、城管、工作人员等，答案里却直接写“制定行业标准”“修改包装”“推行包装标识”甚至“无明确违法依据处罚普通高糖高油食品商户”，会形成明显越权甚至违法表述。这类问题不能只当普通表达瑕疵处理，需要单独拦截。
+鐢ㄦ埛鎸囧嚭锛屼粖鏃ヤ竴棰樺鏋滈骞茶韩浠芥槸鍩哄眰銆佽閬撱€佺ぞ鍖恒€佸競鍦虹洃绠℃墍銆佸煄绠°€佸伐浣滀汉鍛樼瓑锛岀瓟妗堥噷鍗寸洿鎺ュ啓鈥滃埗瀹氳涓氭爣鍑嗏€濃€滀慨鏀瑰寘瑁呪€濃€滄帹琛屽寘瑁呮爣璇嗏€濈敋鑷斥€滄棤鏄庣‘杩濇硶渚濇嵁澶勭綒鏅€氶珮绯栭珮娌归鍝佸晢鎴封€濓紝浼氬舰鎴愭槑鏄捐秺鏉冪敋鑷宠繚娉曡〃杩般€傝繖绫婚棶棰樹笉鑳藉彧褰撴櫘閫氳〃杈剧憰鐤靛鐞嗭紝闇€瑕佸崟鐙嫤鎴€?
 
-**已改文件**
+**宸叉敼鏂囦欢**
 
 - `question_quality.py`
 - `main.py`
 - `CHANGELOG_HARNESS.md`
 
-**最新版行为**
+**鏈€鏂扮増琛屼负**
 
-- `question_quality.py` 新增 `grassroots_authority_overreach` 检查：当题干命中基层身份语境时，会联动扫描 `answer_framework` 与 `candidate_answer`。
-- 对以下高风险表述直接按高风险拦截：
-  - `依法处理持续售卖普通高糖高油食品商户`
-  - `无明确违法依据处罚`
-  - `处罚普通高糖高油食品`
-  - `查处普通高糖高油食品`
-  - `取缔售卖普通高糖高油食品`
-- 对以下“把上级权限写成基层直接权限”的表述按中风险提示：
-  - `制定行业标准`
-  - `修改包装`
-  - `推行包装标识`
-  - `统一包装标识`
-  - `强制包装标识`
-  - `要求商户修改包装`
-- 如果这些表述前面明确写了“建议上级 / 报请上级 / 推动完善 / 上报”等限定语，规则会尽量识别为“建议上级做”，不误伤。
-- `main.py` 已把 `grassroots_authority_overreach` 纳入 `quality_gate` 的 P0 集合。对于基层身份题，这类越权答案不能直接放行。
+- `question_quality.py` 鏂板 `grassroots_authority_overreach` 妫€鏌ワ細褰撻骞插懡涓熀灞傝韩浠借澧冩椂锛屼細鑱斿姩鎵弿 `answer_framework` 涓?`candidate_answer`銆?
+- 瀵逛互涓嬮珮椋庨櫓琛ㄨ堪鐩存帴鎸夐珮椋庨櫓鎷︽埅锛?
+  - `渚濇硶澶勭悊鎸佺画鍞崠鏅€氶珮绯栭珮娌归鍝佸晢鎴穈
+  - `鏃犳槑纭繚娉曚緷鎹缃歚
+  - `澶勭綒鏅€氶珮绯栭珮娌归鍝乣
+  - `鏌ュ鏅€氶珮绯栭珮娌归鍝乣
+  - `鍙栫紨鍞崠鏅€氶珮绯栭珮娌归鍝乣
+- 瀵逛互涓嬧€滄妸涓婄骇鏉冮檺鍐欐垚鍩哄眰鐩存帴鏉冮檺鈥濈殑琛ㄨ堪鎸変腑椋庨櫓鎻愮ず锛?
+  - `鍒跺畾琛屼笟鏍囧噯`
+  - `淇敼鍖呰`
+  - `鎺ㄨ鍖呰鏍囪瘑`
+  - `缁熶竴鍖呰鏍囪瘑`
+  - `寮哄埗鍖呰鏍囪瘑`
+  - `瑕佹眰鍟嗘埛淇敼鍖呰`
+- 濡傛灉杩欎簺琛ㄨ堪鍓嶉潰鏄庣‘鍐欎簡鈥滃缓璁笂绾?/ 鎶ヨ涓婄骇 / 鎺ㄥ姩瀹屽杽 / 涓婃姤鈥濈瓑闄愬畾璇紝瑙勫垯浼氬敖閲忚瘑鍒负鈥滃缓璁笂绾у仛鈥濓紝涓嶈浼ゃ€?
+- `main.py` 宸叉妸 `grassroots_authority_overreach` 绾冲叆 `quality_gate` 鐨?P0 闆嗗悎銆傚浜庡熀灞傝韩浠介锛岃繖绫昏秺鏉冪瓟妗堜笉鑳界洿鎺ユ斁琛屻€?
 
-**后续注意事项**
+**鍚庣画娉ㄦ剰浜嬮」**
 
-1. 这条规则的核心不是“越保守越好”，而是明确区分三层权限：基层可直接做、建议上级做、只有明确违法时才依法查处。
-2. 如果后续扩展到教育、住建、市场监管等更多身份题型，应继续补充越权关键词和合法限定语，而不是只靠现有几个示例词。
+1. 杩欐潯瑙勫垯鐨勬牳蹇冧笉鏄€滆秺淇濆畧瓒婂ソ鈥濓紝鑰屾槸鏄庣‘鍖哄垎涓夊眰鏉冮檺锛氬熀灞傚彲鐩存帴鍋氥€佸缓璁笂绾у仛銆佸彧鏈夋槑纭繚娉曟椂鎵嶄緷娉曟煡澶勩€?
+2. 濡傛灉鍚庣画鎵╁睍鍒版暀鑲层€佷綇寤恒€佸競鍦虹洃绠＄瓑鏇村韬唤棰樺瀷锛屽簲缁х画琛ュ厖瓒婃潈鍏抽敭璇嶅拰鍚堟硶闄愬畾璇紝鑰屼笉鏄彧闈犵幇鏈夊嚑涓ず渚嬭瘝銆?
 
-### 2026-05-22｜周末候选件改为只生成周 PDF 汇编
+### 2026-05-22锝滃懆鏈€欓€変欢鏀逛负鍙敓鎴愬懆 PDF 姹囩紪
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-用户确认周六晚上只需要生成周 PDF 汇编候选件，周日早晨只发送 PDF 汇编，不应再写新的每日精读文章。同时，发送前清洁度守卫只需要在夜里写入候选件前运行一次，早晨发送时继续信任夜里保存的 `quality_gate`。
+鐢ㄦ埛纭鍛ㄥ叚鏅氫笂鍙渶瑕佺敓鎴愬懆 PDF 姹囩紪鍊欓€変欢锛屽懆鏃ユ棭鏅ㄥ彧鍙戦€?PDF 姹囩紪锛屼笉搴斿啀鍐欐柊鐨勬瘡鏃ョ簿璇绘枃绔犮€傚悓鏃讹紝鍙戦€佸墠娓呮磥搴﹀畧鍗彧闇€瑕佸湪澶滈噷鍐欏叆鍊欓€変欢鍓嶈繍琛屼竴娆★紝鏃╂櫒鍙戦€佹椂缁х画淇′换澶滈噷淇濆瓨鐨?`quality_gate`銆?
 
-**已改文件**
+**宸叉敼鏂囦欢**
 
 - `main.py`
 - `CHANGELOG_HARNESS.md`
 
-**最新版行为**
+**鏈€鏂扮増琛屼负**
 
-- `morning_send` 不再重新运行 `pre_send_cleanliness_guard`，只读取夜里候选件中已经保存的 `quality_gate`。
-- 新增 `weekly_pdf_candidate` / `weekly_candidate` / `nightly_weekly_pdf` 候选件模式：只读取每日归档生成周 PDF、保存 `candidate_type=weekly_pdf` 候选件，不进入每日文章抓取、选文和精读写稿流程。
-- 如果周六夜里仍触发普通 `nightly_candidate`，且 `ENABLE_WEEKLY_PDF=true`、候选件日期正好是 `WEEKLY_PDF_WEEKDAY`，程序会自动转为周 PDF 候选件生成，避免周日候选件误写成每日精读。
-- 周 PDF 候选件保存为第二天发送日期；周日 `morning_send` 读取后走已有 `send_weekly_pdf_candidate`，只发汇编 PDF，不写历史文章、不归档每日精读。
-- 周 PDF 候选件邮件正文改为“周日复盘说明邮件”：标题为“本周 PDF 资料包已附上”，正文说明今天不推送新精读/速读、给出复习顺序，并保留反馈问题区；PDF 汇编作为附件发送。
+- `morning_send` 涓嶅啀閲嶆柊杩愯 `pre_send_cleanliness_guard`锛屽彧璇诲彇澶滈噷鍊欓€変欢涓凡缁忎繚瀛樼殑 `quality_gate`銆?
+- 鏂板 `weekly_pdf_candidate` / `weekly_candidate` / `nightly_weekly_pdf` 鍊欓€変欢妯″紡锛氬彧璇诲彇姣忔棩褰掓。鐢熸垚鍛?PDF銆佷繚瀛?`candidate_type=weekly_pdf` 鍊欓€変欢锛屼笉杩涘叆姣忔棩鏂囩珷鎶撳彇銆侀€夋枃鍜岀簿璇诲啓绋挎祦绋嬨€?
+- 濡傛灉鍛ㄥ叚澶滈噷浠嶈Е鍙戞櫘閫?`nightly_candidate`锛屼笖 `ENABLE_WEEKLY_PDF=true`銆佸€欓€変欢鏃ユ湡姝ｅソ鏄?`WEEKLY_PDF_WEEKDAY`锛岀▼搴忎細鑷姩杞负鍛?PDF 鍊欓€変欢鐢熸垚锛岄伩鍏嶅懆鏃ュ€欓€変欢璇啓鎴愭瘡鏃ョ簿璇汇€?
+- 鍛?PDF 鍊欓€変欢淇濆瓨涓虹浜屽ぉ鍙戦€佹棩鏈燂紱鍛ㄦ棩 `morning_send` 璇诲彇鍚庤蛋宸叉湁 `send_weekly_pdf_candidate`锛屽彧鍙戞眹缂?PDF锛屼笉鍐欏巻鍙叉枃绔犮€佷笉褰掓。姣忔棩绮捐銆?
+- 鍛?PDF 鍊欓€変欢閭欢姝ｆ枃鏀逛负鈥滃懆鏃ュ鐩樿鏄庨偖浠垛€濓細鏍囬涓衡€滄湰鍛?PDF 璧勬枡鍖呭凡闄勪笂鈥濓紝姝ｆ枃璇存槑浠婂ぉ涓嶆帹閫佹柊绮捐/閫熻銆佺粰鍑哄涔犻『搴忥紝骞朵繚鐣欏弽棣堥棶棰樺尯锛汸DF 姹囩紪浣滀负闄勪欢鍙戦€併€?
 
-**后续注意事项**
+**鍚庣画娉ㄦ剰浜嬮」**
 
-1. 如需在周末强制生成普通每日精读候选件，可在事件里加 `force_daily=true` 或 `skip_weekly_pdf_candidate=true`。
-2. 周 PDF 依赖每日归档；如果归档天数不足，候选件生成会记录缺失日期并按已有周 PDF 汇编逻辑处理。
+1. 濡傞渶鍦ㄥ懆鏈己鍒剁敓鎴愭櫘閫氭瘡鏃ョ簿璇诲€欓€変欢锛屽彲鍦ㄤ簨浠堕噷鍔?`force_daily=true` 鎴?`skip_weekly_pdf_candidate=true`銆?
+2. 鍛?PDF 渚濊禆姣忔棩褰掓。锛涘鏋滃綊妗ｅぉ鏁颁笉瓒筹紝鍊欓€変欢鐢熸垚浼氳褰曠己澶辨棩鏈熷苟鎸夊凡鏈夊懆 PDF 姹囩紪閫昏緫澶勭悊銆?
 
-### 2026-05-22｜新增发送前清洁度守卫
+### 2026-05-22锝滄柊澧炲彂閫佸墠娓呮磥搴﹀畧鍗?
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-今晚邮件中“可用表达”模块出现了正文开头残留点号/冒号的问题，说明单靠渲染层去重还不够。为避免模板残留、标签泄漏、重复前缀、冒号残留和标题重复进入 `latest.json` 或正式发送正文，需要在发送前增加一层确定性的清洁度守卫。
+浠婃櫄閭欢涓€滃彲鐢ㄨ〃杈锯€濇ā鍧楀嚭鐜颁簡姝ｆ枃寮€澶存畫鐣欑偣鍙?鍐掑彿鐨勯棶棰橈紝璇存槑鍗曢潬娓叉煋灞傚幓閲嶈繕涓嶅銆備负閬垮厤妯℃澘娈嬬暀銆佹爣绛炬硠婕忋€侀噸澶嶅墠缂€銆佸啋鍙锋畫鐣欏拰鏍囬閲嶅杩涘叆 `latest.json` 鎴栨寮忓彂閫佹鏂囷紝闇€瑕佸湪鍙戦€佸墠澧炲姞涓€灞傜‘瀹氭€х殑娓呮磥搴﹀畧鍗€?
 
-**已改文件**
+**宸叉敼鏂囦欢**
 
 - `pre_send_cleanliness.py`
 - `main.py`
 - `CHANGELOG_HARNESS.md`
 
-**最新版行为**
+**鏈€鏂扮増琛屼负**
 
-- 新增 `pre_send_cleanliness_guard(data)`，内部按 `check_cleanliness -> auto_fix_cleanliness -> 同步渲染 plain_text/html_body -> recheck_cleanliness -> decide_gate_status` 执行。
-- 自动修复 `可用表达：可用表达：`、`作答主线：作答主线：`、`审题关键：审题关键：`、`如果点原文，重点看：如果点原文，重点看`、字段正文开头冒号/点号残留，以及重复的 `【公考晨读】` 标题前缀。
-- `featured_article.rewritable_expression` 字段会被清成纯表达，不再保留 `可用表达：` 前缀；`plain_text` 和 `html_body` 会随修复后的 brief 同步更新。
-- 金句高度相似、30 秒输出偏长、考生版答案段落偏长只记录为低风险 issue，不阻断发送。
-- 今日一题题干缺身份、场景、矛盾、任务要素时，清洁度守卫只记录高风险 issue，不硬改题目，并通过 `module_override=daily_question` 交给原有 daily_question 重写/质量门禁处理。
-- 清洁度结果写入 `quality.final.cleanliness` 和 `quality.cleanliness`；未修复的明显模板残留会进入原 `quality_gate`。该守卫只在夜里候选件生成/评估阶段运行，早晨 `morning_send` 继续信任夜里保存的 `quality_gate`。
+- 鏂板 `pre_send_cleanliness_guard(data)`锛屽唴閮ㄦ寜 `check_cleanliness -> auto_fix_cleanliness -> 鍚屾娓叉煋 plain_text/html_body -> recheck_cleanliness -> decide_gate_status` 鎵ц銆?
+- 鑷姩淇 `鍙敤琛ㄨ揪锛氬彲鐢ㄨ〃杈撅細`銆乣浣滅瓟涓荤嚎锛氫綔绛斾富绾匡細`銆乣瀹￠鍏抽敭锛氬棰樺叧閿細`銆乣濡傛灉鐐瑰師鏂囷紝閲嶇偣鐪嬶細濡傛灉鐐瑰師鏂囷紝閲嶇偣鐪媊銆佸瓧娈垫鏂囧紑澶村啋鍙?鐐瑰彿娈嬬暀锛屼互鍙婇噸澶嶇殑 `銆愬叕鑰冩櫒璇汇€慲 鏍囬鍓嶇紑銆?
+- `featured_article.rewritable_expression` 瀛楁浼氳娓呮垚绾〃杈撅紝涓嶅啀淇濈暀 `鍙敤琛ㄨ揪锛歚 鍓嶇紑锛沗plain_text` 鍜?`html_body` 浼氶殢淇鍚庣殑 brief 鍚屾鏇存柊銆?
+- 閲戝彞楂樺害鐩镐技銆?0 绉掕緭鍑哄亸闀裤€佽€冪敓鐗堢瓟妗堟钀藉亸闀垮彧璁板綍涓轰綆椋庨櫓 issue锛屼笉闃绘柇鍙戦€併€?
+- 浠婃棩涓€棰橀骞茬己韬唤銆佸満鏅€佺煕鐩俱€佷换鍔¤绱犳椂锛屾竻娲佸害瀹堝崼鍙褰曢珮椋庨櫓 issue锛屼笉纭敼棰樼洰锛屽苟閫氳繃 `module_override=daily_question` 浜ょ粰鍘熸湁 daily_question 閲嶅啓/璐ㄩ噺闂ㄧ澶勭悊銆?
+- 娓呮磥搴︾粨鏋滃啓鍏?`quality.final.cleanliness` 鍜?`quality.cleanliness`锛涙湭淇鐨勬槑鏄炬ā鏉挎畫鐣欎細杩涘叆鍘?`quality_gate`銆傝瀹堝崼鍙湪澶滈噷鍊欓€変欢鐢熸垚/璇勪及闃舵杩愯锛屾棭鏅?`morning_send` 缁х画淇′换澶滈噷淇濆瓨鐨?`quality_gate`銆?
 
-**后续注意事项**
+**鍚庣画娉ㄦ剰浜嬮」**
 
-1. 该守卫只做规则型清洁和门禁，不引入新 LLM，也不改变邮件结构。
-2. 后续如果新增模块标题，需要同步加入 `pre_send_cleanliness.py` 的 `DISPLAY_LABELS`。
+1. 璇ュ畧鍗彧鍋氳鍒欏瀷娓呮磥鍜岄棬绂侊紝涓嶅紩鍏ユ柊 LLM锛屼篃涓嶆敼鍙橀偖浠剁粨鏋勩€?
+2. 鍚庣画濡傛灉鏂板妯″潡鏍囬锛岄渶瑕佸悓姝ュ姞鍏?`pre_send_cleanliness.py` 鐨?`DISPLAY_LABELS`銆?
 
-### 2026-05-22｜周 PDF 全面切换打印友好浅色填充
+### 2026-05-22锝滃懆 PDF 鍏ㄩ潰鍒囨崲鎵撳嵃鍙嬪ソ娴呰壊濉厖
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-用户继续反馈，周 PDF 虽然已经把日标题区改浅，但首页封面、金句区编号块、框架图步骤编号等元素仍是大面积深色实心填充，打印后容易变成“黑乎乎一片”，影响可读性和复印体验。
+鐢ㄦ埛缁х画鍙嶉锛屽懆 PDF 铏界劧宸茬粡鎶婃棩鏍囬鍖烘敼娴咃紝浣嗛椤靛皝闈€侀噾鍙ュ尯缂栧彿鍧椼€佹鏋跺浘姝ラ缂栧彿绛夊厓绱犱粛鏄ぇ闈㈢Н娣辫壊瀹炲績濉厖锛屾墦鍗板悗瀹规槗鍙樻垚鈥滈粦涔庝箮涓€鐗団€濓紝褰卞搷鍙鎬у拰澶嶅嵃浣撻獙銆?
 
-**已改文件**
-
-- `weekly_typst_export.py`
-- `CHANGELOG_HARNESS.md`
-
-**最新版行为**
-
-- 周 PDF 首页封面由深蓝大底改为浅蓝灰底，主标题文字、数字统计卡片改为深色文字 + 浅色卡片，打印时不会出现大面积深色底。
-- 框架图内的步骤编号、金句库编号块、其他小编号标签，统一改为“浅色底 + 深色字，带边框”的打印友好样式。
-- 主题总览表格、精读原文索引、补充阅读列表的表头，由深色表头改为浅色表头，保留深色文字和结构层级。
-- 这次仍只调整周 PDF 模板配色，不改内容提取、模块顺序和文案内容。
-
-**后续注意事项**
-
-1. 如果后续还要继续压浅颜色，需要同步抽查屏幕阅读时的对比度，避免浅到标题层级不够清。
-2. 正式上线前建议再用一份完整七天样本复核版式，确认浅色表头和编号块在打印机上仍有足够辨识度。
-
-### 2026-05-22｜周 PDF 改为模块尽量整块分页、浅色日标题与金句大框
-
-**改动原因**
-
-用户反馈周 PDF 存在三个阅读问题：一是文章框架图等模块会在分页处被拆开；二是每日标题区深色底打印不友好；三是“可背金句”逐条分散，视觉上不够整合。
-
-**已改文件**
+**宸叉敼鏂囦欢**
 
 - `weekly_typst_export.py`
 - `CHANGELOG_HARNESS.md`
 
-**最新版行为**
+**鏈€鏂扮増琛屼负**
 
-- Typst 周 PDF 中的精读卡、文章框架图、今日可带走等较小模块改为尽量整块保留；如果当前页放不下，会优先整体移到下一页，减少框架图跨页。
-- 每日标题区由深色整块底改为浅蓝灰底 + 深色文字，更适合黑白或低彩打印，同时保留层次感。
-- “可背金句”区域改为一个统一大框，框内按编号分条展示，不再以分散小块呈现。
-- 这次仍只调整周 PDF 模板，不改每日邮件内容和模块提取逻辑。
+- 鍛?PDF 棣栭〉灏侀潰鐢辨繁钃濆ぇ搴曟敼涓烘祬钃濈伆搴曪紝涓绘爣棰樻枃瀛椼€佹暟瀛楃粺璁″崱鐗囨敼涓烘繁鑹叉枃瀛?+ 娴呰壊鍗＄墖锛屾墦鍗版椂涓嶄細鍑虹幇澶ч潰绉繁鑹插簳銆?
+- 妗嗘灦鍥惧唴鐨勬楠ょ紪鍙枫€侀噾鍙ュ簱缂栧彿鍧椼€佸叾浠栧皬缂栧彿鏍囩锛岀粺涓€鏀逛负鈥滄祬鑹插簳 + 娣辫壊瀛楋紝甯﹁竟妗嗏€濈殑鎵撳嵃鍙嬪ソ鏍峰紡銆?
+- 涓婚鎬昏琛ㄦ牸銆佺簿璇诲師鏂囩储寮曘€佽ˉ鍏呴槄璇诲垪琛ㄧ殑琛ㄥご锛岀敱娣辫壊琛ㄥご鏀逛负娴呰壊琛ㄥご锛屼繚鐣欐繁鑹叉枃瀛楀拰缁撴瀯灞傜骇銆?
+- 杩欐浠嶅彧璋冩暣鍛?PDF 妯℃澘閰嶈壊锛屼笉鏀瑰唴瀹规彁鍙栥€佹ā鍧楅『搴忓拰鏂囨鍐呭銆?
 
-**后续注意事项**
+**鍚庣画娉ㄦ剰浜嬮」**
 
-1. 对于高度明显超过一页的超长模块，Typst 仍可能被迫分页；当前优化主要解决框架图、提要卡这类中小模块被拆页的问题。
-2. 如果后续继续压浅配色，需要同时关注屏幕阅读对比度，避免浅到底色和正文层级不清。
+1. 濡傛灉鍚庣画杩樿缁х画鍘嬫祬棰滆壊锛岄渶瑕佸悓姝ユ娊鏌ュ睆骞曢槄璇绘椂鐨勫姣斿害锛岄伩鍏嶆祬鍒版爣棰樺眰绾т笉澶熸竻銆?
+2. 姝ｅ紡涓婄嚎鍓嶅缓璁啀鐢ㄤ竴浠藉畬鏁翠竷澶╂牱鏈鏍哥増寮忥紝纭娴呰壊琛ㄥご鍜岀紪鍙峰潡鍦ㄦ墦鍗版満涓婁粛鏈夎冻澶熻鲸璇嗗害銆?
 
-### 2026-05-22｜周 PDF Typst 模板放宽行距、段距与卡片留白
+### 2026-05-22锝滃懆 PDF 鏀逛负妯″潡灏介噺鏁村潡鍒嗛〉銆佹祬鑹叉棩鏍囬涓庨噾鍙ュぇ妗?
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-周 PDF 汇编当前版本在连续大段正文、卡片说明和框架步骤区域排版偏紧，阅读时容易显得“密密麻麻”。本次参考旧版周复盘 PDF 的版式密度，放宽正文行距、段距和卡片内边距，并将字号微调放大，但避免明显增页。
+鐢ㄦ埛鍙嶉鍛?PDF 瀛樺湪涓変釜闃呰闂锛氫竴鏄枃绔犳鏋跺浘绛夋ā鍧椾細鍦ㄥ垎椤靛琚媶寮€锛涗簩鏄瘡鏃ユ爣棰樺尯娣辫壊搴曟墦鍗颁笉鍙嬪ソ锛涗笁鏄€滃彲鑳岄噾鍙モ€濋€愭潯鍒嗘暎锛岃瑙変笂涓嶅鏁村悎銆?
 
-**已改文件**
+**宸叉敼鏂囦欢**
 
 - `weekly_typst_export.py`
 - `CHANGELOG_HARNESS.md`
 
-**最新版行为**
+**鏈€鏂扮増琛屼负**
 
-- Typst 周 PDF 正文字号从 `10pt` 微调到 `10.2pt`。
-- 全局段落行距、段间距、列表间距同步放宽，长段正文和题目答案区域更容易扫读。
-- 精读卡、文章框架图、今日一题、今日可带走、金句卡片等模块的内边距和标题留白同步增加，整体视觉更接近旧版周复盘 PDF 的呼吸感。
-- 这次只调版式密度，不改周 PDF 的内容结构、模块顺序和提取逻辑。
+- Typst 鍛?PDF 涓殑绮捐鍗°€佹枃绔犳鏋跺浘銆佷粖鏃ュ彲甯﹁蛋绛夎緝灏忔ā鍧楁敼涓哄敖閲忔暣鍧椾繚鐣欙紱濡傛灉褰撳墠椤垫斁涓嶄笅锛屼細浼樺厛鏁翠綋绉诲埌涓嬩竴椤碉紝鍑忓皯妗嗘灦鍥捐法椤点€?
+- 姣忔棩鏍囬鍖虹敱娣辫壊鏁村潡搴曟敼涓烘祬钃濈伆搴?+ 娣辫壊鏂囧瓧锛屾洿閫傚悎榛戠櫧鎴栦綆褰╂墦鍗帮紝鍚屾椂淇濈暀灞傛鎰熴€?
+- 鈥滃彲鑳岄噾鍙モ€濆尯鍩熸敼涓轰竴涓粺涓€澶ф锛屾鍐呮寜缂栧彿鍒嗘潯灞曠ず锛屼笉鍐嶄互鍒嗘暎灏忓潡鍛堢幇銆?
+- 杩欐浠嶅彧璋冩暣鍛?PDF 妯℃澘锛屼笉鏀规瘡鏃ラ偖浠跺唴瀹瑰拰妯″潡鎻愬彇閫昏緫銆?
 
-**后续注意事项**
+**鍚庣画娉ㄦ剰浜嬮」**
 
-1. 后续如果继续加大字号或留白，需同时关注周 PDF 页数增长，避免周末附件过长。
-2. 三天/四天预览与完整七天周报的分页效果不同；正式上线前仍建议用完整一周样本复核分页。
+1. 瀵逛簬楂樺害鏄庢樉瓒呰繃涓€椤电殑瓒呴暱妯″潡锛孴ypst 浠嶅彲鑳借杩垎椤碉紱褰撳墠浼樺寲涓昏瑙ｅ喅妗嗘灦鍥俱€佹彁瑕佸崱杩欑被涓皬妯″潡琚媶椤电殑闂銆?
+2. 濡傛灉鍚庣画缁х画鍘嬫祬閰嶈壊锛岄渶瑕佸悓鏃跺叧娉ㄥ睆骞曢槄璇诲姣斿害锛岄伩鍏嶆祬鍒板簳鑹插拰姝ｆ枃灞傜骇涓嶆竻銆?
 
-### 2026-05-22｜修复模块标题在正文中重复展示
+### 2026-05-22锝滃懆 PDF Typst 妯℃澘鏀惧琛岃窛銆佹璺濅笌鍗＄墖鐣欑櫧
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-部分邮件字段本身带有展示前缀，例如 `可用表达：`、`作答主线：`、`如果点原文，重点看：`。渲染层又额外输出了一次模块标题，导致用户看到“标题 + 正文里再重复一遍同名标题”的双标题展示。
+鍛?PDF 姹囩紪褰撳墠鐗堟湰鍦ㄨ繛缁ぇ娈垫鏂囥€佸崱鐗囪鏄庡拰妗嗘灦姝ラ鍖哄煙鎺掔増鍋忕揣锛岄槄璇绘椂瀹规槗鏄惧緱鈥滃瘑瀵嗛夯楹烩€濄€傛湰娆″弬鑰冩棫鐗堝懆澶嶇洏 PDF 鐨勭増寮忓瘑搴︼紝鏀惧姝ｆ枃琛岃窛銆佹璺濆拰鍗＄墖鍐呰竟璺濓紝骞跺皢瀛楀彿寰皟鏀惧ぇ锛屼絾閬垮厤鏄庢樉澧為〉銆?
 
-**已改文件**
+**宸叉敼鏂囦欢**
+
+- `weekly_typst_export.py`
+- `CHANGELOG_HARNESS.md`
+
+**鏈€鏂扮増琛屼负**
+
+- Typst 鍛?PDF 姝ｆ枃瀛楀彿浠?`10pt` 寰皟鍒?`10.2pt`銆?
+- 鍏ㄥ眬娈佃惤琛岃窛銆佹闂磋窛銆佸垪琛ㄩ棿璺濆悓姝ユ斁瀹斤紝闀挎姝ｆ枃鍜岄鐩瓟妗堝尯鍩熸洿瀹规槗鎵銆?
+- 绮捐鍗°€佹枃绔犳鏋跺浘銆佷粖鏃ヤ竴棰樸€佷粖鏃ュ彲甯﹁蛋銆侀噾鍙ュ崱鐗囩瓑妯″潡鐨勫唴杈硅窛鍜屾爣棰樼暀鐧藉悓姝ュ鍔狅紝鏁翠綋瑙嗚鏇存帴杩戞棫鐗堝懆澶嶇洏 PDF 鐨勫懠鍚告劅銆?
+- 杩欐鍙皟鐗堝紡瀵嗗害锛屼笉鏀瑰懆 PDF 鐨勫唴瀹圭粨鏋勩€佹ā鍧楅『搴忓拰鎻愬彇閫昏緫銆?
+
+**鍚庣画娉ㄦ剰浜嬮」**
+
+1. 鍚庣画濡傛灉缁х画鍔犲ぇ瀛楀彿鎴栫暀鐧斤紝闇€鍚屾椂鍏虫敞鍛?PDF 椤垫暟澧為暱锛岄伩鍏嶅懆鏈檮浠惰繃闀裤€?
+2. 涓夊ぉ/鍥涘ぉ棰勮涓庡畬鏁翠竷澶╁懆鎶ョ殑鍒嗛〉鏁堟灉涓嶅悓锛涙寮忎笂绾垮墠浠嶅缓璁敤瀹屾暣涓€鍛ㄦ牱鏈鏍稿垎椤点€?
+
+### 2026-05-22锝滀慨澶嶆ā鍧楁爣棰樺湪姝ｆ枃涓噸澶嶅睍绀?
+
+**鏀瑰姩鍘熷洜**
+
+閮ㄥ垎閭欢瀛楁鏈韩甯︽湁灞曠ず鍓嶇紑锛屼緥濡?`鍙敤琛ㄨ揪锛歚銆乣浣滅瓟涓荤嚎锛歚銆乣濡傛灉鐐瑰師鏂囷紝閲嶇偣鐪嬶細`銆傛覆鏌撳眰鍙堥澶栬緭鍑轰簡涓€娆℃ā鍧楁爣棰橈紝瀵艰嚧鐢ㄦ埛鐪嬪埌鈥滄爣棰?+ 姝ｆ枃閲屽啀閲嶅涓€閬嶅悓鍚嶆爣棰樷€濈殑鍙屾爣棰樺睍绀恒€?
+
+**宸叉敼鏂囦欢**
 
 - `email_renderer.py`
 - `CHANGELOG_HARNESS.md`
 
-**最新版行为**
+**鏈€鏂扮増琛屼负**
 
-- HTML 渲染层会在展示 `original_reading_focus`、`breaking_hint`、`rewritable_expression` 时，自动剥离与模块标题完全重复的开头前缀。
-- 这次只处理显示重复，不改字段原始内容、不改模块顺序、不改其它正文文案。
-- 如果正文不是以这些模块标题开头，渲染层不会额外改写内容。
+- HTML 娓叉煋灞備細鍦ㄥ睍绀?`original_reading_focus`銆乣breaking_hint`銆乣rewritable_expression` 鏃讹紝鑷姩鍓ョ涓庢ā鍧楁爣棰樺畬鍏ㄩ噸澶嶇殑寮€澶村墠缂€銆?
+- 杩欐鍙鐞嗘樉绀洪噸澶嶏紝涓嶆敼瀛楁鍘熷鍐呭銆佷笉鏀规ā鍧楅『搴忋€佷笉鏀瑰叾瀹冩鏂囨枃妗堛€?
+- 濡傛灉姝ｆ枃涓嶆槸浠ヨ繖浜涙ā鍧楁爣棰樺紑澶达紝娓叉煋灞備笉浼氶澶栨敼鍐欏唴瀹广€?
 
-**后续注意事项**
+**鍚庣画娉ㄦ剰浜嬮」**
 
-1. 生成侧仍应尽量避免在这些字段里重复写展示标题，但即使模型偶尔带出前缀，渲染层也会兜底去重。
-2. 后续如新增类似“标题 + 正文”模块，若正文字段也可能自带同名前缀，应同步接入同类渲染去重逻辑。
+1. 鐢熸垚渚т粛搴斿敖閲忛伩鍏嶅湪杩欎簺瀛楁閲岄噸澶嶅啓灞曠ず鏍囬锛屼絾鍗充娇妯″瀷鍋跺皵甯﹀嚭鍓嶇紑锛屾覆鏌撳眰涔熶細鍏滃簳鍘婚噸銆?
+2. 鍚庣画濡傛柊澧炵被浼尖€滄爣棰?+ 姝ｆ枃鈥濇ā鍧楋紝鑻ユ鏂囧瓧娈典篃鍙兘鑷甫鍚屽悕鍓嶇紑锛屽簲鍚屾鎺ュ叆鍚岀被娓叉煋鍘婚噸閫昏緫銆?
 
-### 2026-05-22｜早晨发送改为信任夜间候选件 quality_gate
+### 2026-05-22锝滄棭鏅ㄥ彂閫佹敼涓轰俊浠诲闂村€欓€変欢 quality_gate
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-夜间候选件已经完成正式质检并写入 `quality_gate`，但早晨 `morning_send` 之前仍会对同一份候选件再次执行全文质检。这样会出现“夜里候选件已是 ok，早晨却因新规则或重检结果被拦截”的漂移，导致正式发送依赖两次不同时间点的内容判定。
+澶滈棿鍊欓€変欢宸茬粡瀹屾垚姝ｅ紡璐ㄦ骞跺啓鍏?`quality_gate`锛屼絾鏃╂櫒 `morning_send` 涔嬪墠浠嶄細瀵瑰悓涓€浠藉€欓€変欢鍐嶆鎵ц鍏ㄦ枃璐ㄦ銆傝繖鏍蜂細鍑虹幇鈥滃閲屽€欓€変欢宸叉槸 ok锛屾棭鏅ㄥ嵈鍥犳柊瑙勫垯鎴栭噸妫€缁撴灉琚嫤鎴€濈殑婕傜Щ锛屽鑷存寮忓彂閫佷緷璧栦袱娆′笉鍚屾椂闂寸偣鐨勫唴瀹瑰垽瀹氥€?
 
-**已改文件**
+**宸叉敼鏂囦欢**
 
 - `main.py`
 - `CHANGELOG_HARNESS.md`
 
-**最新版行为**
+**鏈€鏂扮増琛屼负**
 
-- 早晨发送读取 OSS / 本地保存的候选件后，直接信任候选件内已保存的 `quality_gate`，不再对非周报候选件重跑全文内容质检。
-- 早晨发送仍然保留候选件存在性、`delivery_date` 匹配、已保存 `quality_gate.overall` 是否为 `ok`、收件人与发送链路等基础校验。
-- 如果夜间保存下来的 `quality_gate.overall != ok`，早晨仍然会阻断发送；只是不会再因为早晨重新跑内容质检而把夜间已通过的候选件重新打回。
-- 周报 PDF 候选件链路不受这次改动影响。
+- 鏃╂櫒鍙戦€佽鍙?OSS / 鏈湴淇濆瓨鐨勫€欓€変欢鍚庯紝鐩存帴淇′换鍊欓€変欢鍐呭凡淇濆瓨鐨?`quality_gate`锛屼笉鍐嶅闈炲懆鎶ュ€欓€変欢閲嶈窇鍏ㄦ枃鍐呭璐ㄦ銆?
+- 鏃╂櫒鍙戦€佷粛鐒朵繚鐣欏€欓€変欢瀛樺湪鎬с€乣delivery_date` 鍖归厤銆佸凡淇濆瓨 `quality_gate.overall` 鏄惁涓?`ok`銆佹敹浠朵汉涓庡彂閫侀摼璺瓑鍩虹鏍￠獙銆?
+- 濡傛灉澶滈棿淇濆瓨涓嬫潵鐨?`quality_gate.overall != ok`锛屾棭鏅ㄤ粛鐒朵細闃绘柇鍙戦€侊紱鍙槸涓嶄細鍐嶅洜涓烘棭鏅ㄩ噸鏂拌窇鍐呭璐ㄦ鑰屾妸澶滈棿宸查€氳繃鐨勫€欓€変欢閲嶆柊鎵撳洖銆?
+- 鍛ㄦ姤 PDF 鍊欓€変欢閾捐矾涓嶅彈杩欐鏀瑰姩褰卞搷銆?
 
-**后续注意事项**
+**鍚庣画娉ㄦ剰浜嬮」**
 
-1. 后续如果新增或收紧内容质检规则，夜间候选件生成链路才是唯一的正式内容门禁来源，早晨发送链路不再承担“重新判内容是否合格”的职责。
-2. 如果需要验证正式发送行为，应优先用“夜间先生成候选件，早晨再读取候选件发送”的完整链路测试，而不是假设早晨发送会再做一次内容重检或自动修正文案。
+1. 鍚庣画濡傛灉鏂板鎴栨敹绱у唴瀹硅川妫€瑙勫垯锛屽闂村€欓€変欢鐢熸垚閾捐矾鎵嶆槸鍞竴鐨勬寮忓唴瀹归棬绂佹潵婧愶紝鏃╂櫒鍙戦€侀摼璺笉鍐嶆壙鎷呪€滈噸鏂板垽鍐呭鏄惁鍚堟牸鈥濈殑鑱岃矗銆?
+2. 濡傛灉闇€瑕侀獙璇佹寮忓彂閫佽涓猴紝搴斾紭鍏堢敤鈥滃闂村厛鐢熸垚鍊欓€変欢锛屾棭鏅ㄥ啀璇诲彇鍊欓€変欢鍙戦€佲€濈殑瀹屾暣閾捐矾娴嬭瘯锛岃€屼笉鏄亣璁炬棭鏅ㄥ彂閫佷細鍐嶅仛涓€娆″唴瀹归噸妫€鎴栬嚜鍔ㄤ慨姝ｆ枃妗堛€?
 
-### 2026-05-21｜统一今日一题作答框架上限为45字
+### 2026-05-21锝滅粺涓€浠婃棩涓€棰樹綔绛旀鏋朵笂闄愪负45瀛?
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-35字过紧时容易诱发半截句，45字作为安全上限，但仍要求短、准、完整。
+35瀛楄繃绱ф椂瀹规槗璇卞彂鍗婃埅鍙ワ紝45瀛椾綔涓哄畨鍏ㄤ笂闄愶紝浣嗕粛瑕佹眰鐭€佸噯銆佸畬鏁淬€?
 
-**涉及文件**
+**娑夊強鏂囦欢**
 
 - `question_quality.py`
 - `content_harness/daily_question_skill.md`
@@ -1018,179 +1060,179 @@ Follow-up:
 - `content_harness/daily_question_boundary_rules.md`
 - `content_harness/runtime_prompt_rules.md`
 
-**最新版行为**
+**鏈€鏂扮増琛屼负**
 
-- `answer_framework` / `answer_frame` 每点上限统一为 45 字。
-- 45字不是写满要求；优先短、准、完整，不得为了压缩而出现半截句。
+- `answer_framework` / `answer_frame` 姣忕偣涓婇檺缁熶竴涓?45 瀛椼€?
+- 45瀛椾笉鏄啓婊¤姹傦紱浼樺厛鐭€佸噯銆佸畬鏁达紝涓嶅緱涓轰簡鍘嬬缉鑰屽嚭鐜板崐鎴彞銆?
 
-### 2026-05-21｜检查今日一题代码层边界改动
+### 2026-05-21锝滄鏌ヤ粖鏃ヤ竴棰樹唬鐮佸眰杈圭晫鏀瑰姩
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-Codex 已完成今日一题三层边界相关代码修改，需要将代码层检查结果同步到变更记录，方便后续接手时区分“已完成”和“待小修”的内容。
+Codex 宸插畬鎴愪粖鏃ヤ竴棰樹笁灞傝竟鐣岀浉鍏充唬鐮佷慨鏀癸紝闇€瑕佸皢浠ｇ爜灞傛鏌ョ粨鏋滃悓姝ュ埌鍙樻洿璁板綍锛屾柟渚垮悗缁帴鎵嬫椂鍖哄垎鈥滃凡瀹屾垚鈥濆拰鈥滃緟灏忎慨鈥濈殑鍐呭銆?
 
-**已检查文件**
+**宸叉鏌ユ枃浠?*
 
 - `prompt_templates.py`
 - `email_renderer.py`
 - `question_quality.py`
 - `CHANGELOG_HARNESS.md`
 
-**检查结果**
+**妫€鏌ョ粨鏋?*
 
-- `prompt_templates.py` 已将 `exam_focus` 改为“只拆题，不写作答路线或具体对策”。
-- `prompt_templates.py` 已将 `breaking_hint` 改为“1句话作答主线”，并要求不得列完整分点、不得和作答框架重复。
-- `email_renderer.py` 已将 HTML 展示标题从“破题提示”改为“作答主线”，底层字段仍读取 `breaking_hint` / `breaking_direction` / `review_key`。
-- `question_quality.py` 已新增 `ANSWER_ROUTE_TERMS`，并加入以下边界质检：
+- `prompt_templates.py` 宸插皢 `exam_focus` 鏀逛负鈥滃彧鎷嗛锛屼笉鍐欎綔绛旇矾绾挎垨鍏蜂綋瀵圭瓥鈥濄€?
+- `prompt_templates.py` 宸插皢 `breaking_hint` 鏀逛负鈥?鍙ヨ瘽浣滅瓟涓荤嚎鈥濓紝骞惰姹備笉寰楀垪瀹屾暣鍒嗙偣銆佷笉寰楀拰浣滅瓟妗嗘灦閲嶅銆?
+- `email_renderer.py` 宸插皢 HTML 灞曠ず鏍囬浠庘€滅牬棰樻彁绀衡€濇敼涓衡€滀綔绛斾富绾库€濓紝搴曞眰瀛楁浠嶈鍙?`breaking_hint` / `breaking_direction` / `review_key`銆?
+- `question_quality.py` 宸叉柊澧?`ANSWER_ROUTE_TERMS`锛屽苟鍔犲叆浠ヤ笅杈圭晫璐ㄦ锛?
   - `exam_focus_too_answer_like`
   - `breaking_hint_duplicates_framework`
   - `breaking_hint_too_framework_like`
 
-**发现的待小修问题**
+**鍙戠幇鐨勫緟灏忎慨闂**
 
-- `prompt_templates.py` 中 `answer_framework` 字段说明写成“每条不超过45字”，当前规则、Skill、质检已在后续变更中统一为 45 字，保持生成侧与质检侧一致。
-- `question_quality.py` 中缺少作答主线时的提示语仍写“缺少破题提示”，后续建议改成“缺少作答主线”。该问题不影响功能，但会影响管理员报告口径一致性。
+- `prompt_templates.py` 涓?`answer_framework` 瀛楁璇存槑鍐欐垚鈥滄瘡鏉′笉瓒呰繃45瀛椻€濓紝褰撳墠瑙勫垯銆丼kill銆佽川妫€宸插湪鍚庣画鍙樻洿涓粺涓€涓?45 瀛楋紝淇濇寔鐢熸垚渚т笌璐ㄦ渚т竴鑷淬€?
+- `question_quality.py` 涓己灏戜綔绛斾富绾挎椂鐨勬彁绀鸿浠嶅啓鈥滅己灏戠牬棰樻彁绀衡€濓紝鍚庣画寤鸿鏀规垚鈥滅己灏戜綔绛斾富绾库€濄€傝闂涓嶅奖鍝嶅姛鑳斤紝浣嗕細褰卞搷绠＄悊鍛樻姤鍛婂彛寰勪竴鑷存€с€?
 
-**最新版行为**
+**鏈€鏂扮増琛屼负**
 
-代码层已经基本完成“审题关键 / 作答主线 / 作答框架”边界改造；但在正式视为闭环前，建议完成上述两个小修，并重新运行：
+浠ｇ爜灞傚凡缁忓熀鏈畬鎴愨€滃棰樺叧閿?/ 浣滅瓟涓荤嚎 / 浣滅瓟妗嗘灦鈥濊竟鐣屾敼閫狅紱浣嗗湪姝ｅ紡瑙嗕负闂幆鍓嶏紝寤鸿瀹屾垚涓婅堪涓や釜灏忎慨锛屽苟閲嶆柊杩愯锛?
 
 ```powershell
 python -m py_compile prompt_templates.py question_quality.py email_renderer.py
 ```
 
-### 2026-05-21｜沉淀今日一题三层边界到长文档
+### 2026-05-21锝滄矇娣€浠婃棩涓€棰樹笁灞傝竟鐣屽埌闀挎枃妗?
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-专项规则文件已经建立，但长期维护还需要同步进入模块 Skill 和质量检查清单。否则后续只阅读 `daily_question_skill.md` 或 `quality_checks.md` 时，仍可能遗漏“审题关键 / 作答主线 / 作答框架”的边界要求。
+涓撻」瑙勫垯鏂囦欢宸茬粡寤虹珛锛屼絾闀挎湡缁存姢杩橀渶瑕佸悓姝ヨ繘鍏ユā鍧?Skill 鍜岃川閲忔鏌ユ竻鍗曘€傚惁鍒欏悗缁彧闃呰 `daily_question_skill.md` 鎴?`quality_checks.md` 鏃讹紝浠嶅彲鑳介仐婕忊€滃棰樺叧閿?/ 浣滅瓟涓荤嚎 / 浣滅瓟妗嗘灦鈥濈殑杈圭晫瑕佹眰銆?
 
-**已改文件**
+**宸叉敼鏂囦欢**
 
 - `content_harness/daily_question_skill.md`
 - `content_harness/quality_checks.md`
 - `CHANGELOG_HARNESS.md`
 
-**最新版行为**
+**鏈€鏂扮増琛屼负**
 
-- `daily_question_skill.md` 已把输出链路改为“题目场景 → 审题关键 → 作答主线 → 作答框架 → 考生表达”。
-- `daily_question_skill.md` 已明确 `exam_focus` / `review_key`、`breaking_hint`、`answer_framework` / `answer_frame` 的字段含义和展示关系。
-- `daily_question_skill.md` 已新增“三层边界”章节、合格/不合格示例和自检项。
-- `quality_checks.md` 已新增 `Check 7.7：审题关键、作答主线、作答框架是否边界清楚`。
-- `quality_checks.md` 已把今日一题完整结构从“审题关键 + 作答框架”升级为“审题关键 + 作答主线 + 作答框架”。
-- `quality_checks.md` 已列出建议质检 code：`exam_focus_too_answer_like`、`breaking_hint_too_framework_like`、`breaking_hint_duplicates_framework`。
+- `daily_question_skill.md` 宸叉妸杈撳嚭閾捐矾鏀逛负鈥滈鐩満鏅?鈫?瀹￠鍏抽敭 鈫?浣滅瓟涓荤嚎 鈫?浣滅瓟妗嗘灦 鈫?鑰冪敓琛ㄨ揪鈥濄€?
+- `daily_question_skill.md` 宸叉槑纭?`exam_focus` / `review_key`銆乣breaking_hint`銆乣answer_framework` / `answer_frame` 鐨勫瓧娈靛惈涔夊拰灞曠ず鍏崇郴銆?
+- `daily_question_skill.md` 宸叉柊澧炩€滀笁灞傝竟鐣屸€濈珷鑺傘€佸悎鏍?涓嶅悎鏍肩ず渚嬪拰鑷椤广€?
+- `quality_checks.md` 宸叉柊澧?`Check 7.7锛氬棰樺叧閿€佷綔绛斾富绾裤€佷綔绛旀鏋舵槸鍚﹁竟鐣屾竻妤歚銆?
+- `quality_checks.md` 宸叉妸浠婃棩涓€棰樺畬鏁寸粨鏋勪粠鈥滃棰樺叧閿?+ 浣滅瓟妗嗘灦鈥濆崌绾т负鈥滃棰樺叧閿?+ 浣滅瓟涓荤嚎 + 浣滅瓟妗嗘灦鈥濄€?
+- `quality_checks.md` 宸插垪鍑哄缓璁川妫€ code锛歚exam_focus_too_answer_like`銆乣breaking_hint_too_framework_like`銆乣breaking_hint_duplicates_framework`銆?
 
-**后续建议补齐**
+**鍚庣画寤鸿琛ラ綈**
 
-1. Codex 完成 `prompt_templates.py`、`email_renderer.py`、`question_quality.py` 后，在本文件追加代码层改动记录。
-2. 后续如新增今日一题好/坏样例，应优先覆盖“三层边界重复”的回归样例。
+1. Codex 瀹屾垚 `prompt_templates.py`銆乣email_renderer.py`銆乣question_quality.py` 鍚庯紝鍦ㄦ湰鏂囦欢杩藉姞浠ｇ爜灞傛敼鍔ㄨ褰曘€?
+2. 鍚庣画濡傛柊澧炰粖鏃ヤ竴棰樺ソ/鍧忔牱渚嬶紝搴斾紭鍏堣鐩栤€滀笁灞傝竟鐣岄噸澶嶁€濈殑鍥炲綊鏍蜂緥銆?
 
-### 2026-05-21｜同步 Harness 索引中的阅读顺序和今日一题边界规则
+### 2026-05-21锝滃悓姝?Harness 绱㈠紩涓殑闃呰椤哄簭鍜屼粖鏃ヤ竴棰樿竟鐣岃鍒?
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-`CHANGELOG_HARNESS.md` 和 `daily_question_boundary_rules.md` 已经建立，但 `content_harness/00_index.md` 仍未把它们纳入总览顺序和今日一题必读清单。后续 Codex / Cursor 可能只按索引读文件，从而遗漏最新边界规则。
+`CHANGELOG_HARNESS.md` 鍜?`daily_question_boundary_rules.md` 宸茬粡寤虹珛锛屼絾 `content_harness/00_index.md` 浠嶆湭鎶婂畠浠撼鍏ユ€昏椤哄簭鍜屼粖鏃ヤ竴棰樺繀璇绘竻鍗曘€傚悗缁?Codex / Cursor 鍙兘鍙寜绱㈠紩璇绘枃浠讹紝浠庤€岄仐婕忔渶鏂拌竟鐣岃鍒欍€?
 
-**已改文件**
+**宸叉敼鏂囦欢**
 
 - `content_harness/00_index.md`
 - `CHANGELOG_HARNESS.md`
 
-**最新版行为**
+**鏈€鏂扮増琛屼负**
 
-- `content_harness/00_index.md` 的总览顺序已前置 `../CHANGELOG_HARNESS.md` 和 `../AGENTS.md`。
-- 今日一题修改类型的必读文件已加入 `daily_question_boundary_rules.md`。
-- 今日一题、考生表达质感、质检门禁等相关修改类型均提示先读 `CHANGELOG_HARNESS.md`。
-- 今日一题章节新增确认点：审题关键只拆题，`breaking_hint` 底层字段不改但展示语义为作答主线，作答主线不写成第二套框架，作答框架才正式分点。
+- `content_harness/00_index.md` 鐨勬€昏椤哄簭宸插墠缃?`../CHANGELOG_HARNESS.md` 鍜?`../AGENTS.md`銆?
+- 浠婃棩涓€棰樹慨鏀圭被鍨嬬殑蹇呰鏂囦欢宸插姞鍏?`daily_question_boundary_rules.md`銆?
+- 浠婃棩涓€棰樸€佽€冪敓琛ㄨ揪璐ㄦ劅銆佽川妫€闂ㄧ绛夌浉鍏充慨鏀圭被鍨嬪潎鎻愮ず鍏堣 `CHANGELOG_HARNESS.md`銆?
+- 浠婃棩涓€棰樼珷鑺傛柊澧炵‘璁ょ偣锛氬棰樺叧閿彧鎷嗛锛宍breaking_hint` 搴曞眰瀛楁涓嶆敼浣嗗睍绀鸿涔変负浣滅瓟涓荤嚎锛屼綔绛斾富绾夸笉鍐欐垚绗簩濂楁鏋讹紝浣滅瓟妗嗘灦鎵嶆寮忓垎鐐广€?
 
-**后续建议补齐**
+**鍚庣画寤鸿琛ラ綈**
 
-1. Codex 完成 `prompt_templates.py`、`email_renderer.py`、`question_quality.py` 后，在本文件追加代码层改动记录。
-2. 继续把三层边界规则同步进 `daily_question_skill.md` 和 `quality_checks.md`。
+1. Codex 瀹屾垚 `prompt_templates.py`銆乣email_renderer.py`銆乣question_quality.py` 鍚庯紝鍦ㄦ湰鏂囦欢杩藉姞浠ｇ爜灞傛敼鍔ㄨ褰曘€?
+2. 缁х画鎶婁笁灞傝竟鐣岃鍒欏悓姝ヨ繘 `daily_question_skill.md` 鍜?`quality_checks.md`銆?
 
-### 2026-05-21｜强制接手前先读变更记录
+### 2026-05-21锝滃己鍒舵帴鎵嬪墠鍏堣鍙樻洿璁板綍
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-用户希望创建一个文件，把每次改动、当前最新版行为和后续注意事项记录下来，并要求以后每次修改前先读这个文件。
+鐢ㄦ埛甯屾湜鍒涘缓涓€涓枃浠讹紝鎶婃瘡娆℃敼鍔ㄣ€佸綋鍓嶆渶鏂扮増琛屼负鍜屽悗缁敞鎰忎簨椤硅褰曚笅鏉ワ紝骞惰姹備互鍚庢瘡娆′慨鏀瑰墠鍏堣杩欎釜鏂囦欢銆?
 
-**已改文件**
+**宸叉敼鏂囦欢**
 
 - `AGENTS.md`
 - `CHANGELOG_HARNESS.md`
 
-**最新版行为**
+**鏈€鏂扮増琛屼负**
 
-- `AGENTS.md` 已把 `CHANGELOG_HARNESS.md` 设为接手项目的第一阅读入口。
-- 所有修改类型的必读文件中都加入 `CHANGELOG_HARNESS.md`。
-- 后续任何规则、Prompt、质检、渲染、发送链路、归档链路或部署配置的行为变化，都必须同步追加到 `CHANGELOG_HARNESS.md`。
+- `AGENTS.md` 宸叉妸 `CHANGELOG_HARNESS.md` 璁句负鎺ユ墜椤圭洰鐨勭涓€闃呰鍏ュ彛銆?
+- 鎵€鏈変慨鏀圭被鍨嬬殑蹇呰鏂囦欢涓兘鍔犲叆 `CHANGELOG_HARNESS.md`銆?
+- 鍚庣画浠讳綍瑙勫垯銆丳rompt銆佽川妫€銆佹覆鏌撱€佸彂閫侀摼璺€佸綊妗ｉ摼璺垨閮ㄧ讲閰嶇疆鐨勮涓哄彉鍖栵紝閮藉繀椤诲悓姝ヨ拷鍔犲埌 `CHANGELOG_HARNESS.md`銆?
 
-**后续建议补齐**
+**鍚庣画寤鸿琛ラ綈**
 
-1. 将 `CHANGELOG_HARNESS.md` 也加入 `content_harness/00_index.md` 的总览顺序。
-2. 后续每次提交前检查本文件是否同步更新。
+1. 灏?`CHANGELOG_HARNESS.md` 涔熷姞鍏?`content_harness/00_index.md` 鐨勬€昏椤哄簭銆?
+2. 鍚庣画姣忔鎻愪氦鍓嶆鏌ユ湰鏂囦欢鏄惁鍚屾鏇存柊銆?
 
-### 2026-05-21｜新增今日一题三层边界专项规则文件
+### 2026-05-21锝滄柊澧炰粖鏃ヤ竴棰樹笁灞傝竟鐣屼笓椤硅鍒欐枃浠?
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-仅在运行时 Prompt 中写规则还不够，后续改 Prompt、质检、渲染或样例时，需要一个更稳定的专项规则文件，避免“审题关键 / 作答主线 / 作答框架”边界再次模糊。
+浠呭湪杩愯鏃?Prompt 涓啓瑙勫垯杩樹笉澶燂紝鍚庣画鏀?Prompt銆佽川妫€銆佹覆鏌撴垨鏍蜂緥鏃讹紝闇€瑕佷竴涓洿绋冲畾鐨勪笓椤硅鍒欐枃浠讹紝閬垮厤鈥滃棰樺叧閿?/ 浣滅瓟涓荤嚎 / 浣滅瓟妗嗘灦鈥濊竟鐣屽啀娆℃ā绯娿€?
 
-**已改文件**
+**宸叉敼鏂囦欢**
 
 - `content_harness/daily_question_boundary_rules.md`
 - `CHANGELOG_HARNESS.md`
 
-**最新版行为**
+**鏈€鏂扮増琛屼负**
 
-新增专项规则文件，固定以下约定：
+鏂板涓撻」瑙勫垯鏂囦欢锛屽浐瀹氫互涓嬬害瀹氾細
 
-- `exam_focus` / `review_key` = 审题关键，只拆题，不展开对策。
-- `breaking_hint` = 作答主线，底层字段不改，展示语义改为“作答主线”。
-- `answer_framework` / `answer_frame` = 作答框架，负责正式分点。
+- `exam_focus` / `review_key` = 瀹￠鍏抽敭锛屽彧鎷嗛锛屼笉灞曞紑瀵圭瓥銆?
+- `breaking_hint` = 浣滅瓟涓荤嚎锛屽簳灞傚瓧娈典笉鏀癸紝灞曠ず璇箟鏀逛负鈥滀綔绛斾富绾库€濄€?
+- `answer_framework` / `answer_frame` = 浣滅瓟妗嗘灦锛岃礋璐ｆ寮忓垎鐐广€?
 
-**后续建议补齐**
+**鍚庣画寤鸿琛ラ綈**
 
-1. 将 `content_harness/daily_question_boundary_rules.md` 加入 `AGENTS.md` 和 `content_harness/00_index.md` 的必读清单。
-2. 同步修改 `prompt_templates.py`、`question_quality.py`、`email_renderer.py`。
+1. 灏?`content_harness/daily_question_boundary_rules.md` 鍔犲叆 `AGENTS.md` 鍜?`content_harness/00_index.md` 鐨勫繀璇绘竻鍗曘€?
+2. 鍚屾淇敼 `prompt_templates.py`銆乣question_quality.py`銆乣email_renderer.py`銆?
 
-### 2026-05-21｜明确今日一题三层边界
+### 2026-05-21锝滄槑纭粖鏃ヤ竴棰樹笁灞傝竟鐣?
 
-**改动原因**
+**鏀瑰姩鍘熷洜**
 
-用户反馈“审题关键”和“破题提示”含义相近；进一步讨论后发现，如果“破题提示”等于答题路线，又可能和“作答框架”重复。需要把三者边界固化到规则和运行 Prompt 中。
+鐢ㄦ埛鍙嶉鈥滃棰樺叧閿€濆拰鈥滅牬棰樻彁绀衡€濆惈涔夌浉杩戯紱杩涗竴姝ヨ璁哄悗鍙戠幇锛屽鏋溾€滅牬棰樻彁绀衡€濈瓑浜庣瓟棰樿矾绾匡紝鍙堝彲鑳藉拰鈥滀綔绛旀鏋垛€濋噸澶嶃€傞渶瑕佹妸涓夎€呰竟鐣屽浐鍖栧埌瑙勫垯鍜岃繍琛?Prompt 涓€?
 
-**已改文件**
+**宸叉敼鏂囦欢**
 
 - `content_harness/runtime_prompt_rules.md`
 - `CHANGELOG_HARNESS.md`
 
-**最新版行为**
+**鏈€鏂扮増琛屼负**
 
-- `breaking_hint` 底层字段保留，避免破坏 JSON schema 和旧代码兼容。
-- 运行时语义改为“作答主线”。
-- 审题关键不得写成作答路线。
-- 作答主线不得写成第二套答题框架。
-- 作答框架负责正式分点，并与考生版参考答案分工。
+- `breaking_hint` 搴曞眰瀛楁淇濈暀锛岄伩鍏嶇牬鍧?JSON schema 鍜屾棫浠ｇ爜鍏煎銆?
+- 杩愯鏃惰涔夋敼涓衡€滀綔绛斾富绾库€濄€?
+- 瀹￠鍏抽敭涓嶅緱鍐欐垚浣滅瓟璺嚎銆?
+- 浣滅瓟涓荤嚎涓嶅緱鍐欐垚绗簩濂楃瓟棰樻鏋躲€?
+- 浣滅瓟妗嗘灦璐熻矗姝ｅ紡鍒嗙偣锛屽苟涓庤€冪敓鐗堝弬鑰冪瓟妗堝垎宸ャ€?
 
-**后续建议补齐**
+**鍚庣画寤鸿琛ラ綈**
 
-1. 在 `prompt_templates.py` 的 `JSON_SCHEMA_HINT` 中同步修改 `exam_focus`、`breaking_hint`、`answer_framework` 字段说明。
-2. 在 `question_quality.py` 中新增以下质检：
+1. 鍦?`prompt_templates.py` 鐨?`JSON_SCHEMA_HINT` 涓悓姝ヤ慨鏀?`exam_focus`銆乣breaking_hint`銆乣answer_framework` 瀛楁璇存槑銆?
+2. 鍦?`question_quality.py` 涓柊澧炰互涓嬭川妫€锛?
    - `exam_focus_too_answer_like`
    - `breaking_hint_duplicates_framework`
    - `breaking_hint_too_framework_like`
-3. 在 `email_renderer.py` 中把展示标题“破题提示”改为“作答主线”。
-4. 在 `content_harness/daily_question_skill.md` 和 `content_harness/quality_checks.md` 中补充正式文档说明。
+3. 鍦?`email_renderer.py` 涓妸灞曠ず鏍囬鈥滅牬棰樻彁绀衡€濇敼涓衡€滀綔绛斾富绾库€濄€?
+4. 鍦?`content_harness/daily_question_skill.md` 鍜?`content_harness/quality_checks.md` 涓ˉ鍏呮寮忔枃妗ｈ鏄庛€?
 
-## 历史改动
+## 鍘嗗彶鏀瑰姩
 
-暂无更早人工整理记录。后续如需追溯更早变更，请查看 Git commit history。
-### 2026-06-01｜政策坐标使用历史与 14 天去重
-**改动原因**
+鏆傛棤鏇存棭浜哄伐鏁寸悊璁板綍銆傚悗缁闇€杩芥函鏇存棭鍙樻洿锛岃鏌ョ湅 Git commit history銆?
+### 2026-06-01锝滄斂绛栧潗鏍囦娇鐢ㄥ巻鍙蹭笌 14 澶╁幓閲?
+**鏀瑰姩鍘熷洜**
 
-“今日政策坐标”已经接入 JSON、渲染和质检，需要再加一层“使用历史 + 近 14 天去重”，避免连续多天重复使用同一政策原文、同一条《求是》表达或同一专题框架。
-**已改文件**
+鈥滀粖鏃ユ斂绛栧潗鏍団€濆凡缁忔帴鍏?JSON銆佹覆鏌撳拰璐ㄦ锛岄渶瑕佸啀鍔犱竴灞傗€滀娇鐢ㄥ巻鍙?+ 杩?14 澶╁幓閲嶁€濓紝閬垮厤杩炵画澶氬ぉ閲嶅浣跨敤鍚屼竴鏀跨瓥鍘熸枃銆佸悓涓€鏉°€婃眰鏄€嬭〃杈炬垨鍚屼竴涓撻妗嗘灦銆?
+**宸叉敼鏂囦欢**
 
 - `policy_coordinate_usage_history.py`
 - `policy_coordinate_matcher.py`
@@ -1198,23 +1240,23 @@ python -m py_compile prompt_templates.py question_quality.py email_renderer.py
 - `scripts/check_policy_coordinate_usage_history.py`
 - `CHANGELOG_HARNESS.md`
 
-**最新版行为**
+**鏈€鏂扮増琛屼负**
 
-- 新增 `data/policy_coordinate_usage_history.jsonl` 的独立 JSONL 历史管理模块，缺文件时自动使用空历史，坏行会跳过并返回 warning，不会中断主流程。
-- `match_policy_coordinate_candidates(...)` 新增 `recent_usage` 参数：近 14 天内重复 `matched_policy_id` / `matched_qiushi_quote_id` 会强降权，同一 `matched_framework_id` 连续使用会降权，前两次主题相同时也会避免第 3 天继续用同一主题。
-- 如果没有其他合适材料，允许低优先级重复，但会在 `debug_scores.usage_history.selected_repeat_notes` 和运行日志中说明为什么还是选了重复项。
-- 新增 `build_policy_coordinate_usage_record(...)`，在整封邮件最终通过质检后，单独写入 `policy_coordinate` 使用历史，不影响 `sent_history.json` 原有逻辑。
-- `nightly candidate`、手动测试和被 quality gate 阻断的运行会显示 skip reason，不写入此次去重历史。
-- JSONL 写入失败时只记日志 warning，不会中断生成、发送或其他归档链路。
-**后续注意事项**
+- 鏂板 `data/policy_coordinate_usage_history.jsonl` 鐨勭嫭绔?JSONL 鍘嗗彶绠＄悊妯″潡锛岀己鏂囦欢鏃惰嚜鍔ㄤ娇鐢ㄧ┖鍘嗗彶锛屽潖琛屼細璺宠繃骞惰繑鍥?warning锛屼笉浼氫腑鏂富娴佺▼銆?
+- `match_policy_coordinate_candidates(...)` 鏂板 `recent_usage` 鍙傛暟锛氳繎 14 澶╁唴閲嶅 `matched_policy_id` / `matched_qiushi_quote_id` 浼氬己闄嶆潈锛屽悓涓€ `matched_framework_id` 杩炵画浣跨敤浼氶檷鏉冿紝鍓嶄袱娆′富棰樼浉鍚屾椂涔熶細閬垮厤绗?3 澶╃户缁敤鍚屼竴涓婚銆?
+- 濡傛灉娌℃湁鍏朵粬鍚堥€傛潗鏂欙紝鍏佽浣庝紭鍏堢骇閲嶅锛屼絾浼氬湪 `debug_scores.usage_history.selected_repeat_notes` 鍜岃繍琛屾棩蹇椾腑璇存槑涓轰粈涔堣繕鏄€変簡閲嶅椤广€?
+- 鏂板 `build_policy_coordinate_usage_record(...)`锛屽湪鏁村皝閭欢鏈€缁堥€氳繃璐ㄦ鍚庯紝鍗曠嫭鍐欏叆 `policy_coordinate` 浣跨敤鍘嗗彶锛屼笉褰卞搷 `sent_history.json` 鍘熸湁閫昏緫銆?
+- `nightly candidate`銆佹墜鍔ㄦ祴璇曞拰琚?quality gate 闃绘柇鐨勮繍琛屼細鏄剧ず skip reason锛屼笉鍐欏叆姝ゆ鍘婚噸鍘嗗彶銆?
+- JSONL 鍐欏叆澶辫触鏃跺彧璁版棩蹇?warning锛屼笉浼氫腑鏂敓鎴愩€佸彂閫佹垨鍏朵粬褰掓。閾捐矾銆?
+**鍚庣画娉ㄦ剰浜嬮」**
 
-1. 当前 usage history 故意不和 `sent_history.json` 共享存储，后续如需 OSS 化，应单独设计新的存储模式，不要直接搬用 `sent_history` 逻辑。
-2. 目前去重历史只针对非 candidate / 非测试 / 非整体阻断运行进行记录，如果后续希望让 preview 也参与去重，应单独评估是否影响正式晨发。
-### 2026-06-02｜政策坐标主题试跑与接入报告
-**改动原因**
+1. 褰撳墠 usage history 鏁呮剰涓嶅拰 `sent_history.json` 鍏变韩瀛樺偍锛屽悗缁闇€ OSS 鍖栵紝搴斿崟鐙璁℃柊鐨勫瓨鍌ㄦā寮忥紝涓嶈鐩存帴鎼敤 `sent_history` 閫昏緫銆?
+2. 鐩墠鍘婚噸鍘嗗彶鍙拡瀵归潪 candidate / 闈炴祴璇?/ 闈炴暣浣撻樆鏂繍琛岃繘琛岃褰曪紝濡傛灉鍚庣画甯屾湜璁?preview 涔熷弬涓庡幓閲嶏紝搴斿崟鐙瘎浼版槸鍚﹀奖鍝嶆寮忔櫒鍙戙€?
+### 2026-06-02锝滄斂绛栧潗鏍囦富棰樿瘯璺戜笌鎺ュ叆鎶ュ憡
+**鏀瑰姩鍘熷洜**
 
-在前 7 个任务完成后，需要做 3 个主题试跑，验证 `policy_coordinate` 在 daily JSON、HTML、plain_text、质检和近 14 天去重链路中的实际表现，并沉淀一份可交接的接入报告。
-**已改文件**
+鍦ㄥ墠 7 涓换鍔″畬鎴愬悗锛岄渶瑕佸仛 3 涓富棰樿瘯璺戯紝楠岃瘉 `policy_coordinate` 鍦?daily JSON銆丠TML銆乸lain_text銆佽川妫€鍜岃繎 14 澶╁幓閲嶉摼璺腑鐨勫疄闄呰〃鐜帮紝骞舵矇娣€涓€浠藉彲浜ゆ帴鐨勬帴鍏ユ姤鍛娿€?
+**宸叉敼鏂囦欢**
 
 - `main.py`
 - `scripts/run_policy_coordinate_trials.py`
@@ -1222,15 +1264,15 @@ python -m py_compile prompt_templates.py question_quality.py email_renderer.py
 - `output/policy_coordinate_trials/*`
 - `CHANGELOG_HARNESS.md`
 
-**最新版行为**
+**鏈€鏂扮増琛屼负**
 
-- 新增 `scripts/run_policy_coordinate_trials.py`，复用 `candidates/latest.json` 的完整 brief 结构，构造 3 组模拟主题输入并走现有政策匹配、渲染和质检链路。
-- 试跑主题覆盖：基层治理 / 新就业群体 / 城市治理；高质量发展 / 新质生产力；民生保障 / 就业。
-- 试跑会输出 `daily.json`、`email.html`、`plain_text.txt`、`quality.json`、`run.log` 到 `output/policy_coordinate_trials/<slug>/`。
-- 试跑使用隔离的 `policy_coordinate_usage_history.jsonl`，验证 14 天去重逻辑可运行，同时不污染正式生产历史。
-- `main.py` 增加了对 `exam_transfer` 的二次兜底：当匹配到的政策语料 `exam_usage` 过于展示化、缺少具体答题角度时，会回退为程序生成的结构化考场迁移句。
-- 自动生成 `docs/POLICY_COORDINATE_INTEGRATION_REPORT.md`，汇总文件改动、知识库读取、字段、渲染位置、质检规则、3 个样例结果、风险与 OSS 切换说明。
-**后续注意事项**
+- 鏂板 `scripts/run_policy_coordinate_trials.py`锛屽鐢?`candidates/latest.json` 鐨勫畬鏁?brief 缁撴瀯锛屾瀯閫?3 缁勬ā鎷熶富棰樿緭鍏ュ苟璧扮幇鏈夋斂绛栧尮閰嶃€佹覆鏌撳拰璐ㄦ閾捐矾銆?
+- 璇曡窇涓婚瑕嗙洊锛氬熀灞傛不鐞?/ 鏂板氨涓氱兢浣?/ 鍩庡競娌荤悊锛涢珮璐ㄩ噺鍙戝睍 / 鏂拌川鐢熶骇鍔涳紱姘戠敓淇濋殰 / 灏变笟銆?
+- 璇曡窇浼氳緭鍑?`daily.json`銆乣email.html`銆乣plain_text.txt`銆乣quality.json`銆乣run.log` 鍒?`output/policy_coordinate_trials/<slug>/`銆?
+- 璇曡窇浣跨敤闅旂鐨?`policy_coordinate_usage_history.jsonl`锛岄獙璇?14 澶╁幓閲嶉€昏緫鍙繍琛岋紝鍚屾椂涓嶆薄鏌撴寮忕敓浜у巻鍙层€?
+- `main.py` 澧炲姞浜嗗 `exam_transfer` 鐨勪簩娆″厹搴曪細褰撳尮閰嶅埌鐨勬斂绛栬鏂?`exam_usage` 杩囦簬灞曠ず鍖栥€佺己灏戝叿浣撶瓟棰樿搴︽椂锛屼細鍥為€€涓虹▼搴忕敓鎴愮殑缁撴瀯鍖栬€冨満杩佺Щ鍙ャ€?
+- 鑷姩鐢熸垚 `docs/POLICY_COORDINATE_INTEGRATION_REPORT.md`锛屾眹鎬绘枃浠舵敼鍔ㄣ€佺煡璇嗗簱璇诲彇銆佸瓧娈点€佹覆鏌撲綅缃€佽川妫€瑙勫垯銆? 涓牱渚嬬粨鏋溿€侀闄╀笌 OSS 鍒囨崲璇存槑銆?
+**鍚庣画娉ㄦ剰浜嬮」**
 
-1. 当前试跑验证的是“政策坐标接入链路”而不是“真实选文质量”，后续上线前仍应结合真实抓取文章抽样复核几轮。
-2. 如果后续实现知识库 OSS 读取，建议同步把试跑脚本改成可切换 `local/oss` 两种模式，避免报告与生产行为分叉。
+1. 褰撳墠璇曡窇楠岃瘉鐨勬槸鈥滄斂绛栧潗鏍囨帴鍏ラ摼璺€濊€屼笉鏄€滅湡瀹為€夋枃璐ㄩ噺鈥濓紝鍚庣画涓婄嚎鍓嶄粛搴旂粨鍚堢湡瀹炴姄鍙栨枃绔犳娊鏍峰鏍稿嚑杞€?
+2. 濡傛灉鍚庣画瀹炵幇鐭ヨ瘑搴?OSS 璇诲彇锛屽缓璁悓姝ユ妸璇曡窇鑴氭湰鏀规垚鍙垏鎹?`local/oss` 涓ょ妯″紡锛岄伩鍏嶆姤鍛婁笌鐢熶骇琛屼负鍒嗗弶銆?
