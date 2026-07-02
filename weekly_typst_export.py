@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import re
@@ -246,7 +246,8 @@ def build_data(payloads: list[dict[str, Any]], start_date: str, end_date: str, m
         "exam_map_cards": enrichment.get("exam_map_cards") or [],
         "selected_expression_rows": enrichment.get("selected_expression_rows") or [],
         "material_cards": enrichment.get("material_cards") or [],
-        "practice_questions": enrichment.get("practice_questions") or [],
+        "training_questions": enrichment.get("training_questions") or enrichment.get("practice_questions") or [],
+        "practice_questions": enrichment.get("practice_questions") or enrichment.get("training_questions") or [],
     }
 
 
@@ -324,10 +325,11 @@ def preview_focus_points(data: dict[str, Any]) -> list[str]:
     for row in data.get("material_cards") or []:
         if isinstance(row, dict):
             candidates.extend(clean(item) for item in as_list(row.get("usable_themes") or row.get("target_topics")) if clean(item))
-    for row in data.get("practice_questions") or []:
+    for row in data.get("training_questions") or data.get("practice_questions") or []:
         if isinstance(row, dict):
-            candidates.extend(clean(item) for item in as_list(row.get("target_topics")) if clean(item))
-            candidates.append(clean(row.get("title")))
+            candidates.extend(clean(item) for item in as_list(row.get("answer_outline") or row.get("target_topics")) if clean(item))
+            candidates.extend(clean(item) for item in as_list(row.get("linked_materials")) if clean(item))
+            candidates.append(clean(row.get("title") or row.get("review_key")))
     for row in data.get("exam_map_cards") or []:
         if isinstance(row, dict):
             candidates.append(clean(row.get("title")))
@@ -393,11 +395,17 @@ def preview_material_fragment(data: dict[str, Any]) -> dict[str, str]:
 
 
 def preview_practice_fragment(data: dict[str, Any]) -> dict[str, str]:
-    for row in data.get("practice_questions") or []:
+    for row in data.get("training_questions") or data.get("practice_questions") or []:
         if not isinstance(row, dict):
             continue
         question = clean(row.get("question"))
-        direction = clean(row.get("answer_hint") or row.get("use_hint") or row.get("target_topics"))
+        direction = clean(
+            row.get("reference_direction")
+            or row.get("review_key")
+            or row.get("answer_hint")
+            or row.get("use_hint")
+            or row.get("target_topics")
+        )
         if question:
             return {
                 "title": clean(row.get("title") or "本周训练题片段"),
@@ -643,27 +651,24 @@ def render_typst(data: dict[str, Any]) -> str:
     material_cards = "\n#v(7pt)\n".join(material_parts)
     has_material_cards = bool(material_parts)
 
+    training_rows = data.get("training_questions") or data.get("practice_questions") or []
     practice_parts: list[str] = []
-    for idx, row in enumerate(data.get("practice_questions") or [], start=1):
+    for idx, row in enumerate(training_rows, start=1):
         if not isinstance(row, dict):
             continue
-        title = row_value(row, "title") or f"素材运用题 {idx:02d}"
+        title = row_value(row, "title") or f"题目{idx}"
         question_type = row_value(row, "question_type")
         question = row_value(row, "question")
-        target_topics = row_value(row, "target_topics")
-        suggested_golden_sentences = row_value(row, "suggested_golden_sentences")
-        suggested_case_materials = row_value(row, "suggested_case_materials")
-        suggested_policy_expressions = row_value(row, "suggested_policy_expressions")
-        answer_hint = row_value(row, "answer_hint", "use_hint")
-        mini_reference_answer = row_value(row, "mini_reference_answer")
-        use_boundary = row_value(row, "use_boundary")
-        if question_type == "对策建议题" and not use_boundary:
-            use_boundary = "本题重点是措施表达，不建议硬塞外部案例。"
+        linked_materials = row_value(row, "linked_materials", "suggested_case_materials")
+        linked_expressions = row_value(row, "linked_expressions", "suggested_golden_sentences")
+        review_key = row_value(row, "review_key", "answer_hint", "use_hint")
+        answer_outline = row_value(row, "answer_outline", "target_topics")
+        reference_direction = row_value(row, "reference_direction", "use_boundary")
+        callable_assets = "；".join(part for part in [linked_materials, linked_expressions] if part)
         practice_parts.append(
             f'#practice-card[{typst_text(title)}][{typst_text(question_type)}][{typst_text(question)}]'
-            f'[{typst_text(target_topics)}][{typst_text(suggested_golden_sentences)}]'
-            f'[{typst_text(suggested_case_materials)}][{typst_text(suggested_policy_expressions)}]'
-            f'[{typst_text(answer_hint)}][{typst_text(mini_reference_answer)}][{typst_text(use_boundary)}]'
+            f'[{typst_text(callable_assets)}][{typst_text(review_key)}]'
+            f'[{typst_text(answer_outline)}][{typst_text(reference_direction)}]'
         )
     practice_questions = "\n#v(7pt)\n".join(practice_parts)
 
@@ -677,7 +682,7 @@ def render_typst(data: dict[str, Any]) -> str:
         for row in expression_source[:3]
         if isinstance(row, dict) and clean(row.get("sentence") or row.get("expression") or row.get("text"))
     )
-    first_practice = next((row for row in data.get("practice_questions") or [] if isinstance(row, dict)), {})
+    first_practice = next((row for row in training_rows if isinstance(row, dict)), {})
     overview_practice = (
         f'#badge[{typst_text(row_value(first_practice, "question_type"))}]'
         f'#v(4pt)#text(weight: "bold")[{typst_text(row_value(first_practice, "title") or "本周第一题")}]'
@@ -781,18 +786,15 @@ def render_typst(data: dict[str, Any]) -> str:
   ]
   #if use-boundary != "" [#muted[使用边界：#use-boundary]]
 ]
-#let practice-card(title, question-type, question, target-topics, suggested-golden-sentences, suggested-case-materials, suggested-policy-expressions, answer-hint, mini-reference-answer, use-boundary) = block(fill: white, stroke: 0.6pt + line, inset: 13pt, radius: 9pt, width: 100%, breakable: true)[
+#let practice-card(title, question-type, question, callable-assets, review-key, answer-outline, reference-direction) = block(fill: white, stroke: 0.6pt + line, inset: 13pt, radius: 9pt, width: 100%, breakable: true)[
   #text(size: 12pt, weight: "bold", fill: brand)[#title]
   #if question-type != "" [#linebreak()#badge[#question-type]]
   #v(7pt)
   #if question != "" [#text(weight: "bold")[#question]]
-  #if target-topics != "" [#info-strip[训练主题][#target-topics]]
-  #if suggested-golden-sentences != "" [#info-strip[建议金句][#suggested-golden-sentences]]
-  #if suggested-case-materials != "" [#info-strip[建议素材][#suggested-case-materials]]
-  #if suggested-policy-expressions != "" [#info-strip[政策表达][#suggested-policy-expressions]]
-  #if answer-hint != "" [#info-strip[作答提示][#answer-hint]]
-  #if mini-reference-answer != "" [#reference-answer-card[#mini-reference-answer]]
-  #if use-boundary != "" [#muted[使用边界：#use-boundary]]
+  #if callable-assets != "" [#info-strip[可调用素材][#callable-assets]]
+  #if review-key != "" [#info-strip[审题关键][#review-key]]
+  #if answer-outline != "" [#info-strip[作答提示][#answer-outline]]
+  #if reference-direction != "" [#info-strip[参考迁移方向][#reference-direction]]
 ]
 
 #set page(numbering: none, header: none, footer: none)
@@ -874,7 +876,7 @@ def render_typst(data: dict[str, Any]) -> str:
 #pagebreak()
 = {practice_section_no:02d}｜本周 3 道考场迁移训练
 #info-strip[使用建议][三道题分别用于面试综合分析、对策建议和申论作文分论点展开训练。对策建议题不建议硬塞外部案例。]
-{practice_questions if practice_questions else '#muted[本周暂无稳定可生成的素材运用题]'}
+{practice_questions if practice_questions else ""}
 
 #pagebreak()
 = {daily_section_no:02d}｜每日内容压缩回看
