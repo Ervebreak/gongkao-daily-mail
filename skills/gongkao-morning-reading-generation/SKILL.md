@@ -45,3 +45,13 @@ description: Generate a complete, structured daily public-service-exam morning-r
 - 需由审核技能核验的项目：事实与政策出处、题型/权限、断句、字段泄漏、重复、最终 HTML/纯文本/简版同步。
 
 不要把质量卡或内部修复说明写进用户可见正文。
+
+
+## 按需加载的细则
+
+- 选择主文或速读时，读 `references/article-selection.md`。
+- 从文章拆结构、提炼考点时，读 `references/article-to-exam.md`。
+- 写各个邮件模块、CTA 或统稿时，读 `references/module-composition.md`。
+- 对候选 JSON 做确定性校验、局部修复和回退时，读 `references/validation-and-repair.md` 并运行 `scripts/validate_candidate_contract.py`。
+
+该脚本是生成前的辅助校验，不替代本项目的 `scripts/validate_daily_brief.py` 或独立审核技能。
