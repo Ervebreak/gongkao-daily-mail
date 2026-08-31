@@ -1249,3 +1249,10 @@ python -m py_compile prompt_templates.py question_quality.py email_renderer.py
 - 新增 `skills/gongkao-morning-reading-generation/`，包含 `SKILL.md` 及按需加载的输入输出契约、生成决策规则。
 - 技能边界明确为：独立产出待审核的结构化候选件；不发送邮件、不处理订阅或发送历史、不替代独立审核技能。
 - 本次仅建立技能骨架和规则路由，未接入运行时调用、未变更 JSON schema 或质量门禁代码。
+
+
+## 2026-08-31：生成技能第二、三步
+
+- 为 `gongkao-morning-reading-generation` 新增选文、拆文转化、模块生成和校验回退四份按需加载的参考规则。
+- 新增技能内 `scripts/validate_candidate_contract.py`：检查候选 JSON 的确定性结构、占位文本、材料依赖、答题框架长度、总结格式、速读数量和基础题型身份信号，并输出字段级 error/warning 报告。
+- 该脚本不替代语义审核和现有总门禁；有 error 不进入渲染，有 warning 仍由独立审核技能与项目门禁复核。
