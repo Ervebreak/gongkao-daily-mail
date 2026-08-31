@@ -43,11 +43,11 @@ def add(report: dict[str, Any], level: str, code: str, field: str, message: str)
     report[level].append({"code": code, "field": field, "message": message})
 
 
-def inspect_text(report: dict[str, Any], field: str, value: Any) -> None:
+def inspect_text(report: dict[str, Any], field: str, value: Any, *, expect_sentence: bool = True) -> None:
     value = text(value).strip()
     if value and PLACEHOLDER_RE.search(value):
         add(report, "errors", "placeholder_visible", field, "contains a visible placeholder.")
-    if value and len(value) >= 8 and not SENTENCE_END_RE.search(value):
+    if expect_sentence and value and len(value) >= 8 and not SENTENCE_END_RE.search(value):
         add(report, "warnings", "possibly_truncated", field, "does not end with terminal punctuation; review for truncation.")
 
 
@@ -69,7 +69,7 @@ def validate(data: dict[str, Any]) -> dict[str, Any]:
         if not text(value).strip():
             add(report, "errors", "required_text_missing", field, f"{label} is required.")
         else:
-            inspect_text(report, field, value)
+            inspect_text(report, field, value, expect_sentence=(label == "featured content"))
 
     question, question_field = get_path(data, ("daily_question",))
     if not isinstance(question, dict):
@@ -100,7 +100,7 @@ def validate(data: dict[str, Any]) -> dict[str, Any]:
     for index, point in enumerate(points, 1):
         if len(point) > 45:
             add(report, "errors", "framework_point_too_long", f"{framework_field}[{index}]", "framework point exceeds 45 characters.")
-        inspect_text(report, f"{framework_field}[{index}]", point)
+        inspect_text(report, f"{framework_field}[{index}]", point, expect_sentence=False)
 
     qtype, qtype_field = get_path(data, ("daily_question", "question_type"), ("daily_question", "type"))
     if text(qtype) and any(marker in text(qtype) for marker in SCENARIO_TYPES):
@@ -137,7 +137,7 @@ def validate(data: dict[str, Any]) -> dict[str, Any]:
         if text(value):
             if len(text(value)) > limit:
                 add(report, "warnings", "text_too_long", resolved, f"{field} exceeds {limit} characters.")
-            inspect_text(report, resolved, value)
+            inspect_text(report, resolved, value, expect_sentence=(field == "original reading focus"))
 
     quick_reads, quick_reads_field = get_path(data, ("quick_reads",), ("speed_reads",))
     if quick_reads not in (None, "") and len(as_list(quick_reads)) > 2:
