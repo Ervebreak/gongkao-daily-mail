@@ -399,3 +399,8 @@
 需要核对运行时 Prompt 规则漂移时，先运行：
 
 - `python scripts/audit_prompt_rules.py --json`
+
+
+## 0. 唯一有效生产标准（2026-08 定版）
+
+在本索引所列文档之前，必须先读 [公考晨读生产标准](gongkao_morning_reading_production_standard.md)。它定义选文、生成、质检、定点重写和成品发布的唯一有效口径；与任何历史文档冲突时，以该标准为准。本索引和各模块文档继续承担实现路径与字段细节，不得另立相冲突的产品口径。
