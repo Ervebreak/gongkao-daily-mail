@@ -954,3 +954,8 @@ oss://gongkao-mailer-erve/question_bank/shenlun_question_bank_v3_a.csv
 - 题目与精读文章仍直接相关；
 - 题库失败时邮件仍能正常候选和发送；
 - candidate / quality JSON 能追踪题库使用情况。
+
+
+## 定版覆盖规则（2026-08）
+
+完整版的移动端阅读时长统一为 **5—8 分钟**，不再采用“5—10 分钟”口径。模块结构、用户价值和展示细节如与 [公考晨读生产标准](gongkao_morning_reading_production_standard.md) 冲突，以该标准为准；尤其须坚持主文 1 篇、速读最多 2 篇、政策坐标弱匹配隐藏、用户只读核心模块也能获得完整收获。
