@@ -75,7 +75,7 @@ def test_lite_paid_cta_uses_brief_hook_and_keeps_entries() -> None:
     payload = _sample_latest_json()
     payload["brief"]["lite_paid_cta"] = {
         "hook_type": "daily_question",
-        "hook": "今天这道题适合练“群众诉求复杂、推进受阻”类场景，完整版会补充闭环推进思路，适合迁移到基层治理和公共工程推进题。",
+        "hook": "完整版会补充审题关键、完整作答框架和参考答案，再把文章框架图、考场转化、金句/素材迁移放在一起讲清楚。",
         "source_module": "daily_question",
         "fallback_used": False,
     }
@@ -85,14 +85,14 @@ def test_lite_paid_cta_uses_brief_hook_and_keeps_entries() -> None:
 
     assert not hasattr(email_renderer, "_call_lite_paid_highlight_llm")
     assert "今天完整版多讲了什么" in body
-    assert "今日完整版亮点" in body
-    assert "群众诉求复杂、推进受阻" in body
-    assert "完整版还包含：参考答案、框架图、考场转化、金句拆解、周末 PDF。" in body
+    assert "完整版会补充" in body
+    assert "审题关键、完整作答框架和参考答案" in body
+    assert "完整版还包含：审题关键、完整作答框架、参考答案、框架图、考场转化、金句/素材迁移、周末 PDF。" in body
     assert "体验说明：4.9 元 / 7 天｜9.9 元 / 30 天" in body
     assert "4.9 元 / 7 天" in body
     assert "9.9 元 / 30 天" in body
-    assert "回复“体验”领取说明" in body
-    assert "填写报名表" in body
+    assert "回复“体验”了解说明" in body
+    assert "查看报名表" in body
     assert "早鸟内测" not in body
     assert "mailto:ops@example.com?" in body
     assert "https://paid.example.com/entry" in body
@@ -104,7 +104,7 @@ def test_lite_paid_cta_uses_latest_json_hook_when_brief_hook_missing() -> None:
     payload = _sample_latest_json()
     payload["lite_paid_cta"] = {
         "hook_type": "policy_coordinate",
-        "hook": "今天的政策坐标点出了一句适合记忆的权威表达，完整版会继续讲清它怎样迁移到基层治理和民生服务类题。",
+        "hook": "完整版会补充政策坐标背后的审题关键、完整作答框架和参考答案，并把金句/素材迁移放到考场表达里。",
         "source_module": "policy_coordinate",
         "fallback_used": False,
     }
@@ -112,8 +112,8 @@ def test_lite_paid_cta_uses_latest_json_hook_when_brief_hook_missing() -> None:
     rendered = _render_with_cta_settings(payload)
     body = rendered["plain_text"] + rendered["html_body"]
 
-    assert "今天的政策坐标点出了一句适合记忆的权威表达" in body
-    assert "今日完整版亮点" in body
+    assert "政策坐标背后的审题关键" in body
+    assert "完整版会补充" in body
 
 
 def test_lite_paid_cta_falls_back_when_hook_missing() -> None:
@@ -122,8 +122,8 @@ def test_lite_paid_cta_falls_back_when_hook_missing() -> None:
     rendered = _render_with_cta_settings(payload)
     body = rendered["plain_text"] + rendered["html_body"]
 
-    assert "今日完整版亮点" in body
-    assert "今天完整版会补充参考答案、文章框架图、考场转化和金句拆解" in body
+    assert "完整版会补充" in body
+    assert "完整版会把今天这道题从读题、搭框架到写成答案完整走一遍" in body
 
 
 def test_lite_paid_cta_falls_back_when_hook_contains_banned_words() -> None:
@@ -139,4 +139,4 @@ def test_lite_paid_cta_falls_back_when_hook_contains_banned_words() -> None:
     body = rendered["plain_text"] + rendered["html_body"]
 
     assert "今天这条内容是内部资料，几乎必考，不看就亏。" not in body
-    assert "今天完整版会补充参考答案、文章框架图、考场转化和金句拆解" in body
+    assert "完整版会把今天这道题从读题、搭框架到写成答案完整走一遍" in body

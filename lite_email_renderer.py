@@ -12,8 +12,8 @@ from email_renderer import (
     strip_display_prefix,
 )
 
-LITE_FRAMEWORK_TITLE_OLD = "先想 3 个角度"
-LITE_FRAMEWORK_TITLE_NEW = "先搭作答框架"
+LITE_FRAMEWORK_TITLE_OLD = "先搭作答框架"
+LITE_FRAMEWORK_TITLE_NEW = "思考提示"
 
 
 def _brief_from_latest_json(latest_json: dict[str, Any]) -> dict[str, Any]:
@@ -52,54 +52,33 @@ def _clean_answer_framework_item(item: Any) -> str:
 
 
 def _patched_lite_answer_angles(brief: dict[str, Any]) -> list[str]:
-    """Use the full-email answer framework for the lite email.
-
-    免费简版不再二次压缩或截断作答框架，避免出现第 4 条半截句；
-    仍只展示框架，不展示参考答案、30 秒表达等付费内容。
-    """
+    """Render lite-only thinking prompts instead of the full answer framework."""
     question = ensure_dict(brief.get("daily_question"))
-    raw_value = question.get("answer_framework") or question.get("answer_frame")
-    raw_items: list[Any]
-    if isinstance(raw_value, str):
-        raw_items = _split_numbered_framework_text(raw_value)
-    else:
-        raw_items = as_list(raw_value)
-
-    angles: list[str] = []
-    for item in raw_items:
-        text = _clean_answer_framework_item(item)
-        if text and text not in angles:
-            angles.append(text)
-        if len(angles) >= 4:
-            break
-    if angles:
-        return angles
-
+    theme = str(brief.get("today_theme") or "这个主题").strip()
     hint_text = strip_display_prefix(
         question.get("breaking_hint") or question.get("breaking_direction") or question.get("exam_focus") or "",
         "作答主线",
         "审题关键",
     )
-    fallback_angles: list[str] = []
+    question_text = str(question.get("question") or "").strip()
+    clip = getattr(_email_renderer, "clip_text")
+    prompts = [
+        f"先看题目在问什么对象、什么矛盾、要你完成什么任务。",
+        f"再想它和“{clip(theme, 18)}”有什么关系，别急着展开分点答案。",
+    ]
     if hint_text:
-        parts = [part.strip("，。； ") for part in re.split(r"[；。]", str(hint_text)) if part.strip("，。； ")]
-        hint_labels = ("先稳矛盾", "再抓重点", "最后落地")
-        for idx, part in enumerate(parts[:3]):
-            fallback_angles.append(f"{hint_labels[idx]}：{part}")
-    fallback_angles.extend(
-        [
-            "先摸诉求：先把群众顾虑和现实堵点找准。",
-            "再定主线：把解决问题和推动协商结合起来。",
-            "稳妥推进：依法沟通、逐步形成共识。",
-        ]
-    )
-    for item in fallback_angles:
+        prompts.append(f"可以顺着这个方向想：{clip(hint_text, 42)}")
+    elif question_text:
+        prompts.append(f"可以先用一句话判断：这道题不是泛泛表态，而是要把问题放回具体场景里处理。")
+    prompts.append("样例：我会先把问题和诉求看清楚，再考虑怎样把工作做得稳妥、可执行。")
+    result: list[str] = []
+    for item in prompts:
         text = _clean_answer_framework_item(item)
-        if text and text not in angles:
-            angles.append(text)
-        if len(angles) >= 3:
+        if text and text not in result:
+            result.append(text)
+        if len(result) >= 4:
             break
-    return angles
+    return result
 
 
 def _install_lite_answer_framework_patch() -> None:
@@ -107,7 +86,7 @@ def _install_lite_answer_framework_patch() -> None:
 
 
 def _normalize_lite_framework_title(content: str) -> str:
-    return content.replace(LITE_FRAMEWORK_TITLE_OLD, LITE_FRAMEWORK_TITLE_NEW)
+    return content.replace(LITE_FRAMEWORK_TITLE_OLD, LITE_FRAMEWORK_TITLE_NEW).replace("先想 3 个角度", LITE_FRAMEWORK_TITLE_NEW)
 
 
 def _append_unsubscribe_plain_text(plain_text: str, brief: dict[str, Any]) -> str:
