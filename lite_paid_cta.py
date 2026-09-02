@@ -15,15 +15,18 @@ BANNED_LITE_CTA_WORDS = (
 )
 
 GENERIC_BENEFIT_WORDS = (
+    "审题关键",
+    "完整作答框架",
     "参考答案",
     "框架图",
     "考场转化",
     "金句拆解",
+    "素材迁移",
     "周末 PDF",
 )
 
 SAFE_LITE_CTA_FALLBACK = (
-    "今天完整版会补充参考答案、文章框架图、考场转化和金句拆解，适合把今日文章从“读过”转成“考场能用”。"
+    "完整版会把今天这道题从读题、搭框架到写成答案完整走一遍，并补充文章框架图、考场转化和金句/素材迁移。"
 )
 
 
@@ -77,6 +80,13 @@ def _extract_answer_labels(brief: dict[str, Any], limit: int = 4) -> list[str]:
     return labels
 
 
+def _contains_answer_chain(text: str, brief: dict[str, Any]) -> bool:
+    labels = [label for label in _extract_answer_labels(brief) if len(label) >= 2]
+    if labels and sum(1 for label in labels if label in text) >= 2:
+        return True
+    return bool(re.search(r"[\w\u4e00-\u9fff]{2,}[—→-][\w\u4e00-\u9fff]{2,}[—→-][\w\u4e00-\u9fff]{2,}", text))
+
+
 def _coordinate_quote_text(value: Any) -> str:
     return str(value or "").strip().rstrip("。；;！!？?")
 
@@ -88,22 +98,22 @@ def build_lite_paid_cta_prompt(brief: dict[str, Any]) -> str:
     answer_labels = "—".join(_extract_answer_labels(brief))
     quote_text = _coordinate_quote_text(coordinate.get("authoritative_quote") or coordinate.get("policy_quote"))
     prompt_parts = [
-        "你是公考晨读邮件编辑，请为免费简版邮件尾部写 1 条“今日完整版亮点”。",
-        "目标：告诉免费用户今天完整版最值得看的具体内容，说明适合哪类题、可迁移到什么考场场景。",
+        "你是公考晨读邮件编辑，请为免费简版邮件尾部写 1 条“今天完整版多讲了什么”。",
+        "目标：只说明完整版解决什么学习问题、包含哪些模块；免费版只给问题、方向和一个样例，不给完整结构、方法和答案。",
         "只输出 JSON，对象结构必须包含：hook_type、hook、source_module。",
         "约束：",
         "1. hook 用 1 句中文，控制在 60-120 字。",
-        "2. 只写 1 个亮点，不要泛泛罗列参考答案、框架图、金句拆解等固定权益。",
+        "2. 可以写模块名：审题关键、完整作答框架、参考答案、文章框架图、考场转化、金句/素材迁移。",
         "3. 必须基于当天已有内容，不得虚构外部案例、政策、人物或数据。",
-        "4. 不得泄露完整 candidate_answer，不得照抄参考答案。",
+        "4. 不得写出 answer_framework 的具体分点标签、作答链条、candidate_answer 内容或任何完整答案表达。",
         "5. 不得出现押题、必考、保过、上岸、提分神器、内部资料、不看就亏。",
-        "6. 优先从：今日一题拆解 > 政策坐标/权威表达 > 文章框架转化 中选择一个最具体的亮点。",
+        "6. 语气像自然提示，不要写成促销广告。",
         "",
         f"今日主题：{brief.get('today_theme') or ''}",
         f"精读标题：{featured.get('title') or ''}",
         f"精读一句话：{featured.get('one_sentence') or ''}",
         f"今日一题：{question.get('question') or ''}",
-        f"作答角度：{answer_labels}",
+        f"作答角度仅供边界检查，禁止在 hook 中复述：{answer_labels}",
         f"政策坐标：{quote_text}",
         f"考场迁移：{coordinate.get('exam_transfer') or ''}",
         f"审题关键：{question.get('exam_focus') or question.get('breaking_hint') or question.get('breaking_direction') or ''}",
@@ -142,13 +152,17 @@ def is_valid_lite_paid_cta_hook(hook: str, brief: dict[str, Any]) -> bool:
         return False
     if any(word in text for word in BANNED_LITE_CTA_WORDS):
         return False
+    if _contains_answer_chain(text, brief):
+        return False
 
     candidate_answer = str(_ensure_dict(brief.get("daily_question")).get("candidate_answer") or "").strip()
     if candidate_answer and candidate_answer in text:
         return False
 
     benefit_hits = sum(1 for word in GENERIC_BENEFIT_WORDS if word in text)
-    if benefit_hits >= 3:
+    if benefit_hits < 2:
+        return False
+    if benefit_hits >= 6 and len(text) > 120:
         return False
 
     if re.search(r"(比如|例如)\s*$", text):

@@ -761,10 +761,12 @@ def _lite_paid_mailto_url() -> str:
 
 def _lite_paid_feature_list() -> list[str]:
     return [
+        "审题关键",
+        "完整作答框架",
         "今日一题参考答案",
         "文章框架图",
         "考场转化",
-        "金句拆解",
+        "金句/素材迁移",
         "周末 PDF 汇编",
     ]
 
@@ -781,7 +783,7 @@ def _lite_paid_plan_summary() -> str:
 
 
 def _lite_paid_feature_summary() -> str:
-    return "参考答案、框架图、考场转化、金句拆解、周末 PDF。"
+    return "审题关键、完整作答框架、参考答案、框架图、考场转化、金句/素材迁移、周末 PDF。"
 
 
 def _lite_paid_highlight_topic(brief: dict[str, Any]) -> str:
@@ -832,28 +834,7 @@ def _lite_paid_highlight_scenarios(brief: dict[str, Any]) -> str:
 
 
 def _lite_paid_highlight_fallback(brief: dict[str, Any]) -> str:
-    coordinate = ensure_dict(brief.get("policy_coordinate"))
-    quote_text = coordinate_quote_text(coordinate.get("authoritative_quote") or coordinate.get("policy_quote"))
-    topic = _lite_paid_highlight_topic(brief)
-    chain = _lite_paid_highlight_chain(brief)
-    scenarios = _lite_paid_highlight_scenarios(brief)
-    if quote_text and should_render_policy_coordinate(brief):
-        return clip_text(
-            f"今天的政策坐标引用了“{quote_text}”这句适合记忆的权威表达，完整版会进一步讲清它怎么迁移到{scenarios}，适合作为开头立意或结尾升华。",
-            118,
-        )
-    if chain:
-        return clip_text(
-            f"今天这道题适合练“{topic}”类场景，完整版会把思路拆成“{chain}”，可迁移到{scenarios}。",
-            118,
-        )
-    three_step_line = _lite_three_step_line(brief)
-    if three_step_line:
-        return clip_text(
-            f"今天这篇文章虽然讲的是具体案例，但完整版会把它转成“{three_step_line}”这条考场表达主线，适合迁移到{scenarios}。",
-            118,
-        )
-    return "今天的完整版会继续把文章判断和题目框架往考场表达上推进，帮助你更快抓到可迁移的作答主线。"
+    return "完整版会把今天这道题从读题、搭框架到写成答案完整走一遍，并补充文章框架图、考场转化和金句/素材迁移。"
 
 
 def _lite_paid_highlight(latest_json: dict[str, Any], brief: dict[str, Any]) -> str:
@@ -948,50 +929,26 @@ def _lite_expression(brief: dict[str, Any]) -> str:
 
 def _lite_answer_angles(brief: dict[str, Any]) -> list[str]:
     question = ensure_dict(brief.get("daily_question"))
-    raw_items = as_list(question.get("answer_framework")) or as_list(question.get("answer_frame"))
-    angles: list[str] = []
-    for item in raw_items:
-        if isinstance(item, dict):
-            text = str(item.get("label") or item.get("title") or item.get("content") or item.get("text") or "").strip()
-        else:
-            text = str(item or "").strip()
-        if not text:
-            continue
-        if "：" in text:
-            label, content = text.split("：", 1)
-        elif ":" in text:
-            label, content = text.split(":", 1)
-        else:
-            label, content = text, ""
-        label = re.sub(r"\s+", "", label.strip())[:8].strip("，、：:； ")
-        content = clip_text(content.strip(), 42)
-        angle = f"{label}：{content}" if content else label
-        if angle:
-            angles.append(angle)
-        if len(angles) >= 3:
-            break
+    theme = str(brief.get("today_theme") or "这个主题").strip()
     hint_text = strip_display_prefix(
         question.get("breaking_hint") or question.get("breaking_direction") or question.get("exam_focus") or "",
         "作答主线",
         "审题关键",
     )
-    fallback_angles: list[str] = []
+    prompts = [
+        "先看题目在问什么对象、什么矛盾、要你完成什么任务。",
+        f"再想它和“{clip_text(theme, 18)}”有什么关系，别急着展开分点答案。",
+    ]
     if hint_text:
-        parts = [part.strip("，。； ") for part in re.split(r"[；。]", str(hint_text)) if part.strip("，。； ")]
-        hint_labels = ("先稳矛盾", "再抓重点", "最后落地")
-        for idx, part in enumerate(parts[:3]):
-            fallback_angles.append(f"{hint_labels[idx]}：{clip_text(part, 42)}")
-    fallback_angles.extend(
-        [
-            "先摸诉求：先把群众顾虑和现实堵点找准。",
-            "再定主线：把解决问题和推动协商结合起来。",
-            "稳妥推进：依法沟通、逐步形成共识。",
-        ]
-    )
-    for item in fallback_angles:
+        prompts.append(f"可以顺着这个方向想：{clip_text(hint_text, 42)}")
+    else:
+        prompts.append("可以先用一句话判断：这道题不是泛泛表态，而是要把问题放回具体场景里处理。")
+    prompts.append("样例：我会先把问题和诉求看清楚，再考虑怎样把工作做得稳妥、可执行。")
+    angles: list[str] = []
+    for item in prompts:
         if item and item not in angles:
             angles.append(item)
-        if len(angles) >= 3:
+        if len(angles) >= 4:
             break
     return angles
 
@@ -1071,7 +1028,7 @@ def render_lite_plain_text(latest_json: dict[str, Any]) -> str:
             "今日一题",
             question_text,
             "",
-            "先想 3 个角度",
+            "思考提示",
         ]
     )
     lines.extend(f"{idx}. {item}" for idx, item in enumerate(_lite_answer_angles(brief), start=1))
@@ -1088,15 +1045,15 @@ def render_lite_plain_text(latest_json: dict[str, Any]) -> str:
         [
             "",
             "今天完整版多讲了什么",
-            "今日完整版亮点：",
+            "完整版会补充：",
             paid_highlight,
             "",
             f"完整版还包含：{_lite_paid_feature_summary()}",
             "",
             f"体验说明：{_lite_paid_plan_summary()}",
             "",
-            f"主入口（回复“体验”）：{paid_mailto_url}" if paid_mailto_url else "",
-            f"次入口（报名表）：{paid_url}" if paid_url else "",
+            f"回复“体验”了解说明：{paid_mailto_url}" if paid_mailto_url else "",
+            f"查看报名表：{paid_url}" if paid_url else "",
             "暂时不参加也没关系，免费简版会继续保留。",
         ]
     )
@@ -1181,7 +1138,7 @@ def render_lite_email(latest_json: dict[str, Any]) -> str:
     </div>
 
     <div style="background:#f8fafc;border:1px solid #dbe4ee;border-radius:14px;padding:14px 15px;margin-bottom:12px;">
-      <div style="font-size:13px;color:#0f172a;font-weight:900;margin-bottom:8px;">先想 3 个角度</div>
+      <div style="font-size:13px;color:#0f172a;font-weight:900;margin-bottom:8px;">思考提示</div>
       <ol style="margin:0;padding-left:18px;">{angle_items}</ol>
     </div>
 
@@ -1189,13 +1146,13 @@ def render_lite_email(latest_json: dict[str, Any]) -> str:
 
     <div style="background:#fff8e8;border:1px solid #fed7aa;border-radius:16px;padding:15px 16px;">
       <div style="font-size:17px;font-weight:900;color:#92400e;margin-bottom:8px;">今天完整版多讲了什么</div>
-      <div style="font-size:13px;color:#b45309;font-weight:900;margin-bottom:6px;">今日完整版亮点</div>
+      <div style="font-size:13px;color:#b45309;font-weight:900;margin-bottom:6px;">完整版会补充</div>
       <div style="font-size:14px;line-height:1.82;color:#78350f;margin-bottom:10px;">{h(paid_highlight)}</div>
       <div style="font-size:14px;line-height:1.8;color:#78350f;margin-bottom:8px;">完整版还包含：{h(_lite_paid_feature_summary())}</div>
       <div style="font-size:12px;line-height:1.7;color:#92400e;margin-bottom:12px;">体验说明：{h(_lite_paid_plan_summary())}</div>
       <div style="margin-bottom:10px;">
-        <a href="{h(paid_mailto_url)}" target="_blank" style="display:inline-block;background:#fffbeb;color:#92400e;text-decoration:none;border:1px solid #fcd34d;border-radius:999px;padding:9px 14px;font-size:13px;font-weight:700;margin:0 8px 8px 0;">回复“体验”领取说明</a>
-        <a href="{h(paid_url)}" target="_blank" style="display:inline-block;background:transparent;color:#92400e;text-decoration:none;border:1px solid #fdba74;border-radius:999px;padding:9px 14px;font-size:13px;font-weight:700;margin:0 8px 8px 0;">填写报名表</a>
+        <a href="{h(paid_mailto_url)}" target="_blank" style="display:inline-block;background:#fffbeb;color:#92400e;text-decoration:none;border:1px solid #fcd34d;border-radius:999px;padding:9px 14px;font-size:13px;font-weight:700;margin:0 8px 8px 0;">回复“体验”了解说明</a>
+        <a href="{h(paid_url)}" target="_blank" style="display:inline-block;background:transparent;color:#92400e;text-decoration:none;border:1px solid #fdba74;border-radius:999px;padding:9px 14px;font-size:13px;font-weight:700;margin:0 8px 8px 0;">查看报名表</a>
       </div>
       <div style="font-size:13px;line-height:1.8;color:#92400e;">暂时不参加也没关系，免费简版会继续保留。</div>
     </div>

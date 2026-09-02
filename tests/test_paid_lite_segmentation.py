@@ -170,15 +170,17 @@ def test_render_lite_email_returns_dict_and_keeps_structured_preview() -> None:
     html_body = lite["html_body"]
     body = lite["plain_text"] + html_body
     assert "今日精读文章" in html_body
-    assert ("3步看懂" in html_body) or ("先想 3 个角度" in html_body)
+    assert ("3步看懂" in html_body) or ("思考提示" in html_body)
     assert "今日一题" in html_body
     assert "今日速读" in html_body
-    assert "今日完整版亮点" in html_body
+    assert "完整版会补充" in html_body
     assert "退订" in html_body
     assert "把群众工作做成一张可执行清单" in body
     assert "先解决群众的急难愁盼" in body
-    assert "摸清诉求" in html_body
-    assert "公开协商" in html_body
+    assert "先看题目在问什么对象" in html_body
+    assert "样例：我会先把问题和诉求看清楚" in html_body
+    assert "摸清诉求" not in html_body
+    assert "公开协商" not in html_body
     assert "规范收费先把规则讲清楚" in html_body
     assert "让技术红利真正落到中小主体" in html_body
     assert "mailto:ops@example.com?" in body
@@ -243,12 +245,12 @@ def test_render_lite_email_degrades_gracefully_for_partial_content() -> None:
     body = lite["plain_text"] + html_body
     assert "今日精读文章" in html_body
     assert "今日一题" in html_body
-    assert ("先想 3 个角度" in html_body) or ("先搭作答框架" in html_body)
+    assert "思考提示" in html_body
     assert "今日速读" in html_body
     assert "规范收费要先把规则讲清楚" in body
-    assert "先摸诉求" in body
-    assert "今日完整版亮点" in body
-    assert "今天完整版会补充参考答案、文章框架图、考场转化和金句拆解" in body
+    assert "先摸诉求" not in body
+    assert "完整版会补充" in body
+    assert "完整版会把今天这道题从读题、搭框架到写成答案完整走一遍" in body
 
 
 
