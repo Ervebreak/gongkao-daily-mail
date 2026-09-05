@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 
 EVIDENCE_SCHEMA_VERSION = 1
-FACT_REVIEW_SCHEMA_VERSION = 1
+FACT_REVIEW_SCHEMA_VERSION = 2
 SOURCE_BOUND_PATHS = (
     "featured_article.one_sentence",
     "featured_article.core_viewpoint",
@@ -285,6 +285,24 @@ def candidate_fact_hash(brief: dict[str, Any]) -> str:
     return _sha256_text(_canonical_json(source_bound_candidate_payload(brief)))
 
 
+def _public_candidate_payload(value: Any) -> Any:
+    """Return reader-facing candidate data, excluding internal review/debug state."""
+    if isinstance(value, dict):
+        return {
+            str(key): _public_candidate_payload(item)
+            for key, item in value.items()
+            if not str(key).startswith("_")
+        }
+    if isinstance(value, list):
+        return [_public_candidate_payload(item) for item in value]
+    return value
+
+
+def candidate_content_hash(brief: dict[str, Any]) -> str:
+    """Bind a review to the complete public candidate, including simulations/analysis."""
+    return _sha256_text(_canonical_json(_public_candidate_payload(brief)))
+
+
 def _flatten_text(value: Any) -> str:
     if isinstance(value, dict):
         return " ".join(_flatten_text(item) for item in value.values())
@@ -389,6 +407,7 @@ def build_fact_review(brief: dict[str, Any], *, semantic_review: dict[str, Any] 
         "binding": {
             "source_set_hash": bundle.get("source_set_hash"),
             "candidate_fact_hash": candidate_fact_hash(brief),
+            "candidate_content_hash": candidate_content_hash(brief),
         },
         "checks": {
             "source_evidence_count": len(items),
@@ -406,4 +425,5 @@ def fact_review_binding_is_current(brief: dict[str, Any], review: dict[str, Any]
         binding.get("source_set_hash")
         and binding.get("source_set_hash") == bundle.get("source_set_hash")
         and binding.get("candidate_fact_hash") == candidate_fact_hash(brief)
+        and binding.get("candidate_content_hash") == candidate_content_hash(brief)
     )

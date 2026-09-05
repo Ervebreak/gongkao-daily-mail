@@ -34,7 +34,7 @@ Latest behavior:
 - Selection prompts receive verification status and score only the source article. Six-dimensional details are normalized to the actual runtime total, with source-only basis and score history; writing/repair does not change that score.
 - Writing and all rewrite prompts reuse the selected source evidence. Source-bound summaries/framework/quick-read facts must be traceable; clearly marked simulated question context remains allowed but cannot flow into source summaries.
 - Content review receives verified source paragraphs plus final candidate output. A separate `fact_consistency` quality module blocks missing/incomplete evidence and confirmed scope/recurrence upgrades; deterministic checks are contract guards, not a claim of full semantic accuracy.
-- Fact review binds `source_set_hash` and `candidate_fact_hash`. Nightly candidates persist the evidence/review, and morning recheck rebuilds the binding from the stored snapshot, so edited source/candidate content invalidates the old result without unconditional refetch.
+- Fact review binds `source_set_hash`, source-bound `candidate_fact_hash`, and full public `candidate_content_hash`. Nightly candidates persist the evidence/review, and morning recheck rebuilds the binding from the stored snapshot, so any edited source or reader-facing candidate content invalidates the old result without unconditional refetch.
 - Internal evidence, paragraph IDs, scoring reasons, and debug fields remain outside full/lite rendering and CTA.
 - Existing 75/85 thresholds, two-stage send, subscription behavior, price behavior, and test/send isolation remain unchanged.
 

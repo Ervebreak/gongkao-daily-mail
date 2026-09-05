@@ -6,6 +6,7 @@ from fact_evidence import (
     build_evidence_bundle,
     build_fact_review,
     build_source_evidence,
+    candidate_content_hash,
     candidate_fact_hash,
     fact_review_binding_is_current,
     normalize_selection_scores,
@@ -129,6 +130,11 @@ def test_source_or_candidate_change_invalidates_old_review_binding():
     changed_source = deepcopy(brief)
     changed_source["_source_evidence"]["source_set_hash"] = "different"
     assert not fact_review_binding_is_current(changed_source, review)
+    changed_simulation = deepcopy(brief)
+    changed_simulation["daily_question"]["question"] = "【模拟情境】候选题正文也发生了变化。"
+    assert candidate_fact_hash(changed_simulation) == candidate_fact_hash(brief)
+    assert candidate_content_hash(changed_simulation) != candidate_content_hash(brief)
+    assert not fact_review_binding_is_current(changed_simulation, review)
 
 
 def test_selection_score_uses_detail_sum_and_keeps_history():
@@ -210,9 +216,10 @@ def test_candidate_persists_evidence_and_internal_fields_do_not_render():
     brief["today_three_things"] = {}
     brief["today_takeaway"] = {}
     brief, _ = ensure_brief_schema(brief, "2026-09-06")
-    brief["_fact_review"] = build_fact_review(brief)
     plain = render_plain_text(brief)
     lite = render_lite_email({"brief": brief, "subject": brief["email_subject"]})
+    # Renderers may normalize reader-facing fields; bind only after that final form exists.
+    brief["_fact_review"] = build_fact_review(brief)
     assert "source_set_hash" not in plain
     assert "content_fingerprint" not in plain
     assert "source_set_hash" not in lite["plain_text"]
@@ -230,3 +237,4 @@ def test_candidate_persists_evidence_and_internal_fields_do_not_render():
     )
     assert payload["source_evidence"]["source_set_hash"] == brief["_source_evidence"]["source_set_hash"]
     assert payload["fact_review"]["binding"]["candidate_fact_hash"] == candidate_fact_hash(brief)
+    assert payload["fact_review"]["binding"]["candidate_content_hash"] == candidate_content_hash(brief)

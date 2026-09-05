@@ -17,7 +17,7 @@
 - 每篇入选文章保留标题、来源、日期、URL、抓取时间、正文指纹、段落编号及正文完整性状态。
 - 标题/来源/日期/URL 与正文主题必须对应；正文过短、疑似仅摘要、结尾不完整或样板文字占比过高时有限重抓，仍不能确认则阻断或重选。
 - 夜间候选持久化 `_source_evidence` 与 `_fact_review`；早晨复检优先复用对应正文快照，不无条件重复联网抓取。
-- `_fact_review.binding` 同时绑定 `source_set_hash` 与 `candidate_fact_hash`。任一变化后必须重审，旧 `ok` 不得豁免当前门禁。
+- `_fact_review.binding` 同时绑定 `source_set_hash`、原文约束字段的 `candidate_fact_hash` 与全部读者可见候选的 `candidate_content_hash`。任一变化后必须重审，旧 `ok` 不得豁免当前门禁。
 - 内部证据、评分理由和调试字段不得进入完整版、简版或 CTA。
 
 ## 2. 高风险表达

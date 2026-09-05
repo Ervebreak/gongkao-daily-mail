@@ -6,7 +6,7 @@ from typing import Any
 
 from config import settings
 from llm_client import chat_completion
-from fact_evidence import candidate_fact_hash, evidence_prompt_payload
+from fact_evidence import candidate_content_hash, candidate_fact_hash, evidence_prompt_payload
 
 
 DIMENSION_LIMITS = {
@@ -423,6 +423,7 @@ def _build_review_prompt(brief: dict[str, Any], plain_text: str, html_body: str)
         "review_binding": {
             "source_set_hash": (brief.get("_source_evidence") or {}).get("source_set_hash") if isinstance(brief.get("_source_evidence"), dict) else None,
             "candidate_fact_hash": candidate_fact_hash(brief),
+            "candidate_content_hash": candidate_content_hash(brief),
         },
         "email_subject": brief.get("email_subject"),
         "today_theme": brief.get("today_theme"),
@@ -478,6 +479,7 @@ def evaluate_content_quality(brief: dict[str, Any], plain_text: str, html_body: 
             **dict(result.get("checks") or {}),
             "source_set_hash": (brief.get("_source_evidence") or {}).get("source_set_hash") if isinstance(brief.get("_source_evidence"), dict) else None,
             "candidate_fact_hash": candidate_fact_hash(brief),
+            "candidate_content_hash": candidate_content_hash(brief),
             "mock_proves_contract_only": True,
         }
         return result
@@ -503,6 +505,7 @@ def evaluate_content_quality(brief: dict[str, Any], plain_text: str, html_body: 
                 **dict(result.get("checks") or {}),
                 "source_set_hash": (brief.get("_source_evidence") or {}).get("source_set_hash") if isinstance(brief.get("_source_evidence"), dict) else None,
                 "candidate_fact_hash": candidate_fact_hash(brief),
+                "candidate_content_hash": candidate_content_hash(brief),
                 "reviewed_against_source_evidence": True,
             }
             return result
