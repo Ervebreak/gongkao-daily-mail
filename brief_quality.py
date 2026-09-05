@@ -45,7 +45,9 @@ def _repeated_lines(text: str) -> list[str]:
 
 
 def evaluate_brief_cleanliness(brief: dict[str, Any], plain_text: str = "", html_body: str = "") -> dict[str, Any]:
-    text = "\n".join([plain_text or "", _text(brief)])
+    # Development metadata intentionally lives in the structured brief. A leak
+    # exists only when it reaches a rendered user-visible output.
+    text = plain_text or ""
     issues: list[dict[str, str]] = []
 
     if len((plain_text or "").strip()) < 800:

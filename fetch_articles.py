@@ -19,6 +19,7 @@ from article_filter import Article, clean_text, enrich_and_filter_with_stats
 from config import settings
 from history import build_history_index, load_history
 from history import normalize_title
+from fact_evidence import build_source_evidence
 
 
 TZ = dt.timezone(dt.timedelta(hours=8))
@@ -357,27 +358,42 @@ def extract_people_daily_database_paragraphs(soup: BeautifulSoup) -> list[str]:
 
 
 def fetch_article(article: Article) -> Article | None:
-    try:
-        html = fetch_html(article.url)
-    except Exception:
-        return None
-    soup = BeautifulSoup(html, "html.parser")
-    heading = soup.select_one(".div_detail .title") if "data.people.com.cn/rmrb/" in article.url else None
-    heading = heading or soup.find(["h1", "h2"])
-    if heading:
-        title = clean_text(heading.get_text(" ", strip=True))
-        if title and not is_bad_listing_title(title):
-            article.title = title
-    if is_bad_listing_title(article.title):
-        return None
-    if "data.people.com.cn/rmrb/" in article.url:
-        article.body = extract_people_daily_database_paragraphs(soup)
-    else:
-        article.body = extract_paragraphs(soup)
-    if not article.body:
-        return None
-    article.date = article.date or page_date(soup)
-    return article
+    listing_title = article.title
+    last_article: Article | None = None
+    for attempt in range(1, 3):
+        try:
+            html = fetch_html(article.url)
+        except Exception:
+            continue
+        soup = BeautifulSoup(html, "html.parser")
+        heading = soup.select_one(".div_detail .title") if "data.people.com.cn/rmrb/" in article.url else None
+        heading = heading or soup.find(["h1", "h2"])
+        page_title = clean_text(heading.get_text(" ", strip=True)) if heading else ""
+        if page_title and not is_bad_listing_title(page_title):
+            article.title = page_title
+        if is_bad_listing_title(article.title):
+            return None
+        if "data.people.com.cn/rmrb/" in article.url:
+            article.body = extract_people_daily_database_paragraphs(soup)
+        else:
+            article.body = extract_paragraphs(soup)
+        article.date = article.date or page_date(soup)
+        article.evidence = build_source_evidence(
+            title=article.title,
+            source=article.source,
+            published_at=article.published_at,
+            url=article.url,
+            paragraphs=article.body,
+            listing_title=listing_title,
+            page_title=page_title or article.title,
+            fetch_attempts=attempt,
+        )
+        last_article = article
+        if article.evidence.get("verification_status") == "verified":
+            return article
+    # An incomplete response is retained only for diagnostics. It must not enter
+    # the selection pool as if a title/summary or HTTP 200 proved full text.
+    return None if last_article is None or last_article.evidence.get("verification_status") != "verified" else last_article
 
 
 def is_recent(article: Article, lookback_days: int) -> bool:
@@ -552,12 +568,24 @@ def get_candidate_articles_with_stats() -> tuple[list[Article], dict[str, object
     history_index["manual_block_urls"] = set(settings.blocked_urls)
     if settings.run_mode == "test":
         raw = load_mock_articles()
+        for article in raw:
+            article.evidence = build_source_evidence(
+                title=article.title,
+                source=article.source,
+                published_at=article.published_at,
+                url=article.url,
+                paragraphs=article.body,
+            )
         fetch_status = {"mock": {"called": True, "found": len(raw), "status": "ok"}}
     else:
         raw, fetch_status = fetch_prod_articles()
         if not raw:
-            raw = load_mock_articles()
-            fetch_status["fallback"] = {"called": True, "found": len(raw), "status": "mock_articles_used"}
+            fetch_status["fallback"] = {
+                "called": False,
+                "found": 0,
+                "status": "blocked_no_verified_full_text",
+                "reason": "生产候选不得用样例标题/摘要替代未核验全文。",
+            }
     articles, stats = enrich_and_filter_with_stats(raw, settings.llm_selection_pool_max, history_index)
     stats.update(history_meta)
     stats["output_max_articles"] = settings.max_articles

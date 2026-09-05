@@ -6,6 +6,7 @@ from pathlib import Path
 from article_filter import Article
 from config import settings
 from stage3_structured_constraints import STRUCTURED_FIELD_RULES_V1
+from fact_evidence import article_evidence, build_evidence_bundle, evidence_prompt_payload
 
 
 SYSTEM_PROMPT = """
@@ -316,6 +317,7 @@ def compact_article(article: Article) -> dict[str, object]:
     """Candidate-stage article payload: broad but token-controlled."""
     body_limit = max(1, settings.llm_article_body_paragraphs)
     paragraph_chars = max(80, settings.llm_article_paragraph_chars)
+    evidence = article_evidence(article)
     return {
         "title": article.title,
         "source": article.source,
@@ -326,6 +328,14 @@ def compact_article(article: Article) -> dict[str, object]:
         "themes": article.themes,
         "score": article.score,
         "body": [_clip_text(p, paragraph_chars) for p in article.body[:body_limit]],
+        "source_evidence": {
+            "verification_status": evidence.get("verification_status"),
+            "content_fingerprint": evidence.get("content_fingerprint"),
+            "paragraph_count": evidence.get("paragraph_count"),
+            "body_chars": evidence.get("body_chars"),
+            "limitations": evidence.get("limitations") or [],
+        },
+        "paragraph_ids": [item.get("id") for item in (evidence.get("paragraphs") or [])[:body_limit]],
     }
 
 
@@ -363,6 +373,15 @@ def full_article_for_generation(article: Article, role: str = "candidate") -> di
         "themes": article.themes,
         "score": article.score,
         "body": _clip_paragraphs_by_total_chars(article.body, max_chars),
+        "source_evidence": {
+            key: value
+            for key, value in article_evidence(article).items()
+            if key != "paragraphs"
+        },
+        "fact_basis": [
+            {"id": item.get("id"), "text": item.get("text")}
+            for item in article_evidence(article).get("paragraphs", [])
+        ],
     }
 
 
@@ -413,6 +432,14 @@ def build_selection_prompt(articles: list[Article], today: str, selection_contex
                     "material_value": "素材提炼价值，0-10",
                     "authority_timeliness": "来源权威与时效，0-10"
                 },
+                "score_evidence": {
+                    "exam_conversion": "对应原文段落编号、证据与局限",
+                    "problem_awareness": "对应原文段落编号、证据与局限",
+                    "scenario_specificity": "对应原文段落编号、证据与局限",
+                    "contradiction_tension": "对应原文段落编号、证据与局限",
+                    "material_value": "对应原文段落编号、证据与局限",
+                    "authority_timeliness": "对应原文元数据、证据与局限"
+                },
                 "suitable_exam_types": ["申论对策题/申论综合分析题/机关实务题/结构化面试等"],
                 "possible_question": "根据主线文章可自然生成的一道具体、场景化考题",
                 "reason": "为什么适合做今日精读，80字以内",
@@ -435,7 +462,10 @@ def build_selection_prompt(articles: list[Article], today: str, selection_contex
             "总分低于75分的文章原则上不得作为 featured；若候选池整体较弱必须选择，应在 risk_note 中说明。",
             "如果最近3天主题或来源重复，应降权；除非单篇考题转化价值明显更高，并在 selection_notes 中说明。",
             "quick_reads 最多选择2篇，尽量与主线来源或主题有所区分。",
-            "只允许从输入文章中选择，不得虚构标题、URL或来源。"
+            "只允许从输入文章中选择，不得虚构标题、URL或来源。",
+            "评分只评价输入原文本身；不得用尚未生成的模拟题、参考答案、补写措施或表达质量给文章加分。",
+            "六维分项必须有原文证据和局限，total_score 必须等于六项之和。写作与表达修复不得改变该分数。",
+            "source_evidence.verification_status 不是 verified 的文章不得作为 featured；速读也必须有足够正文支持概括。",
         ],
         "articles": [compact_article(article) for article in articles],
     }
@@ -467,6 +497,7 @@ def build_final_generation_prompt(
         "selection_result": selection_result or {},
         "question_bank_context": question_bank_context or {},
         "articles": articles_payload,
+        "source_evidence": evidence_prompt_payload(build_evidence_bundle(selected_articles)),
     }
     return f"""
 请基于已选文章生成一封“公考/考编每日晨读邮件”的 JSON。
@@ -477,6 +508,10 @@ def build_final_generation_prompt(
 3. featured_article 的今日精读、文章框架图、今日一题、今日可带走，必须基于更完整正文生成，不要只根据开头脑补。
 4. quick_reads 最多 2 篇，只做素材价值提示。
 5. 输出必须是合法 JSON，必须符合 schema 中主要字段。
+6. source_evidence 是内部原文依据：原文概括、结构图和速读事实只能使用其中可定位段落；事实、作者判断与考试分析要分开。
+7. 今日一题可新增合理的身份、地点和冲突，但题干必须明确为模拟情境；模拟情节不得回流到原文概括、结构图或速读事实。
+8. 不得把“可能”改成“已经”、把“部分”扩大为“普遍”，也不得把“问题仍存在”改成“治理后复发/回潮”。
+9. 内部 source_evidence、段落编号、评分理由和调试字段不得写入读者可见字段。
 
 整体目标：
 - 内容要实，关键模块可以适当充实；但要删重复、保重点、支持手机端快速扫读。

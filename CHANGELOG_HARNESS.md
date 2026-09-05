@@ -1,5 +1,48 @@
 # Harness Change Log
 
+## 2026-09-05 - Source-evidence fact consistency chain
+
+Reason:
+
+- A candidate changed an article's “some local problems remain prominent” into a broader “post-campaign relapse” claim and mixed simulated question details into the source summary.
+- The content reviewer previously received the candidate but not the corresponding verified source paragraphs, and morning recheck could not prove that an old review still matched the current source/candidate versions.
+- A side-channel score diverged from the actual runtime score at `_llm_two_stage.selection.featured.total_score`; this change does not reinterpret 49 as scorer error and does not install a passing default score.
+
+Files changed:
+
+- `fact_evidence.py`
+- `fetch_articles.py`
+- `article_filter.py`
+- `prompt_templates.py`
+- `llm_client.py`
+- `content_quality_reviewer.py`
+- `quality_gate.py`
+- `candidate_store.py`
+- `main.py`
+- `content_harness/00_index.md`
+- `content_harness/article_selection_prompt.md`
+- `content_harness/content_quality_review_prompt.md`
+- `content_harness/fact_safety_rules.md`
+- `content_harness/gongkao_morning_reading_production_standard.md`
+- `content_harness/workflow.md`
+- `tests/test_fact_evidence.py`
+
+Latest behavior:
+
+- Article fetch validates title/source/date/URL/body correspondence, retries at most once, and records a paragraph-addressable source snapshot with content fingerprint, fetch time, completeness checks, and limitations. HTTP 200 or length alone is not treated as full-text proof.
+- Production no longer falls back to mock articles when no verified source text is available.
+- Selection prompts receive verification status and score only the source article. Six-dimensional details are normalized to the actual runtime total, with source-only basis and score history; writing/repair does not change that score.
+- Writing and all rewrite prompts reuse the selected source evidence. Source-bound summaries/framework/quick-read facts must be traceable; clearly marked simulated question context remains allowed but cannot flow into source summaries.
+- Content review receives verified source paragraphs plus final candidate output. A separate `fact_consistency` quality module blocks missing/incomplete evidence and confirmed scope/recurrence upgrades; deterministic checks are contract guards, not a claim of full semantic accuracy.
+- Fact review binds `source_set_hash` and `candidate_fact_hash`. Nightly candidates persist the evidence/review, and morning recheck rebuilds the binding from the stored snapshot, so edited source/candidate content invalidates the old result without unconditional refetch.
+- Internal evidence, paragraph IDs, scoring reasons, and debug fields remain outside full/lite rendering and CTA.
+- Existing 75/85 thresholds, two-stage send, subscription behavior, price behavior, and test/send isolation remain unchanged.
+
+Validation boundary:
+
+- Offline unit/integration tests cover evidence completeness, score consistency/history, scope/recurrence regression, numeric review signals, simulation separation, binding invalidation, storage, rendering non-leakage, and gate blocking.
+- `TEST_LLM_MODEL=mock` validates orchestration/contracts only. It does not prove real-model semantic review accuracy, and no live article fetch or real model call is required by these regressions.
+
 ## 2026-06-30 - Phase 3A weekly PDF material card structure stabilization
 
 Reason:

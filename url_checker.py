@@ -4,6 +4,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import requests
+from config import settings
 
 
 RISKY_HOSTS = {
@@ -20,6 +21,9 @@ def classify_url(url: str) -> dict[str, str]:
     host = parsed.netloc.lower()
     if not parsed.scheme or not host:
         return {"url_status": "invalid", "url_status_reason": "invalid url format"}
+
+    if settings.run_mode == "test":
+        return {"url_status": "valid", "url_status_reason": "network check skipped in RUN_MODE=test"}
 
     try:
         response = requests.head(

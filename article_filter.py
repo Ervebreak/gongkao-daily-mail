@@ -37,6 +37,7 @@ class Article:
     tags: list[str] = field(default_factory=list)
     themes: list[str] = field(default_factory=list)
     score: int = 0
+    evidence: dict[str, object] = field(default_factory=dict)
 
     @property
     def text(self) -> str:
@@ -56,6 +57,7 @@ class Article:
             "tags": self.tags,
             "themes": self.themes,
             "score": self.score,
+            "source_evidence": self.evidence,
         }
 
 

@@ -164,6 +164,8 @@ def build_candidate_payload(
         "article_stats": article_stats,
         "final_selection": final_selection,
         "llm_trace_summary": llm_trace_summary or {},
+        "source_evidence": brief.get("_source_evidence") if isinstance(brief.get("_source_evidence"), dict) else {},
+        "fact_review": brief.get("_fact_review") if isinstance(brief.get("_fact_review"), dict) else {},
     }
     return normalize_candidate_quality_state(payload)
 

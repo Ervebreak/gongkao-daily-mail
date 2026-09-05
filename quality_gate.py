@@ -18,6 +18,7 @@ MODULE_LABELS = {
     "content_risk": "内容风险",
     "selection": "选题质量",
     "content_quality": "正文内容质量",
+    "fact_consistency": "原文事实一致性",
     "cleanliness": "PreSend 清洁度",
     "pre_send_cleanliness": "PreSend 清洁度",
     "policy_coordinate": "政策坐标",
@@ -141,6 +142,14 @@ def evaluate_selection_quality(brief: dict[str, Any]) -> dict[str, Any]:
         total_score = int(score)
     except Exception:
         total_score = -1
+    score_detail = featured.get("score_detail") if isinstance(featured.get("score_detail"), dict) else {}
+    score_detail_total = 0
+    score_detail_complete = True
+    for key in ("exam_conversion", "problem_awareness", "scenario_specificity", "contradiction_tension", "material_value", "authority_timeliness"):
+        try:
+            score_detail_total += int(score_detail[key])
+        except Exception:
+            score_detail_complete = False
 
     featured_title, featured_url = _selection_title_url(featured)
     featured_metadata_present = bool(featured_title and featured_url)
@@ -182,6 +191,12 @@ def evaluate_selection_quality(brief: dict[str, Any]) -> dict[str, Any]:
             "severity": "high",
             "code": "weak_featured_selection",
             "message": f"\u4e3b\u7ebf\u6587\u7ae0\u9009\u9898\u5206\u8fc7\u4f4e\uff1a{total_score}\uff0c\u5e94\u91cd\u65b0\u9009\u9898\u6216\u8fdb\u5165\u4eba\u5de5\u590d\u6838\u3002",
+        })
+    if not selection_metadata_missing and (not score_detail_complete or score_detail_total != total_score):
+        issues.append({
+            "severity": "high",
+            "code": "selection_score_detail_mismatch",
+            "message": f"主线文章有效总分 {total_score} 与六维明细 {score_detail_total if score_detail_complete else '不完整'} 不一致；须回到原文证据修正实际读取字段并留痕，不得靠旁路分数放行。",
         })
 
     sensitive_surface = _selection_sensitive_surface(brief, effective_featured, article)
@@ -234,6 +249,8 @@ def evaluate_selection_quality(brief: dict[str, Any]) -> dict[str, Any]:
             "effective_featured_title": effective_featured_title,
             "effective_featured_url": effective_featured_url,
             "effective_selection_score": (total_score if total_score >= 0 else None),
+            "score_detail_total": score_detail_total if score_detail_complete else None,
+            "score_detail_complete": score_detail_complete,
             "score_source": score_source,
             "featured_title": effective_featured_title,
         },
@@ -289,6 +306,7 @@ def build_quality_gate(
     content_risk_quality: dict[str, Any] | None = None,
     selection_quality: dict[str, Any] | None = None,
     content_quality: dict[str, Any] | None = None,
+    fact_consistency_quality: dict[str, Any] | None = None,
     cleanliness_quality: dict[str, Any] | None = None,
     policy_coordinate_quality: dict[str, Any] | None = None,
     subject_quality: dict[str, Any] | None = None,
@@ -324,6 +342,7 @@ def build_quality_gate(
         "quick_read_url_not_valid",
         "quick_reads_all_news_summary",
         "weak_featured_selection",
+        "selection_score_detail_mismatch",
         "missing_final_selection",
         "sensitive_topic_needs_review",
         "dev_marker_repeated",
@@ -343,6 +362,10 @@ def build_quality_gate(
         "unsupported_claims",
         "mainline_incoherent",
         "content_quality_reviewer_error",
+        "source_evidence_missing",
+        "source_evidence_incomplete",
+        "fact_review_stale",
+        "unsupported_scope_and_recurrence_upgrade",
         "duplicate_label_prefix",
         "leading_colon",
         "rewritable_expression_label_prefix",
@@ -377,6 +400,7 @@ def build_quality_gate(
         ("content_risk", content_risk_quality or {}),
         ("selection", selection_quality or {}),
         ("content_quality", content_quality or {}),
+        ("fact_consistency", fact_consistency_quality or {}),
         ("cleanliness", cleanliness_quality or {}),
         ("policy_coordinate", policy_coordinate_quality or {}),
         ("subject_quality", subject_quality or {}),
@@ -447,6 +471,7 @@ def evaluate_all_quality(
     from reading_guide_quality import evaluate_reading_guide_quality
     from subject_quality import evaluate_subject_quality
     from takeaway_quality import evaluate_takeaway
+    from fact_evidence import build_fact_review
 
     if selection_quality is None:
         selection_quality = {}
@@ -454,6 +479,9 @@ def evaluate_all_quality(
         cleanliness_quality = {}
     lite_payload = latest_json if isinstance(latest_json, dict) else {"brief": brief}
     lite_rendered = render_lite_email(lite_payload)
+    content_quality = evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation)
+    fact_consistency = build_fact_review(brief, semantic_review=content_quality)
+    brief["_fact_review"] = fact_consistency
     return {
         "daily_question": evaluate_daily_question(brief),
         "framework_map": evaluate_framework_map(brief),
@@ -465,7 +493,8 @@ def evaluate_all_quality(
         "module_redundancy": evaluate_module_redundancy(brief),
         "content_risk": evaluate_content_risks(brief, plain_text, html_body),
         "selection": selection_quality,
-        "content_quality": evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation),
+        "content_quality": content_quality,
+        "fact_consistency": fact_consistency,
         "cleanliness": cleanliness_quality,
         "policy_coordinate": evaluate_policy_coordinate_quality(brief, plain_text, html_body),
         "subject_quality": evaluate_subject_quality(brief),
@@ -487,6 +516,7 @@ def build_gate_from_quality_map(quality: dict[str, Any], plain_text: str = "", h
         quality.get("content_risk", {}),
         quality.get("selection", {}),
         quality.get("content_quality", {}),
+        quality.get("fact_consistency", {}),
         quality.get("cleanliness", {}),
         quality.get("policy_coordinate", {}),
         quality.get("subject_quality", {}),
