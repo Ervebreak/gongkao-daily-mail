@@ -29,7 +29,7 @@
 | `quality_checks.md` | 定义什么要检查、如何判定、失败后怎么处理 |
 | `runtime_prompt_rules.md` | 定义运行时 Prompt 的精简规则 |
 | `display_rules.md` | 定义邮件展示、模块边界、标签泄漏和三版本同步规则 |
-| `fact_safety_rules.md` | 定义时政常识、部门/文件/政策事实的安全边界 |
+| `fact_safety_rules.md` | 定义原文证据、版本绑定，以及时政常识、部门/文件/政策事实的安全边界 |
 | `deployment_rules.md` | 定义发布 zip 和阿里云 FC 部署前依赖自检 |
 | `p0_repair_workflow.md` | 定义 P0 聚合、模块修复、兜底和 blocked case 沉淀流程 |
 | `article_selection_prompt.md` | 定义选文固定 Prompt：考题转化度、问题意识、场景具体度、矛盾张力、降权规则和输出字段 |
@@ -142,6 +142,8 @@
 
 - `prompt_templates.py`
 - `takeaway_quality.py`
+- `fact_evidence.py`
+- `content_quality_reviewer.py`
 - `scripts/validate_daily_brief.py`
 
 ### 速读考试价值

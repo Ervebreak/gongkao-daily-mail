@@ -16,6 +16,7 @@ from article_filter import Article
 from config import settings
 from lite_paid_cta import build_lite_paid_cta_prompt, fallback_lite_paid_cta_payload, finalize_lite_paid_cta_payload
 from quick_reads_quality import evaluate_quick_reads
+from fact_evidence import article_evidence, build_evidence_bundle, normalize_selection_scores
 from question_quality import (
     compress_daily_question_breaking_hint,
     detect_daily_question_type_mode,
@@ -177,7 +178,7 @@ def mock_brief(articles: list[Article], today: str) -> dict[str, Any]:
     featured = articles[0]
     quick = articles[1:4]
     themes = " / ".join(featured.themes[:3]) if featured.themes else "基层治理"
-    return {
+    brief = {
         "email_subject": f"公考晨读 {today}",
         "date": today,
         "today_theme": themes,
@@ -225,7 +226,7 @@ def mock_brief(articles: list[Article], today: str) -> dict[str, Any]:
             "memory_sentence": "常识积累要同时记住概念、政策背景和现实应用场景。",
         },
         "daily_question": {
-            "question": "假如你是街道工作人员，辖区正在推进一项基层治理整改工作，但部分群众认为只是“一阵风”，基层干部也反映人手不足。领导让你参与推进，你会重点做好哪些工作？",
+            "question": "【模拟情境】假如你是街道工作人员，辖区推进基层治理整改时出现群众质疑和人手不足问题。领导让你参与推进，请说明你将如何做好沟通、协调和落实工作？",
             "question_type": "申论对策题",
             "exam_focus": "这道题表面问工作推进，本质考察群众沟通、资源统筹和政策落实能力。",
             "breaking_direction": "先回应群众疑虑和基层压力，再从解释沟通、责任分工、过程反馈和长效机制展开。",
@@ -253,6 +254,8 @@ def mock_brief(articles: list[Article], today: str) -> dict[str, Any]:
             "use_scenarios": ["申论", "面试", "公基", "行测常识"],
         },
     }
+    brief["_source_evidence"] = build_evidence_bundle([featured, *quick])
+    return brief
 
 
 def _article_key(article: Article) -> str:
@@ -1126,12 +1129,20 @@ def rewrite_failed_modules_once(
 def generate_brief_two_stage(articles: list[Article], today: str, test_mode: bool = False, selection_context: dict[str, Any] | None = None) -> dict[str, Any]:
     """Two-stage generation: select articles first, then generate with fuller featured article text."""
     selection_prompt = build_selection_prompt(articles, today, selection_context=selection_context)
-    selection = _call_with_fallback(selection_prompt, test_mode, stage="selection")
+    raw_selection = _call_with_fallback(selection_prompt, test_mode, stage="selection")
+    raw_featured = raw_selection.get("featured") if isinstance(raw_selection.get("featured"), dict) else {}
+    score_article = _find_article_by_selection(articles, raw_featured)
+    selection = normalize_selection_scores(
+        raw_selection,
+        reason="initial_selection_from_verified_source",
+        evidence_fingerprint=str(article_evidence(score_article).get("content_fingerprint") or "") if score_article else "",
+    )
     selected_articles = _resolve_selected_articles(articles, selection)
     featured_article = selected_articles[0] if selected_articles else None
     question_bank_refs, question_bank_meta, question_bank_context = _question_bank_context_for_article(featured_article)
     final_prompt = build_final_generation_prompt(selected_articles, today, selection, question_bank_context=question_bank_context)
     brief = _call_with_fallback(final_prompt, test_mode, stage="writing", contract=True)
+    brief["_source_evidence"] = build_evidence_bundle(selected_articles)
     # Preserve selection diagnostics for logging/debug; ensure_brief_schema will ignore unknown fields if needed.
     brief.setdefault("_llm_two_stage", {})
     if isinstance(brief.get("_llm_two_stage"), dict):
@@ -1187,6 +1198,7 @@ def generate_brief(articles: list[Article], today: str, test_mode: bool = False,
         question_bank_context=question_bank_context,
     )
     brief = _call_with_fallback(prompt, test_mode, stage="writing")
+    brief["_source_evidence"] = build_evidence_bundle(articles[:3])
     brief["_question_bank"] = {
         **question_bank_meta,
         "question_bank_refs": question_bank_refs,

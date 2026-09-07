@@ -306,6 +306,7 @@ def build_quality_gate(
     content_risk_quality: dict[str, Any] | None = None,
     selection_quality: dict[str, Any] | None = None,
     content_quality: dict[str, Any] | None = None,
+    fact_consistency_quality: dict[str, Any] | None = None,
     cleanliness_quality: dict[str, Any] | None = None,
     policy_coordinate_quality: dict[str, Any] | None = None,
     subject_quality: dict[str, Any] | None = None,
@@ -325,6 +326,7 @@ def build_quality_gate(
         content_risk_quality,
         selection_quality,
         content_quality,
+        fact_consistency_quality,
         cleanliness_quality,
         policy_coordinate_quality,
         subject_quality,
@@ -538,6 +540,9 @@ def summarize_final_selection(brief: dict[str, Any]) -> dict[str, Any]:
         return str(value) if value else ""
 
     featured = brief.get("featured_article", {})
+    two_stage = brief.get("_llm_two_stage") if isinstance(brief.get("_llm_two_stage"), dict) else {}
+    selection = two_stage.get("selection") if isinstance(two_stage.get("selection"), dict) else {}
+    selected_featured = selection.get("featured") if isinstance(selection.get("featured"), dict) else {}
     quick_reads = brief.get("quick_reads", [])
     sources = [scalar_text(featured.get("source"))] + [scalar_text(item.get("source")) for item in quick_reads]
     themes = [scalar_text(featured.get("theme"))] + [scalar_text(item.get("theme")) for item in quick_reads]
@@ -550,6 +555,10 @@ def summarize_final_selection(brief: dict[str, Any]) -> dict[str, Any]:
             "theme": scalar_text(featured.get("theme")),
             "published_at": featured.get("published_at"),
             "url": featured.get("url"),
+            "total_score": selected_featured.get("total_score"),
+            "score_detail": selected_featured.get("score_detail") or {},
+            "score_history": selected_featured.get("score_history") or [],
+            "score_source": selected_featured.get("score_source") or "",
         },
         "quick_reads": [
             {
@@ -3749,6 +3758,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
             "content_risk": content_risk_quality,
             "selection": selection_quality,
             "content_quality": content_quality,
+            "fact_consistency": quality_map.get("fact_consistency", {}),
             "cleanliness": cleanliness_quality,
             "policy_coordinate": quality_map.get("policy_coordinate", {}),
             "subject_quality": quality_map.get("subject_quality", {}),
@@ -3836,6 +3846,8 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
         candidate_payload["question_bank_source"] = question_bank_meta.get("question_bank_source")
         candidate_payload["question_bank_refs"] = question_bank_meta.get("question_bank_refs") or []
         candidate_payload["question_bank_warnings"] = question_bank_meta.get("question_bank_warnings") or []
+        candidate_payload["source_evidence"] = brief.get("_source_evidence") or {}
+        candidate_payload["fact_review"] = brief.get("_fact_review") or quality_map.get("fact_consistency") or {}
         candidate_save_result = save_candidate(candidate_payload)
         logger.info("candidate saved", **candidate_save_result, quality_gate=quality_gate)
         if quality_gate.get("overall") == "fail":

@@ -6,6 +6,7 @@ from typing import Any
 
 from config import settings
 from llm_client import chat_completion
+from fact_evidence import candidate_content_hash, candidate_fact_hash, evidence_prompt_payload
 
 
 DIMENSION_LIMITS = {
@@ -157,6 +158,9 @@ def _issue_from_raw(raw: Any, *, severity: str, fallback_code: str) -> dict[str,
             issue["bad_text"] = str(raw.get("bad_text")).strip()
         if raw.get("field"):
             issue["field"] = str(raw.get("field")).strip()
+        for key in ("candidate_claim", "source_locator", "judgment", "repair_target"):
+            if raw.get(key):
+                issue[key] = str(raw.get(key)).strip()
         return issue
     text = str(raw or "").strip()
     return {"severity": severity, "code": fallback_code, "message": text or fallback_code}
@@ -246,6 +250,27 @@ def _semantic_truncation_targets(raw: dict[str, Any], issues: list[dict[str, Any
         if not isinstance(issue, dict):
             continue
         code = str(issue.get("code") or "").strip()
+        if code == "truncation_error":
+            message = str(issue.get("message") or "") + " " + str((raw.get("raw_review") or {}).get("notes") if isinstance(raw.get("raw_review"), dict) else "")
+            inferred = {
+                "original_reading_focus": "brief.featured_article.original_reading_focus",
+                "quick_reads[0]": "brief.quick_reads[0].one_sentence",
+                "quick_reads[1]": "brief.quick_reads[1].one_sentence",
+                "today_takeaway.framework": "brief.today_takeaway.framework",
+            }
+            for marker, inferred_field in inferred.items():
+                if marker not in message:
+                    continue
+                targets.append({
+                    "field": inferred_field,
+                    "module": inferred_field.split(".")[1],
+                    "issue_code": code,
+                    "reason": str(issue.get("message") or code).strip() or code,
+                    "action": "Rewrite this exact field into a complete sentence without adding source facts, then rerender and recheck every output variant.",
+                    "severity": "high",
+                    "auto_fixable": True,
+                })
+            continue
         if code not in {"text_truncation", "truncated_takeaway", "expression_truncated"}:
             continue
         field = str(issue.get("field") or "").strip()
@@ -392,6 +417,14 @@ def _build_review_prompt(brief: dict[str, Any], plain_text: str, html_body: str)
     question = brief.get("daily_question") if isinstance(brief.get("daily_question"), dict) else {}
     takeaway = brief.get("today_takeaway") if isinstance(brief.get("today_takeaway"), dict) else {}
     payload = {
+        "source_evidence": evidence_prompt_payload(
+            brief.get("_source_evidence") if isinstance(brief.get("_source_evidence"), dict) else {}
+        ),
+        "review_binding": {
+            "source_set_hash": (brief.get("_source_evidence") or {}).get("source_set_hash") if isinstance(brief.get("_source_evidence"), dict) else None,
+            "candidate_fact_hash": candidate_fact_hash(brief),
+            "candidate_content_hash": candidate_content_hash(brief),
+        },
         "email_subject": brief.get("email_subject"),
         "today_theme": brief.get("today_theme"),
         "today_focus": brief.get("today_focus"),
@@ -417,7 +450,7 @@ def _build_review_prompt(brief: dict[str, Any], plain_text: str, html_body: str)
     }
     return (
         _load_prompt_template()
-        + "\n\n请审核以下最终邮件内容，只输出合法 JSON，不要输出解释文字。html_excerpt_first_6000 是邮件头部截取片段，不能仅因该字段末尾不闭合就判定实际 HTML 截断；如需判断完整性，请结合 html_tail_2000 和 html_complete：\n"
+        + "\n\n请将 source_evidence 中的带段落编号原文与候选逐项对照，只输出合法 JSON。不得仅相信候选自行生成的摘要。重点检查主体、时间、数字对象及单位、范围、确定性、因果和新增事件；特别阻止‘可能→已经’、‘部分→普遍’、‘问题仍存在→治理后复发’。合法且明确标注的模拟题可以保留，但模拟情节不得进入原文概括或结构图。每个事实报警写明 field、candidate_claim、source_locator、judgment、repair_target。不确定项也必须标为待核验。html_excerpt_first_6000 是邮件头部截取片段，不能仅因该字段末尾不闭合就判定实际 HTML 截断；如需判断完整性，请结合 html_tail_2000 和 html_complete：\n"
         + json.dumps(payload, ensure_ascii=False, default=str)
     )
 
@@ -441,7 +474,15 @@ def evaluate_content_quality(brief: dict[str, Any], plain_text: str, html_body: 
 
     models = _model_candidates(test_mode)
     if test_mode and any(model.lower() == "mock" for model in models):
-        return _mock_content_quality()
+        result = _mock_content_quality()
+        result["checks"] = {
+            **dict(result.get("checks") or {}),
+            "source_set_hash": (brief.get("_source_evidence") or {}).get("source_set_hash") if isinstance(brief.get("_source_evidence"), dict) else None,
+            "candidate_fact_hash": candidate_fact_hash(brief),
+            "candidate_content_hash": candidate_content_hash(brief),
+            "mock_proves_contract_only": True,
+        }
+        return result
     prompt = _build_review_prompt(brief, plain_text, html_body)
     errors: list[str] = []
     for attempt, model in enumerate(models, start=1):
@@ -459,7 +500,15 @@ def evaluate_content_quality(brief: dict[str, Any], plain_text: str, html_body: 
                     "contract": False,
                 },
             )
-            return _normalize_review(raw, model=model)
+            result = _normalize_review(raw, model=model)
+            result["checks"] = {
+                **dict(result.get("checks") or {}),
+                "source_set_hash": (brief.get("_source_evidence") or {}).get("source_set_hash") if isinstance(brief.get("_source_evidence"), dict) else None,
+                "candidate_fact_hash": candidate_fact_hash(brief),
+                "candidate_content_hash": candidate_content_hash(brief),
+                "reviewed_against_source_evidence": True,
+            }
+            return result
         except Exception as exc:
             errors.append(f"{model}: {exc}")
 

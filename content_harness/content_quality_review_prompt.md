@@ -84,6 +84,11 @@ rewrite_targets 用来驱动程序自动局部改稿。每个 target 必须包�
 - low_information_gain：用户读完只得到泛泛口号，没有新动作、新框架或新表达。
 
 判定规则：
+- 必须直接读取输入中的 source_evidence 原文段落，与候选逐项对照；候选自行生成的摘要、事实依据或评分理由不能替代原文。
+- 检查主体、时间、数字对象与单位、范围、确定性、因果和新增事件，重点阻止“可能→已经”“部分→普遍”“问题仍存在→治理后复发”。
+- 题干新增身份、地点、冲突可以作为明确的模拟情境存在；同样内容若进入一句话看懂、原文概括、结构图或速读事实，则按 unsupported_claims 处理。
+- 事实报警必须尽量提供 field、candidate_claim、source_locator、judgment、repair_target；不能确定时明确标为待核验，不得默认为通过。
+- source_evidence 缺失或 verification_status 不是 verified 时，不得判可发。
 - overall_score < 75，不建议发送，并在 p0_issues 中输出 code: low_content_quality。
 - user_safety < 10，不得发送，并输出 code: low_user_safety。
 - exam_value < 14，不得发送，并输出 code: low_exam_value。
