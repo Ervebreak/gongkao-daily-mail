@@ -23,7 +23,7 @@ jobs:
         shell: pwsh
         run: |
           python -m py_compile main.py config.py scripts\validate_daily_brief.py
-          python -m py_compile weekly_report.py weekly_typst_export.py
+          python -m py_compile weekly_report.py weekly_typst_export.py fc_weekly_render.py scripts\build_weekly_package.py
 
       - name: Build function.zip
         shell: pwsh
