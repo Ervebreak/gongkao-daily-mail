@@ -95,6 +95,8 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zip = [System.IO.Compression.ZipFile]::OpenRead($OutputZip)
 try {
     Assert-Entry $zip @("main.py")
+    Assert-Entry $zip @("fc_weekly_render.py")
+    Assert-Entry $zip @("scripts/build_weekly_package.py", "scripts\build_weekly_package.py")
     Assert-Entry $zip @("requirements.txt")
     Assert-Entry $zip @("question_bank.py")
     Assert-Entry $zip @("scripts/validate_daily_brief.py", "scripts\validate_daily_brief.py")
