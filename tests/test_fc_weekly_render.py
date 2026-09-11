@@ -6,12 +6,14 @@ import json
 import logging
 import sys
 import zipfile
+import builtins
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 import fc_weekly_render as target
+import weekly_typst_export as weekly_export
 
 
 TOKEN = "test-token-that-must-not-leak"
@@ -115,6 +117,29 @@ def test_typst_missing_returns_explicit_error(monkeypatch: pytest.MonkeyPatch) -
     assert _body(response)["issue_code"] == "weekly_render_typst_unavailable"
 
 
+def test_explicit_enrichment_never_imports_model_curator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_import = builtins.__import__
+
+    def guarded_import(name, *args, **kwargs):
+        if name == "weekly_material_curator":
+            raise AssertionError("model enrichment module must not be imported")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.delitem(sys.modules, "weekly_material_curator", raising=False)
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
+    payload = _payload()
+    data = weekly_export.build_data(
+        payload["days"],
+        payload["start_date"],
+        payload["end_date"],
+        [],
+        enrichment_override=payload["enrichment"],
+    )
+    assert data["exam_map_cards"] is payload["enrichment"]["exam_map_cards"]
+
+
 def test_success_uses_one_shared_data_and_returns_report(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -210,3 +235,6 @@ def test_entrypoint_has_no_production_side_effect_imports() -> None:
     ):
         assert forbidden not in source
 
+    exporter_source = Path(weekly_export.__file__).read_text(encoding="utf-8")
+    for forbidden in ("weekly_report", "daily_archive", "email_sender", "candidate_store"):
+        assert forbidden not in exporter_source
