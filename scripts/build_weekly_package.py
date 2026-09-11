@@ -20,6 +20,13 @@ EXPECTED_PRACTICE_TYPES = (
     "申论作文分论点展开题",
 )
 
+EXPECTED_ENRICHMENT_KEYS = (
+    "exam_map_cards",
+    "selected_expression_rows",
+    "material_cards",
+    "practice_questions",
+)
+
 INTERNAL_MARKERS = (
     "不新增精读文章",
     "周日复盘版",
@@ -59,6 +66,22 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--start-date", default="", help="Override start date, e.g. 2026-09-07.")
     parser.add_argument("--end-date", default="", help="Override end date, e.g. 2026-09-12.")
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        help=(
+            "Disable model enrichment completely. Requires --enrichment-json. "
+            "The supplied enrichment is injected into the weekly data builder, so no model API call is made."
+        ),
+    )
+    parser.add_argument(
+        "--enrichment-json",
+        default="",
+        help=(
+            "Prebuilt weekly enrichment JSON containing exam_map_cards, selected_expression_rows, "
+            "material_cards and practice_questions. Required with --offline."
+        ),
+    )
     parser.add_argument("--api-key", default="", help="Optional DashScope API key. Prefer DASHSCOPE_API_KEY env var.")
     parser.add_argument("--model", default="", help="Optional primary model for weekly curation.")
     parser.add_argument("--fallback-model", default="", help="Optional fallback model for weekly curation.")
@@ -74,7 +97,25 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def validate_generation_mode(args: argparse.Namespace) -> None:
+    if args.offline and not str(args.enrichment_json or "").strip():
+        raise ValueError("--offline requires --enrichment-json.")
+    if args.offline and any(
+        str(value or "").strip()
+        for value in (args.api_key, args.model, args.fallback_model, args.base_url)
+    ):
+        raise ValueError(
+            "--offline cannot be combined with --api-key, --model, --fallback-model or --base-url."
+        )
+
+
 def _set_env_from_args(args: argparse.Namespace) -> None:
+    if args.offline:
+        # Fail closed even when the shell already has a DashScope key. config.settings is
+        # imported later, after this function runs. Offline enrichment is also injected
+        # directly into weekly_typst_export, so the model curator is never executed.
+        os.environ.pop("DASHSCOPE_API_KEY", None)
+        return
     if args.api_key:
         os.environ["DASHSCOPE_API_KEY"] = args.api_key
     if args.model:
@@ -91,6 +132,34 @@ def _load_payload(path: Path) -> dict[str, Any]:
         raise ValueError(f"{path} does not contain a JSON object.")
     payload.setdefault("date", path.stem)
     return payload
+
+
+def load_enrichment(path: Path) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"{path} does not contain an enrichment JSON object.")
+    if isinstance(payload.get("enrichment"), dict):
+        payload = payload["enrichment"]
+
+    missing = [key for key in EXPECTED_ENRICHMENT_KEYS if key not in payload]
+    if missing:
+        raise ValueError(f"Enrichment JSON is missing required keys: {', '.join(missing)}")
+    invalid = [key for key in EXPECTED_ENRICHMENT_KEYS if not isinstance(payload.get(key), list)]
+    if invalid:
+        raise ValueError(f"Enrichment JSON keys must be arrays: {', '.join(invalid)}")
+    warnings = payload.get("warnings", [])
+    if warnings is None:
+        warnings = []
+    if not isinstance(warnings, list):
+        raise ValueError("Enrichment JSON key warnings must be an array when provided.")
+
+    return {
+        "exam_map_cards": payload["exam_map_cards"],
+        "selected_expression_rows": payload["selected_expression_rows"],
+        "material_cards": payload["material_cards"],
+        "practice_questions": payload["practice_questions"],
+        "warnings": warnings,
+    }
 
 
 def _date_from_payload(payload: dict[str, Any], fallback: str) -> str:
@@ -346,15 +415,22 @@ def build_delivery_report(
     artifacts: dict[str, Any],
     issues: list[dict[str, Any]],
     runtime_error: str = "",
+    generation_mode: str = "model_enrichment",
+    enrichment_json: str = "",
 ) -> dict[str, Any]:
     data = shared_data or {}
     warnings = [str(item) for item in data.get("warnings") or []]
     high_count = sum(1 for item in issues if str(item.get("severity") or "").lower() == "high")
     status = "blocked" if runtime_error or high_count else "pass"
+    model_disabled = generation_mode in {"offline_enrichment", "provided_enrichment"}
     return {
         "schema_version": 1,
         "status": status,
         "side_effect_free": True,
+        "generation_mode": generation_mode,
+        "enrichment_json": enrichment_json,
+        "model_enrichment_disabled": model_disabled,
+        "model_api_call": False if model_disabled else None,
         "start_date": start_date,
         "end_date": end_date,
         "source_files": [str(path) for path in source_files],
@@ -383,9 +459,29 @@ def _write_json(path: Path, payload: Any) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
 
 
+def build_shared_data(
+    weekly_export: Any,
+    payloads: list[dict[str, Any]],
+    start_date: str,
+    end_date: str,
+    *,
+    enrichment_override: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if enrichment_override is None:
+        return weekly_export.build_data(payloads, start_date, end_date, [])
+
+    original_builder = weekly_export.build_weekly_enrichment
+    weekly_export.build_weekly_enrichment = lambda _days: enrichment_override
+    try:
+        return weekly_export.build_data(payloads, start_date, end_date, [])
+    finally:
+        weekly_export.build_weekly_enrichment = original_builder
+
+
 def main() -> int:
     args = _parse_args()
-    _set_env_from_args(args)
+    generation_mode = "offline_enrichment" if args.offline else ("provided_enrichment" if args.enrichment_json else "model_enrichment")
+    enrichment_path = Path(args.enrichment_json).expanduser().resolve() if args.enrichment_json else None
 
     source_paths = [Path(item).expanduser().resolve() for item in args.json_files]
     output_dir = Path(args.output_dir).expanduser().resolve()
@@ -400,6 +496,10 @@ def main() -> int:
     runtime_error = ""
 
     try:
+        validate_generation_mode(args)
+        _set_env_from_args(args)
+        enrichment_override = load_enrichment(enrichment_path) if enrichment_path else None
+
         pairs = [(path, _load_payload(path)) for path in source_paths]
         pairs.sort(key=lambda pair: _date_from_payload(pair[1], pair[0].stem))
         sorted_paths = [path for path, _payload in pairs]
@@ -407,17 +507,19 @@ def main() -> int:
         start_date, end_date, dates = _resolve_date_range(payloads, sorted_paths, args)
         issues.extend(evaluate_input_gate(dates, start_date=start_date, end_date=end_date))
 
-        # Import only after environment overrides are applied because config.settings
-        # is instantiated at import time. These modules build local data and files;
-        # this entrypoint deliberately does not import weekly_report, candidate_store,
-        # email_sender or OSS upload helpers.
-        from weekly_typst_export import (
-            build_data,
-            build_typst_weekly_pdf,
-            build_typst_weekly_preview_pdf,
-        )
+        # Import only after offline mode has removed any ambient API key / online
+        # overrides have been applied because config.settings is instantiated at import
+        # time. This entrypoint deliberately does not import OSS, email or candidate
+        # persistence helpers.
+        import weekly_typst_export as weekly_export
 
-        shared_data = build_data(payloads, start_date, end_date, [])
+        shared_data = build_shared_data(
+            weekly_export,
+            payloads,
+            start_date,
+            end_date,
+            enrichment_override=enrichment_override,
+        )
         issues.extend(evaluate_content_gate(shared_data))
 
         base_name = f"gongkao-weekly-{start_date}_to_{end_date}"
@@ -426,7 +528,7 @@ def main() -> int:
         shared_data_path = output_dir / f"{base_name}-data.json"
         _write_json(shared_data_path, shared_data)
 
-        full_meta = build_typst_weekly_pdf(
+        full_meta = weekly_export.build_typst_weekly_pdf(
             payloads,
             [],
             full_pdf,
@@ -434,7 +536,7 @@ def main() -> int:
             end_date,
             data=shared_data,
         )
-        preview_meta = build_typst_weekly_preview_pdf(
+        preview_meta = weekly_export.build_typst_weekly_preview_pdf(
             payloads,
             [],
             preview_pdf,
@@ -481,6 +583,8 @@ def main() -> int:
         artifacts=artifacts,
         issues=issues,
         runtime_error=runtime_error,
+        generation_mode=generation_mode,
+        enrichment_json=str(enrichment_path or ""),
     )
     _write_json(report_path, report)
 
