@@ -9,8 +9,6 @@ from pathlib import Path
 from typing import Any
 
 from config import settings
-import weekly_report as weekly
-from weekly_material_curator import build_weekly_enrichment
 
 
 def find_typst_binary() -> str | None:
@@ -25,11 +23,28 @@ def find_typst_binary() -> str | None:
 
 
 def clean(value: Any) -> str:
-    return weekly._clean(value)
+    if value is None:
+        return ""
+    if isinstance(value, (list, tuple)):
+        return "；".join(clean(item) for item in value if clean(item))
+    if isinstance(value, dict):
+        return "；".join(clean(item) for item in value.values() if clean(item))
+    return str(value).strip()
 
 
 def as_list(value: Any) -> list[Any]:
-    return weekly._as_list(value)
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, tuple):
+        return list(value)
+    return [value]
+
+
+def brief_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    brief = payload.get("brief")
+    return brief if isinstance(brief, dict) else payload
 
 
 def typst_text(value: Any) -> str:
@@ -114,7 +129,7 @@ def normalize_tags(featured: dict[str, Any], question: dict[str, Any], takeaway:
 
 
 def normalize_day(payload: dict[str, Any], index: int) -> dict[str, Any]:
-    brief = weekly.brief_from_payload(payload)
+    brief = brief_from_payload(payload)
     featured = brief.get("featured_article") if isinstance(brief.get("featured_article"), dict) else {}
     question = brief.get("daily_question") if isinstance(brief.get("daily_question"), dict) else {}
     takeaway = brief.get("today_takeaway") if isinstance(brief.get("today_takeaway"), dict) else {}
@@ -174,7 +189,14 @@ def normalize_day(payload: dict[str, Any], index: int) -> dict[str, Any]:
     }
 
 
-def build_data(payloads: list[dict[str, Any]], start_date: str, end_date: str, misses: list[dict[str, str]]) -> dict[str, Any]:
+def build_data(
+    payloads: list[dict[str, Any]],
+    start_date: str,
+    end_date: str,
+    misses: list[dict[str, str]],
+    *,
+    enrichment_override: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     days = [normalize_day(payload, idx) for idx, payload in enumerate(payloads, start=1)]
     keyword_counter: Counter[str] = Counter()
     expression_rows: list[dict[str, str]] = []
@@ -215,16 +237,23 @@ def build_data(payloads: list[dict[str, Any]], start_date: str, end_date: str, m
         ("生态治理与权责边界", "政府主导、财政兜底、政企分离；适用于公共服务定价、生态治理、公益商业边界。"),
         ("市场秩序与消费公平", "平台责任、算法问责、下沉维权；适用于新型市场监管和消费者权益保护。"),
     ]
-    try:
-        enrichment = build_weekly_enrichment(days)
-    except Exception as exc:
-        enrichment = {
-            "exam_map_cards": [],
-            "selected_expression_rows": [],
-            "material_cards": [],
-            "practice_questions": [],
-            "warnings": [f"weekly enrichment failed open: {type(exc).__name__}: {exc}"],
-        }
+    if enrichment_override is not None:
+        enrichment = enrichment_override
+    else:
+        # Keep the model-capable curator outside the pure render import graph.
+        # Offline callers provide enrichment_override and never import or call it.
+        from weekly_material_curator import build_weekly_enrichment
+
+        try:
+            enrichment = build_weekly_enrichment(days)
+        except Exception as exc:
+            enrichment = {
+                "exam_map_cards": [],
+                "selected_expression_rows": [],
+                "material_cards": [],
+                "practice_questions": [],
+                "warnings": [f"weekly enrichment failed open: {type(exc).__name__}: {exc}"],
+            }
     warnings.extend(enrichment.get("warnings") or [])
     return {
         "start_date": start_date,
