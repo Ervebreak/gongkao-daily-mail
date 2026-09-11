@@ -80,6 +80,12 @@ def test_token_is_not_logged(caplog: pytest.LogCaptureFixture) -> None:
     assert TOKEN not in caplog.text
 
 
+def test_fc_bytes_event_is_supported(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(target, "_render", lambda *_args: (b"zip", "weekly.zip"))
+    response = target.handler(json.dumps(_event(_payload())).encode("utf-8"), None)
+    assert response["statusCode"] == 200
+
+
 def test_requires_exactly_six_daily_objects() -> None:
     payload = _payload()
     payload["days"] = payload["days"][:5]
