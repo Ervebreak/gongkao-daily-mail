@@ -52,6 +52,23 @@ def _headers(event: Any) -> dict[str, str]:
     return {str(key).lower(): str(value) for key, value in event["headers"].items()}
 
 
+def _event_object(event: Any) -> dict[str, Any]:
+    if isinstance(event, dict):
+        return event
+    if isinstance(event, (bytes, bytearray)):
+        try:
+            event = event.decode("utf-8")
+        except UnicodeDecodeError:
+            return {}
+    if isinstance(event, str):
+        try:
+            parsed = json.loads(event)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
 def _authorized(event: Any) -> bool:
     expected = os.environ.get("WEEKLY_RENDER_TOKEN", "")
     if not expected:
@@ -366,10 +383,11 @@ def _render(start_date: str, end_date: str, days: list[dict[str, Any]], enrichme
 
 def handler(event: Any, context: Any) -> dict[str, Any]:
     del context
-    if not _authorized(event):
+    envelope = _event_object(event)
+    if not _authorized(envelope):
         return _json_response(401, "weekly_render_auth_failed", "Unauthorized.")
     try:
-        payload = _request_payload(event)
+        payload = _request_payload(envelope)
         start_date, end_date, days, enrichment = _validate_request(payload)
         zip_bytes, filename = _render(start_date, end_date, days, enrichment)
         return {
@@ -386,4 +404,3 @@ def handler(event: Any, context: Any) -> dict[str, Any]:
         return _json_response(exc.http_status, exc.code, exc.message)
     except Exception:
         return _json_response(500, "weekly_render_compile_failed", "Weekly PDF rendering failed.")
-
