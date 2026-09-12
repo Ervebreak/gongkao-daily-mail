@@ -1,5 +1,43 @@
 # Harness Change Log
 
+## 2026-09-11 - Side-effect-free FC weekly PDF render endpoint
+
+Reason:
+
+- The weekend PDF generation skill needs a remote renderer that consumes six already-generated daily JSON objects plus reviewed weekly enrichment.
+- The existing CLI supported offline enrichment, but the Typst exporter still imported the production weekly module and offline injection temporarily replaced a module function, which was not a sufficiently strict or concurrency-safe FC boundary.
+
+Files changed:
+
+- `fc_weekly_render.py`
+- `weekly_typst_export.py`
+- `scripts/build_weekly_package.py`
+- `tests/test_fc_weekly_render.py`
+- `tests/test_build_weekly_package.py`
+- `.env.example`
+- `README.md`
+- `content_harness/deployment_rules.md`
+- `scripts/build_fc_package.ps1`
+- `.github/workflows/build-fc-package.yml`
+- `CHANGELOG_HARNESS.md`
+
+Latest behavior:
+
+- Added independent FC HTTP handler `fc_weekly_render.handler` with constant-time Bearer token validation from `WEEKLY_RENDER_TOKEN`.
+- The request must contain exactly the four top-level fields `start_date`, `end_date`, `days`, and `enrichment`; days must be exactly six JSON objects with unique, ascending, internally consistent dates inside the requested range.
+- Non-contiguous dates are accepted for explicitly paused days, but the server never fetches or fills missing data.
+- Weekly enrichment is now passed explicitly into `weekly_typst_export.build_data(..., enrichment_override=...)`; offline rendering no longer monkeypatches a module function.
+- The Typst exporter no longer imports `weekly_report`, `daily_archive`, `email_sender`, or candidate persistence, and only lazy-imports the model-capable curator when no enrichment override is supplied.
+- The handler writes request data only under a unique `/tmp/weekly-render-*/` directory, renders full and lite-preview PDFs from the same shared data object, writes a delivery report, returns a base64 ZIP, and removes the temporary directory on exit.
+- Server-enforced report flags are fixed to offline/no-model/no-OSS/no-email/no-candidate/no-archive-read/no-web-fetch and `allow_incomplete=false`; request fields cannot override them.
+- Direct ZIP responses default to a 4 MB raw ZIP limit via `WEEKLY_RENDER_MAX_ZIP_BYTES`; oversized results fail closed without OSS fallback.
+
+Validation boundary:
+
+- Unit tests cover auth failure, token log hygiene, exact six-day validation, duplicate dates, required enrichment fields, rejection of `allow_incomplete`, Typst absence, shared full/lite data identity, prohibited imports/actions, and delivery report inclusion.
+- Deployment still must provide a working Typst binary in PATH, `/opt/bin/typst`, or `bin/typst`.
+
+
 ## 2026-09-05 - Source-evidence fact consistency chain
 
 Reason:

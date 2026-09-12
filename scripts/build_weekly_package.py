@@ -470,12 +470,13 @@ def build_shared_data(
     if enrichment_override is None:
         return weekly_export.build_data(payloads, start_date, end_date, [])
 
-    original_builder = weekly_export.build_weekly_enrichment
-    weekly_export.build_weekly_enrichment = lambda _days: enrichment_override
-    try:
-        return weekly_export.build_data(payloads, start_date, end_date, [])
-    finally:
-        weekly_export.build_weekly_enrichment = original_builder
+    return weekly_export.build_data(
+        payloads,
+        start_date,
+        end_date,
+        [],
+        enrichment_override=enrichment_override,
+    )
 
 
 def main() -> int:

@@ -13,11 +13,62 @@ python scripts\weekly_quality_review.py --metrics output\harness_metrics.jsonl
 
 脚本会输出 `weekly_harness_review_YYYY-WW.md` 和同名 JSON，汇总 P0/P1/P2、模块分布、重写成功率、P0 二次修复成功率、管理员报告和早晨发送成功率，并形成下一周 Harness 升级清单。
 
-这是阿里云函数计算 FC 可部署版本。入口函数为：
+这是阿里云函数计算 FC 可部署版本。日常生产入口函数为：
 
 ```text
 main.handler
 ```
+
+## 独立周 PDF 离线渲染入口
+
+供周末 PDF 汇编技能调用的独立 HTTP 入口为：
+
+```text
+fc_weekly_render.handler
+```
+
+建议在阿里云 FC 中创建独立函数并复用同一代码包，不要把该 HTTP
+入口路由到 `main.handler`。函数只接受 6 个已生成的 daily JSON 和一份
+完整 enrichment；不读取生产 archive，不上传 OSS，不发送邮件，不写
+candidate，不修改订阅表，不抓网页，也不调用模型。
+
+必须配置：
+
+```text
+WEEKLY_RENDER_TOKEN=<高熵随机 Bearer Token>
+WEEKLY_RENDER_MAX_ZIP_BYTES=4000000
+```
+
+请求示例：
+
+```http
+POST /weekly-render
+Authorization: Bearer <secret>
+Content-Type: application/json
+
+{
+  "start_date": "2026-09-05",
+  "end_date": "2026-09-11",
+  "days": [{}, {}, {}, {}, {}, {}],
+  "enrichment": {
+    "exam_map_cards": [],
+    "selected_expression_rows": [],
+    "material_cards": [],
+    "practice_questions": []
+  }
+}
+```
+
+成功响应为 `application/zip`（FC 响应体使用 base64 编码），ZIP 只包含
+完整版 PDF、lite-preview PDF 和 `weekly_pdf_delivery_report.json`。
+失败响应为 JSON，并包含稳定的 `issue_code`。请求中的 6 天可以因明确
+停更而不连续，但必须严格升序、日期唯一且全部落在请求区间内；服务端不会
+补齐缺失日期。
+
+部署时必须确保 `typst --version` 可执行；导出器依次查找 PATH、
+`/opt/bin/typst` 和代码包内 `bin/typst`。同步 ZIP 默认限制为 4 MB，
+以给 base64 膨胀和 FC HTTP 响应限制留出空间；超过上限会返回
+`weekly_render_response_too_large`，不会上传到临时外部存储。
 
 ## 部署打包
 

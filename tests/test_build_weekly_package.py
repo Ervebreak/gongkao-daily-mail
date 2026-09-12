@@ -156,18 +156,14 @@ def test_load_enrichment_rejects_missing_required_keys(tmp_path: Path) -> None:
 
 def test_build_shared_data_injects_enrichment_without_calling_original_model_builder() -> None:
     enrichment = _valid_enrichment()
-    calls = {"original": 0}
-
-    def original_builder(_days):
-        calls["original"] += 1
-        raise AssertionError("online model builder must not run")
+    calls = {"build_data": 0}
 
     fake = SimpleNamespace()
-    fake.build_weekly_enrichment = original_builder
 
-    def build_data(_payloads, _start, _end, _misses):
-        injected = fake.build_weekly_enrichment([{"date": "2026-09-07"}])
-        return {"days": [{"date": "2026-09-07"}], **injected}
+    def build_data(_payloads, _start, _end, _misses, *, enrichment_override=None):
+        calls["build_data"] += 1
+        assert enrichment_override is enrichment
+        return {"days": [{"date": "2026-09-07"}], **enrichment_override}
 
     fake.build_data = build_data
 
@@ -179,9 +175,9 @@ def test_build_shared_data_injects_enrichment_without_calling_original_model_bui
         enrichment_override=enrichment,
     )
 
-    assert calls["original"] == 0
+    assert calls["build_data"] == 1
     assert result["material_cards"] == enrichment["material_cards"]
-    assert fake.build_weekly_enrichment is original_builder
+    assert not hasattr(fake, "build_weekly_enrichment")
 
 
 def test_delivery_report_records_offline_no_model_contract(tmp_path: Path) -> None:

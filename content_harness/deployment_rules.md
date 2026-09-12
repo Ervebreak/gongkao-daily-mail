@@ -123,3 +123,29 @@ KNOWLEDGE_OSS_PREFIX=
 1. 将 `KNOWLEDGE_BASE_MODE` 改为 `oss`；
 2. 将 `KNOWLEDGE_OSS_PREFIX` 设置为 bucket 内知识库对象前缀；
 3. 继续复用现有 `OSS_ENDPOINT`、`OSS_BUCKET`、`OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`。
+
+
+## 6. 独立周 PDF 离线渲染函数
+
+周 PDF 技能使用独立 FC HTTP 函数，handler 必须设为
+`fc_weekly_render.handler`。推荐与日常生产入口分成两个 FC 函数，
+可以复用同一代码包，但不得把周 PDF HTTP 请求路由到 `main.handler`。
+
+必填环境变量：
+
+```text
+WEEKLY_RENDER_TOKEN=<高熵随机值>
+WEEKLY_RENDER_MAX_ZIP_BYTES=4000000
+```
+
+部署门禁：
+
+1. `WEEKLY_RENDER_TOKEN` 只在 FC 环境变量中配置，不写入代码、日志或响应。
+2. 运行环境必须能执行 `typst --version`；支持 PATH、`/opt/bin/typst` 或包内 `bin/typst`。
+3. 函数只开放 HTTP POST，并在网关/FC 层同步限制请求体大小、超时和并发。
+4. 入口固定离线 enrichment，不能接受 online model 参数或 `allow_incomplete`。
+5. 临时文件只写入 `/tmp/weekly-render-<随机值>/`，请求结束自动清理。
+6. 成功响应直接返回 base64 ZIP；超过 `WEEKLY_RENDER_MAX_ZIP_BYTES` 时阻断，不回退到 OSS。
+7. 部署前运行：
+   `python -m py_compile fc_weekly_render.py scripts/build_weekly_package.py weekly_typst_export.py`
+   和 `python -m pytest -q tests/test_fc_weekly_render.py tests/test_build_weekly_package.py tests/test_weekly_typst_export_materials.py`。
