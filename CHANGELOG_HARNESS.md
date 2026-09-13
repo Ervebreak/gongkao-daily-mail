@@ -1,5 +1,22 @@
 # Harness Change Log
 
+## 2026-09-13 - Keep weekly material-card openings together
+
+Reason:
+
+- Final PDF visual QA found a material-card heading stranded at the bottom of one page while its source, summary and examples began on the next page.
+
+Files changed:
+
+- `weekly_typst_export.py`
+- `CHANGELOG_HARNESS.md`
+
+Latest behavior:
+
+- The material-card title, type badge, source, applicable themes, question types and material summary are wrapped in one non-breakable Typst opening block.
+- The two longer essay examples and usage boundary remain breakable, preserving normal flow for unusually long cards.
+- This is a layout-only change: enrichment data, full/Lite shared-data behavior, rendering engine and side-effect-free FC boundary are unchanged.
+
 ## 2026-09-11 - Side-effect-free FC weekly PDF render endpoint
 
 Reason:
