@@ -795,13 +795,17 @@ def render_typst(data: dict[str, Any]) -> str:
   #body
 ]
 #let material-card(title, material-type, source-dates, source-articles, material-summary, examples, use-boundary, target-topics, suggested-question-types) = block(fill: white, stroke: 0.6pt + line, inset: 13pt, radius: 9pt, width: 100%, breakable: true)[
-  #text(size: 12pt, weight: "bold", fill: brand)[作文素材积累·#title（一例多用）]
-  #if material-type != "" [#linebreak()#badge[#material-type]]
-  #v(7pt)
-  #if source-dates != "" or source-articles != "" [#info-strip[来源][#source-dates#if source-dates != "" and source-articles != "" [｜#source-articles]]]
-  #if target-topics != "" [#info-strip[可用主题方向][#target-topics]]
-  #if suggested-question-types != "" [#info-strip[适用题型][#suggested-question-types]]
-  #if material-summary != "" [#info-strip[素材简介][#material-summary]]
+  // Keep the card heading and its opening context together. The longer examples
+  // remain breakable below, so an unusually long card can still flow across pages.
+  #block(breakable: false)[
+    #text(size: 12pt, weight: "bold", fill: brand)[作文素材积累·#title（一例多用）]
+    #if material-type != "" [#linebreak()#badge[#material-type]]
+    #v(7pt)
+    #if source-dates != "" or source-articles != "" [#info-strip[来源][#source-dates#if source-dates != "" and source-articles != "" [｜#source-articles]]]
+    #if target-topics != "" [#info-strip[可用主题方向][#target-topics]]
+    #if suggested-question-types != "" [#info-strip[适用题型][#suggested-question-types]]
+    #if material-summary != "" [#info-strip[素材简介][#material-summary]]
+  ]
   #if examples != "" [
     #v(6pt)
     #text(weight: "bold", fill: brand)[作文示例]
