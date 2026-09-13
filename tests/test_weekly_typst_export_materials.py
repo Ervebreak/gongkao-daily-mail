@@ -79,6 +79,16 @@ def test_render_typst_shows_material_cards_as_one_case_many_uses() -> None:
     assert "复制链接或搜索原文题目打开原文" in text
 
 
+
+def test_render_typst_keeps_material_card_opening_with_heading() -> None:
+    text = render_typst(_base_data())
+
+    opening = '#block(breakable: false)[\n    #text(size: 12pt, weight: "bold", fill: brand)[作文素材积累·#title（一例多用）]'
+    assert opening in text
+    assert text.index(opening) < text.index('#if examples != "" [')
+
+
+
 def test_render_typst_shows_at_most_three_material_cards() -> None:
     data = _base_data()
     data["material_cards"] = []
