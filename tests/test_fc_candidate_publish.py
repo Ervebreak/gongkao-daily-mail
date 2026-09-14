@@ -70,8 +70,8 @@ def _candidate(date: str = "2026-09-14") -> dict:
         "delivery_date": date,
         "subject": "【公考晨读】测试主题",
         "brief": brief,
-        "plain_text": "PLAIN",
-        "html_body": "HTML",
+        "plain_text": "STALE BUT ALLOWED SNAPSHOT",
+        "html_body": "STALE BUT ALLOWED HTML",
         "quality": {"final": {}, "gate": gate},
         "quality_gate": dict(gate),
         "source_evidence": evidence,
@@ -97,10 +97,14 @@ def _body(response: dict) -> dict:
 def _publisher_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DAILY_PUBLISH_TOKEN", TOKEN)
     monkeypatch.setattr(target, "settings", SimpleNamespace(candidate_storage="oss", oss_bucket="test-bucket"))
-    monkeypatch.setattr(target, "render_plain_text", lambda _brief: "PLAIN")
-    monkeypatch.setattr(target, "render_email_html", lambda _brief: "HTML")
+    monkeypatch.setattr(target, "render_plain_text", lambda _brief: "CURRENT PLAIN")
+    monkeypatch.setattr(target, "render_email_html", lambda _brief: "CURRENT HTML")
     monkeypatch.setattr(target, "fact_review_binding_is_current", lambda _brief, _review: True)
-    monkeypatch.setattr(target.candidate_store, "load_candidate", lambda: (None, {"candidate_oss_read_ok": False}))
+    monkeypatch.setattr(
+        target.candidate_store,
+        "_get_oss_json",
+        lambda _key: (None, {"candidate_oss_read_ok": False, "candidate_oss_error": "candidate not found."}),
+    )
     monkeypatch.setattr(
         target.candidate_store,
         "save_candidate",
@@ -230,19 +234,34 @@ def test_selection_score_must_meet_publish_threshold() -> None:
     assert _body(response)["issue_code"] == "daily_candidate_selection_score_invalid"
 
 
-def test_render_drift_is_rejected() -> None:
-    candidate = _candidate()
-    candidate["html_body"] = "STALE HTML"
-    response = target.handler(_event(candidate), None)
+def test_snapshot_drift_does_not_block_if_current_renderer_succeeds() -> None:
+    response = target.handler(_event(_candidate()), None)
+    assert response["statusCode"] == 200
+    assert _body(response)["status"] == "published"
+
+
+def test_renderer_exception_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(_brief):
+        raise RuntimeError("render boom")
+
+    monkeypatch.setattr(target, "render_email_html", boom)
+    response = target.handler(_event(_candidate()), None)
     assert response["statusCode"] == 400
-    assert _body(response)["issue_code"] == "daily_candidate_render_drift"
+    assert _body(response)["issue_code"] == "daily_candidate_render_invalid"
+
+
+def test_empty_render_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(target, "render_plain_text", lambda _brief: "   ")
+    response = target.handler(_event(_candidate()), None)
+    assert response["statusCode"] == 400
+    assert _body(response)["issue_code"] == "daily_candidate_render_invalid"
 
 
 def test_older_candidate_cannot_replace_latest(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         target.candidate_store,
-        "load_candidate",
-        lambda: ({"delivery_date": "2026-09-15"}, {"candidate_oss_read_ok": True}),
+        "_get_oss_json",
+        lambda _key: ({"delivery_date": "2026-09-15"}, {"candidate_oss_read_ok": True}),
     )
     response = target.handler(_event(_candidate("2026-09-14")), None)
     assert response["statusCode"] == 409
@@ -252,12 +271,39 @@ def test_older_candidate_cannot_replace_latest(monkeypatch: pytest.MonkeyPatch) 
 def test_same_date_candidate_may_replace_latest(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         target.candidate_store,
-        "load_candidate",
-        lambda: ({"delivery_date": "2026-09-14"}, {"candidate_oss_read_ok": True}),
+        "_get_oss_json",
+        lambda _key: ({"delivery_date": "2026-09-14"}, {"candidate_oss_read_ok": True}),
     )
     response = target.handler(_event(_candidate("2026-09-14")), None)
     assert response["statusCode"] == 200
     assert _body(response)["status"] == "published"
+
+
+def test_true_oss_not_found_allows_first_publish() -> None:
+    response = target.handler(_event(_candidate()), None)
+    assert response["statusCode"] == 200
+
+
+def test_oss_latest_read_failure_blocks_publish(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        target.candidate_store,
+        "_get_oss_json",
+        lambda _key: (None, {"candidate_oss_read_ok": False, "candidate_oss_error": "503 Service Unavailable"}),
+    )
+    response = target.handler(_event(_candidate()), None)
+    assert response["statusCode"] == 503
+    assert _body(response)["issue_code"] == "daily_candidate_stale_check_failed"
+
+
+def test_malformed_latest_date_blocks_publish(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        target.candidate_store,
+        "_get_oss_json",
+        lambda _key: ({"delivery_date": "bad-date"}, {"candidate_oss_read_ok": True}),
+    )
+    response = target.handler(_event(_candidate()), None)
+    assert response["statusCode"] == 503
+    assert _body(response)["issue_code"] == "daily_candidate_stale_check_failed"
 
 
 def test_publisher_requires_oss_storage(monkeypatch: pytest.MonkeyPatch) -> None:
