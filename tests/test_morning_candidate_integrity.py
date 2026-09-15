@@ -4,10 +4,10 @@ import copy
 
 from fact_evidence import current_fact_review_binding
 from morning_candidate_integrity import (
-    BOUND_CONTENT_REVIEW_KEY,
     SEND_SNAPSHOT_KEY,
     attach_candidate_send_snapshot,
     content_quality_review_binding_is_current,
+    get_bound_stored_content_quality,
     restore_bound_render_snapshot,
     validate_live_content_quality_review,
 )
@@ -69,10 +69,11 @@ def test_loaded_candidate_attaches_bound_render_and_semantic_review() -> None:
     snapshot = candidate["quality"][SEND_SNAPSHOT_KEY]
     assert snapshot["plain_text"] == "AUDITED PLAIN TEXT"
     assert snapshot["html_body"] == "<html><body>AUDITED HTML</body></html>"
-    assert BOUND_CONTENT_REVIEW_KEY in candidate["brief"]
-    assert content_quality_review_binding_is_current(
-        candidate["brief"], candidate["brief"][BOUND_CONTENT_REVIEW_KEY]
-    )
+    assert "_morning_bound_content_quality" not in candidate["brief"]
+    stored = get_bound_stored_content_quality(candidate, candidate["brief"])
+    assert stored is not None
+    assert stored["score"] == 93
+    assert content_quality_review_binding_is_current(candidate["brief"], stored)
 
 
 def test_bound_render_snapshot_wins_over_send_time_rerender() -> None:
@@ -92,6 +93,7 @@ def test_bound_render_snapshot_wins_over_send_time_rerender() -> None:
 
 def test_brief_change_invalidates_render_and_semantic_bindings() -> None:
     candidate = attach_candidate_send_snapshot(_candidate())
+    original_review = copy.deepcopy(candidate["quality"]["final"]["content_quality"])
     changed = copy.deepcopy(candidate)
     changed["brief"]["today_theme"] = "已经变化的主题"
     restored, reused = restore_bound_render_snapshot(
@@ -105,9 +107,7 @@ def test_brief_change_invalidates_render_and_semantic_bindings() -> None:
     )
     assert reused is False
     assert restored["plain_text"] == changed["plain_text"]
-    assert not content_quality_review_binding_is_current(
-        changed["brief"], changed["brief"][BOUND_CONTENT_REVIEW_KEY]
-    )
+    assert not content_quality_review_binding_is_current(changed["brief"], original_review)
 
 
 def test_content_quality_hook_reuses_stored_review_without_live_llm() -> None:
