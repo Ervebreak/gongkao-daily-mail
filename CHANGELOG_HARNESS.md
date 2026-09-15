@@ -1,5 +1,33 @@
 # Harness Change Log
 
+## 2026-09-15 - Make morning send use audited candidate artifacts directly
+
+Reason:
+
+- The morning FC loaded the reviewed OSS candidate successfully, but then discarded its stored Full plain/HTML artifacts, rendered them again from `brief`, and reran semantic quality checks. A malformed live reviewer response could therefore block a candidate whose stored gate was already `ok`.
+
+Files changed:
+
+- `main.py`
+- `candidate_store.py`
+- `.github/workflows/build-fc-package.yml`
+- `content_harness/workflow.md`
+- `content_harness/quality_checks.md`
+- `tests/test_morning_gate_drift.py`
+- `CHANGELOG_HARNESS.md`
+
+Latest behavior:
+
+- `morning_send` uses the uploaded candidate's stored `subject`, `plain_text`, and `html_body` without rebuilding or cleaning the Full email.
+- Daily and weekly morning sends no longer rerun selection, content, fact, cleanliness, or weekly PDF quality evaluators; the saved `quality_gate` remains the sole content-review decision.
+- Morning send still blocks a missing candidate, a delivery-date mismatch, a stored gate whose `overall` is not `ok`, or missing send artifacts.
+- Lite/weekly-preview rendering remains a delivery-time subscriber-formatting step based on the same uploaded candidate; it is not a second content gate.
+- Nightly generation and Publisher validation remain unchanged and continue to own all substantive quality checks before the candidate is accepted.
+
+Validation boundary:
+
+- Regression tests make every morning renderer and quality evaluator fail if called, prove stored Full artifacts remain unchanged, preserve stored-gate blocking, cover missing-artifact blocking, and cover weekly candidates.
+
 ## 2026-09-15 - Align Lite CTA copy with Full-only answer-module boundary
 
 Reason:
