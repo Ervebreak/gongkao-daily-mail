@@ -27,7 +27,6 @@ from quality_gate import (
     evaluate_all_quality as shared_evaluate_all_quality,
     evaluate_selection_quality as shared_evaluate_selection_quality,
     evaluate_weekly_pdf_quality as shared_evaluate_weekly_pdf_quality,
-    looks_like_gate_drift,
 )
 from token_economics import summarize_token_usage
 
@@ -2258,137 +2257,6 @@ def evaluate_candidate_with_current_quality(
     }
 
 
-_MORNING_DAILY_QUESTION_ISSUE_KEYS = (
-    "module",
-    "module_override",
-    "code",
-    "path",
-    "field",
-    "source_module",
-)
-
-
-def _collect_daily_question_texts(value: Any) -> list[str]:
-    rows: list[str] = []
-    if isinstance(value, dict):
-        for item in value.values():
-            rows.extend(_collect_daily_question_texts(item))
-    elif isinstance(value, list):
-        for item in value:
-            rows.extend(_collect_daily_question_texts(item))
-    elif isinstance(value, str):
-        text = " ".join(value.split()).strip()
-        if text:
-            rows.append(text)
-    return rows
-
-
-def _is_morning_daily_question_issue(
-    issue: Any,
-    *,
-    module_name: str = "",
-    daily_question_texts: list[str] | None = None,
-) -> bool:
-    if module_name == "daily_question":
-        return True
-    if not isinstance(issue, dict):
-        return False
-    for key in _MORNING_DAILY_QUESTION_ISSUE_KEYS:
-        value = str(issue.get(key) or "").lower()
-        if "daily_question" in value:
-            return True
-    code = str(issue.get("code") or "").lower()
-    if code in {
-        "missing_identity",
-        "missing_scene",
-        "missing_conflict",
-        "missing_task",
-        "missing_question",
-        "daily_question_missing_identity",
-        "daily_question_missing_scene",
-        "daily_question_missing_conflict",
-        "daily_question_missing_task",
-    }:
-        return True
-    bad_text = " ".join(str(issue.get("bad_text") or "").split()).strip()
-    if bad_text and daily_question_texts:
-        for source_text in daily_question_texts:
-            if bad_text in source_text or source_text in bad_text:
-                return True
-    return False
-
-
-def _suppress_morning_daily_question_cleanliness(
-    cleanliness_quality: Any,
-    *,
-    daily_question_texts: list[str] | None = None,
-) -> dict[str, Any]:
-    if not isinstance(cleanliness_quality, dict):
-        return {}
-    sanitized = dict(cleanliness_quality)
-    for key in ("issues", "unresolved_issues"):
-        values = sanitized.get(key)
-        if isinstance(values, list):
-            sanitized[key] = [
-                issue
-                for issue in values
-                if not _is_morning_daily_question_issue(
-                    issue,
-                    module_name="cleanliness",
-                    daily_question_texts=daily_question_texts,
-                )
-            ]
-    unresolved = sanitized.get("unresolved_issues")
-    issues = sanitized.get("issues")
-    if (
-        str(sanitized.get("status") or "").lower() == "fail"
-        and isinstance(unresolved, list)
-        and isinstance(issues, list)
-        and not unresolved
-    ):
-        sanitized["status"] = "ok" if not issues else "review"
-    return sanitized
-
-
-def _suppress_morning_daily_question_quality_map(
-    quality_map: Any,
-    *,
-    daily_question_texts: list[str] | None = None,
-) -> dict[str, Any]:
-    if not isinstance(quality_map, dict):
-        return {}
-    sanitized: dict[str, Any] = {}
-    for module_name, payload in quality_map.items():
-        if module_name == "daily_question":
-            checks = payload.get("checks") if isinstance(payload, dict) and isinstance(payload.get("checks"), dict) else {}
-            sanitized[module_name] = {
-                "ok": True,
-                "status": "ok",
-                "score": 100,
-                "checks": checks,
-                "issues": [],
-            }
-            continue
-        if not isinstance(payload, dict):
-            sanitized[module_name] = payload
-            continue
-        next_payload = dict(payload)
-        for key in ("issues", "final_issues", "unresolved_issues", "p0_issues", "p1_issues", "p2_issues", "warnings"):
-            values = next_payload.get(key)
-            if isinstance(values, list):
-                next_payload[key] = [
-                    issue
-                    for issue in values
-                    if not _is_morning_daily_question_issue(
-                        issue,
-                        module_name=module_name,
-                        daily_question_texts=daily_question_texts,
-                    )
-                ]
-        sanitized[module_name] = next_payload
-    return sanitized
-
-
 def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
     from candidate_store import load_candidate
     from daily_archive import archive_daily_content
@@ -2398,11 +2266,9 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
         send_segmented_email,
         split_recipient_records,
     )
-    from email_renderer import render_email_html, render_plain_text
     from harness_metrics import append_morning_metrics
     from history import append_records
     from policy_coordinate_usage_history import append_policy_coordinate_usage
-    from pre_send_cleanliness import pre_send_cleanliness_guard
 
     settings.output_dir.mkdir(parents=True, exist_ok=True)
     logger = RunLogger(settings.output_dir)
@@ -2437,7 +2303,6 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
 
     candidate_date = str(candidate.get("delivery_date") or "")
     quality_gate = candidate.get("quality_gate") if isinstance(candidate.get("quality_gate"), dict) else {}
-    stored_quality_gate = dict(quality_gate)
     if candidate_date != delivery_date:
         logger.info("candidate send blocked", reason="candidate_date_mismatch", candidate_date=candidate_date, delivery_date=delivery_date)
         try:
@@ -2456,224 +2321,6 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
         logger.dump_to_stdout()
         return {"status": "blocked", "reason": "candidate_date_mismatch", "delivery_date": delivery_date, "candidate_date": candidate_date, "log": str(log_path)}
 
-    if candidate.get("candidate_type") != "weekly_pdf":
-        brief = candidate.get("brief") if isinstance(candidate.get("brief"), dict) else {}
-        subject = str(candidate.get("subject") or brief.get("email_subject") or f"公考晨读 {delivery_date}")
-        if not subject.startswith(settings.subject_prefix):
-            subject = f"{settings.subject_prefix}{subject}"
-        plain_text = render_plain_text(brief)
-        html_body = render_email_html(brief)
-        guarded, cleanliness_quality = pre_send_cleanliness_guard(
-            {
-                "brief": brief,
-                "subject": subject,
-                "plain_text": plain_text,
-                "html_body": html_body,
-                "quality": candidate.get("quality") or {},
-            },
-            enforce_daily_question_structure=False,
-        )
-        daily_question_texts = _collect_daily_question_texts(
-            (guarded.get("brief") if isinstance(guarded.get("brief"), dict) else brief).get("daily_question")
-            if isinstance((guarded.get("brief") if isinstance(guarded.get("brief"), dict) else brief), dict)
-            else {}
-        )
-        cleanliness_quality = _suppress_morning_daily_question_cleanliness(
-            cleanliness_quality,
-            daily_question_texts=daily_question_texts,
-        )
-        candidate.update(
-            {
-                "brief": guarded.get("brief") if isinstance(guarded.get("brief"), dict) else brief,
-                "subject": str(guarded.get("subject") or subject),
-                "plain_text": str(guarded.get("plain_text") or plain_text),
-                "html_body": str(guarded.get("html_body") or html_body),
-                "send_time_cleanliness": cleanliness_quality,
-            }
-        )
-        logger.info(
-            "candidate send hydrated from brief",
-            plain_text_chars=len(str(candidate.get("plain_text") or "")),
-            html_body_chars=len(str(candidate.get("html_body") or "")),
-            cleanliness_status=cleanliness_quality.get("status"),
-            cleanliness_unresolved_count=len(cleanliness_quality.get("unresolved_issues") or []),
-        )
-        unresolved_blocking = [
-            issue
-            for issue in (cleanliness_quality.get("unresolved_issues") or [])
-            if isinstance(issue, dict)
-            and (issue.get("blocking") or str(issue.get("severity") or "").lower() == "high")
-        ]
-        if unresolved_blocking:
-            logger.info(
-                "candidate send blocked",
-                reason="send_time_cleanliness_fail",
-                cleanliness_status=cleanliness_quality.get("status"),
-                unresolved_issues=unresolved_blocking,
-            )
-            try:
-                metrics_result = append_morning_metrics(
-                    delivery_date=delivery_date,
-                    test_invocation=test_invocation,
-                    status="blocked",
-                    reason="send_time_cleanliness_fail",
-                    candidate=candidate,
-                    load_meta=load_meta,
-                )
-                logger.info("harness metrics", **metrics_result)
-            except Exception as exc:
-                logger.info("harness metrics failed", error=str(exc))
-            log_path = logger.save("latest_candidate_send.log")
-            logger.dump_to_stdout()
-            return {
-                "status": "blocked",
-                "reason": "send_time_cleanliness_fail",
-                "delivery_date": delivery_date,
-                "cleanliness_quality": cleanliness_quality,
-                "log": str(log_path),
-            }
-        try:
-            current_brief = candidate["brief"] if isinstance(candidate.get("brief"), dict) else {}
-            current_subject = str(candidate.get("subject") or subject)
-            current_plain_text = str(candidate.get("plain_text") or "")
-            current_html_body = str(candidate.get("html_body") or "")
-            current_selection_quality = evaluate_selection_quality(current_brief)
-            current_quality_map = evaluate_all_quality(
-                current_brief,
-                current_plain_text,
-                current_html_body,
-                test_invocation=test_invocation,
-                selection_quality=current_selection_quality,
-                cleanliness_quality=cleanliness_quality,
-                latest_json={**candidate, "brief": current_brief, "subject": current_subject, "plain_text": current_plain_text, "html_body": current_html_body},
-            )
-            current_quality_map = _suppress_morning_daily_question_quality_map(
-                current_quality_map,
-                daily_question_texts=daily_question_texts,
-            )
-            quality_gate = build_gate_from_quality_map(
-                current_quality_map,
-                plain_text=current_plain_text,
-                html_body=current_html_body,
-            )
-            candidate["quality"] = {"final": current_quality_map, "gate": quality_gate}
-            candidate["quality_gate"] = quality_gate
-            candidate["stored_quality_gate"] = stored_quality_gate
-            logger.info("candidate morning quality recheck", stored_quality_gate=stored_quality_gate, current_quality_gate=quality_gate)
-            if looks_like_gate_drift(stored_quality_gate, quality_gate):
-                logger.info("candidate send blocked", reason="morning_gate_drift", stored_quality_gate=stored_quality_gate, current_quality_gate=quality_gate)
-                try:
-                    metrics_result = append_morning_metrics(
-                        delivery_date=delivery_date,
-                        test_invocation=test_invocation,
-                        status="blocked",
-                        reason="morning_gate_drift",
-                        candidate=candidate,
-                        load_meta=load_meta,
-                    )
-                    logger.info("harness metrics", **metrics_result)
-                except Exception as exc:
-                    logger.info("harness metrics failed", error=str(exc))
-                log_path = logger.save("latest_candidate_send.log")
-                logger.dump_to_stdout()
-                return {
-                    "status": "blocked",
-                    "reason": "morning_gate_drift",
-                    "delivery_date": delivery_date,
-                    "stored_quality_gate": stored_quality_gate,
-                    "current_quality_gate": quality_gate,
-                    "log": str(log_path),
-                }
-        except Exception as exc:
-            if not test_invocation:
-                logger.info("candidate send blocked", reason="morning_gate_recheck_error", error=str(exc))
-                try:
-                    metrics_result = append_morning_metrics(
-                        delivery_date=delivery_date,
-                        test_invocation=test_invocation,
-                        status="blocked",
-                        reason="morning_gate_recheck_error",
-                        candidate=candidate,
-                        load_meta=load_meta,
-                    )
-                    logger.info("harness metrics", **metrics_result)
-                except Exception as metrics_exc:
-                    logger.info("harness metrics failed", error=str(metrics_exc))
-                log_path = logger.save("latest_candidate_send.log")
-                logger.dump_to_stdout()
-                return {
-                    "status": "blocked",
-                    "reason": "morning_gate_recheck_error",
-                    "delivery_date": delivery_date,
-                    "error": str(exc),
-                    "log": str(log_path),
-                }
-            logger.info("candidate morning quality recheck failed", error=str(exc), fallback_to_stored_gate=True)
-            candidate["morning_gate_drift"] = {"status": "recheck_failed", "error": str(exc)}
-    else:
-        try:
-            current_quality_map = {
-                "weekly_pdf": shared_evaluate_weekly_pdf_quality(candidate, delivery_date=delivery_date)
-            }
-            quality_gate = build_gate_from_quality_map(
-                current_quality_map,
-                plain_text=str(candidate.get("plain_text") or ""),
-                html_body=str(candidate.get("html_body") or ""),
-            )
-            candidate["quality"] = {"final": current_quality_map, "gate": quality_gate}
-            candidate["quality_gate"] = quality_gate
-            candidate["stored_quality_gate"] = stored_quality_gate
-            logger.info("weekly pdf candidate morning quality recheck", stored_quality_gate=stored_quality_gate, current_quality_gate=quality_gate)
-            if looks_like_gate_drift(stored_quality_gate, quality_gate):
-                logger.info("candidate send blocked", reason="morning_gate_drift", stored_quality_gate=stored_quality_gate, current_quality_gate=quality_gate)
-                try:
-                    metrics_result = append_morning_metrics(
-                        delivery_date=delivery_date,
-                        test_invocation=test_invocation,
-                        status="blocked",
-                        reason="morning_gate_drift",
-                        candidate=candidate,
-                        load_meta=load_meta,
-                    )
-                    logger.info("harness metrics", **metrics_result)
-                except Exception as exc:
-                    logger.info("harness metrics failed", error=str(exc))
-                log_path = logger.save("latest_candidate_send.log")
-                logger.dump_to_stdout()
-                return {
-                    "status": "blocked",
-                    "reason": "morning_gate_drift",
-                    "delivery_date": delivery_date,
-                    "stored_quality_gate": stored_quality_gate,
-                    "current_quality_gate": quality_gate,
-                    "log": str(log_path),
-                }
-        except Exception as exc:
-            if not test_invocation:
-                logger.info("candidate send blocked", reason="morning_gate_recheck_error", error=str(exc))
-                try:
-                    metrics_result = append_morning_metrics(
-                        delivery_date=delivery_date,
-                        test_invocation=test_invocation,
-                        status="blocked",
-                        reason="morning_gate_recheck_error",
-                        candidate=candidate,
-                        load_meta=load_meta,
-                    )
-                    logger.info("harness metrics", **metrics_result)
-                except Exception as metrics_exc:
-                    logger.info("harness metrics failed", error=str(metrics_exc))
-                log_path = logger.save("latest_candidate_send.log")
-                logger.dump_to_stdout()
-                return {
-                    "status": "blocked",
-                    "reason": "morning_gate_recheck_error",
-                    "delivery_date": delivery_date,
-                    "error": str(exc),
-                    "log": str(log_path),
-                }
-            logger.info("weekly pdf candidate morning quality recheck failed", error=str(exc), fallback_to_stored_gate=True)
-            candidate["morning_gate_drift"] = {"status": "recheck_failed", "error": str(exc)}
     if quality_gate.get("overall") != "ok":
         logger.info("candidate send blocked", reason="quality_gate_fail", quality_gate=quality_gate)
         try:
@@ -2691,6 +2338,51 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
         log_path = logger.save("latest_candidate_send.log")
         logger.dump_to_stdout()
         return {"status": "blocked", "reason": "quality_gate_fail", "delivery_date": delivery_date, "quality_gate": quality_gate, "log": str(log_path)}
+
+    required_artifacts = ["subject", "plain_text", "html_body"]
+    if candidate.get("candidate_type") == "weekly_pdf":
+        required_artifacts.append("weekly_pdf")
+    else:
+        required_artifacts.append("brief")
+    missing_artifacts = []
+    for key in required_artifacts:
+        value = candidate.get(key)
+        if key in {"brief", "weekly_pdf"}:
+            if not isinstance(value, dict) or not value:
+                missing_artifacts.append(key)
+        elif not str(value or "").strip():
+            missing_artifacts.append(key)
+    if missing_artifacts:
+        logger.info("candidate send blocked", reason="candidate_artifact_missing", missing_artifacts=missing_artifacts)
+        try:
+            metrics_result = append_morning_metrics(
+                delivery_date=delivery_date,
+                test_invocation=test_invocation,
+                status="blocked",
+                reason="candidate_artifact_missing",
+                candidate=candidate,
+                load_meta=load_meta,
+            )
+            logger.info("harness metrics", **metrics_result)
+        except Exception as exc:
+            logger.info("harness metrics failed", error=str(exc))
+        log_path = logger.save("latest_candidate_send.log")
+        logger.dump_to_stdout()
+        return {
+            "status": "blocked",
+            "reason": "candidate_artifact_missing",
+            "delivery_date": delivery_date,
+            "missing_artifacts": missing_artifacts,
+            "log": str(log_path),
+        }
+
+    logger.info(
+        "candidate send using stored audited artifacts",
+        candidate_type=str(candidate.get("candidate_type") or "daily"),
+        plain_text_chars=len(str(candidate.get("plain_text") or "")),
+        html_body_chars=len(str(candidate.get("html_body") or "")),
+        quality_gate=quality_gate,
+    )
 
     if candidate.get("candidate_type") == "weekly_pdf":
         return send_weekly_pdf_candidate(
