@@ -45,3 +45,15 @@ def test_lite_email_quality_flags_internal_marker_leak() -> None:
 
     assert result["status"] == "fail"
     assert any(item["code"] == "lite_internal_marker_leaked" for item in result["issues"])
+
+
+def test_lite_email_quality_flags_blacklisted_answer_module_in_visible_cta() -> None:
+    visible_hook = "完整版会补充文章框架图、考场转化和参考答案，并说明素材迁移的使用场景。"
+    result = evaluate_lite_email_quality(
+        _payload(visible_hook),
+        plain_text=f"今天完整版多讲了什么\n今日完整版亮点：{visible_hook}",
+        html_body="<p>今天完整版多讲了什么</p>",
+    )
+
+    assert result["status"] == "fail"
+    assert any(item["code"] == "lite_full_answer_module_named" for item in result["issues"])

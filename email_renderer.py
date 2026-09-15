@@ -7,7 +7,7 @@ from urllib.parse import quote, urlencode
 
 from config import settings
 from exam_transfer_card import build_exam_transfer_card
-from lite_paid_cta import resolve_lite_paid_cta_payload
+from lite_paid_cta import SAFE_LITE_CTA_FALLBACK, resolve_lite_paid_cta_payload
 
 
 def h(value: Any) -> str:
@@ -761,12 +761,12 @@ def _lite_paid_mailto_url() -> str:
 
 def _lite_paid_feature_list() -> list[str]:
     return [
-        "审题关键",
-        "完整作答框架",
-        "今日一题参考答案",
         "文章框架图",
         "考场转化",
-        "金句/素材迁移",
+        "原文问题链",
+        "治理边界辨析",
+        "素材迁移",
+        "表达积累",
         "周末 PDF 汇编",
     ]
 
@@ -783,7 +783,7 @@ def _lite_paid_plan_summary() -> str:
 
 
 def _lite_paid_feature_summary() -> str:
-    return "审题关键、完整作答框架、参考答案、框架图、考场转化、金句/素材迁移、周末 PDF。"
+    return "、".join(_lite_paid_feature_list()) + "。"
 
 
 def _lite_paid_highlight_topic(brief: dict[str, Any]) -> str:
@@ -834,14 +834,10 @@ def _lite_paid_highlight_scenarios(brief: dict[str, Any]) -> str:
 
 
 def _lite_paid_highlight_fallback(brief: dict[str, Any]) -> str:
-    return "完整版会把今天这道题从读题、搭框架到写成答案完整走一遍，并补充文章框架图、考场转化和金句/素材迁移。"
+    return SAFE_LITE_CTA_FALLBACK
 
 
 def _lite_paid_highlight(latest_json: dict[str, Any], brief: dict[str, Any]) -> str:
-    cached = str(latest_json.get("_lite_paid_highlight") or "").strip() if isinstance(latest_json, dict) else ""
-    if cached:
-        return cached
-
     payload = resolve_lite_paid_cta_payload(latest_json, brief)
     highlight = str(payload.get("hook") or _lite_paid_highlight_fallback(brief)).strip()
     if isinstance(latest_json, dict):

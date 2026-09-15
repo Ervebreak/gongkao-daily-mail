@@ -1,5 +1,35 @@
 # Harness Change Log
 
+## 2026-09-15 - Align Lite CTA copy with Full-only answer-module boundary
+
+Reason:
+
+- The finalized daily Skill prohibits Lite-visible copy from directly naming Full-only answer modules, while the current CTA prompt, fixed value summary, fallback, and cached highlight path could still surface those labels or an answer-production chain.
+
+Files changed:
+
+- `lite_paid_cta.py`
+- `email_renderer.py`
+- `lite_email_quality.py`
+- `content_harness/runtime_prompt_rules.md`
+- `content_harness/quality_checks.md`
+- `tests/test_lite_paid_cta.py`
+- `tests/test_lite_email_quality_gate.py`
+- `tests/test_paid_lite_segmentation.py`
+- `CHANGELOG_HARNESS.md`
+
+Latest behavior:
+
+- Lite CTA generation and fixed value summaries only name safe categories such as article framework maps, exam transfer, source problem chains, governance-boundary analysis, material transfer, expression accumulation, and the weekend PDF.
+- Hooks that directly name Full-only answer modules or disclose multi-step answer chains are rejected, including legacy `_lite_paid_highlight` cache values; invalid values fall back to deterministic low-pressure copy.
+- Existing hype, anxiety, and overpromise bans remain active and now cover the finalized Skill's additional prohibited phrases.
+- Final Lite quality review treats any visible Full-only answer-module label as a high-severity leak.
+- Full rendering, source selection, daily content generation, Publisher, OSS, sending, subscriber logic, and pricing are unchanged.
+
+Validation boundary:
+
+- Focused regressions cover safe wording, each prohibited module label, cached legacy hooks, generated Lite plain/HTML CTA areas, answer-label chains, and visible-output quality detection.
+
 ## 2026-09-13 - Keep weekly material-card openings together
 
 Reason:

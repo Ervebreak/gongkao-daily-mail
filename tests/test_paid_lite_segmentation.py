@@ -250,7 +250,7 @@ def test_render_lite_email_degrades_gracefully_for_partial_content() -> None:
     assert "规范收费要先把规则讲清楚" in body
     assert "先摸诉求" not in body
     assert "完整版会补充" in body
-    assert "完整版会把今天这道题从读题、搭框架到写成答案完整走一遍" in body
+    assert "完整版还会展开文章框架图与考场转化" in body
 
 
 
