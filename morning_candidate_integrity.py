@@ -7,6 +7,7 @@ from fact_evidence import candidate_content_hash, current_fact_review_binding
 
 
 SEND_SNAPSHOT_KEY = "_morning_send_snapshot"
+BOUND_CONTENT_REVIEW_KEY = "_morning_bound_content_quality"
 _BINDING_KEYS = ("source_set_hash", "candidate_fact_hash", "candidate_content_hash")
 _REQUIRED_SCORE_KEYS = (
     "topic_fit",
@@ -50,13 +51,47 @@ def _install_render_snapshot_hook() -> None:
     pre_send_cleanliness._sync_rendered_outputs = _sync_with_bound_snapshot
 
 
-def attach_candidate_send_snapshot(candidate: dict[str, Any]) -> dict[str, Any]:
-    """Attach an in-memory snapshot of the already-audited rendered candidate.
+def _install_content_quality_hook() -> None:
+    """Reuse a bound stored semantic review and validate any live fallback result."""
+    try:
+        import content_quality_reviewer
+    except Exception:
+        return
 
-    The snapshot is added only when a candidate is loaded for morning send. It is
-    never part of the persisted candidate payload. The public brief hash binds the
-    stored plain/html artifacts to the exact reader-facing brief they were audited
-    against.
+    current = getattr(content_quality_reviewer, "evaluate_content_quality", None)
+    if not callable(current) or getattr(current, "_morning_content_quality_hook", False):
+        return
+
+    original = current
+
+    def _evaluate_with_bound_review(
+        brief: dict[str, Any],
+        plain_text: str,
+        html_body: str,
+        test_mode: bool = False,
+    ) -> dict[str, Any]:
+        stored = brief.get(BOUND_CONTENT_REVIEW_KEY) if isinstance(brief, dict) else None
+        if content_quality_review_binding_is_current(brief, stored if isinstance(stored, dict) else None):
+            reused = copy.deepcopy(stored)
+            checks = dict(reused.get("checks") or {}) if isinstance(reused.get("checks"), dict) else {}
+            checks["morning_review_reused"] = True
+            checks["morning_review_reuse_reason"] = "stored_content_quality_binding_current"
+            reused["checks"] = checks
+            return reused
+        return validate_live_content_quality_review(original(brief, plain_text, html_body, test_mode=test_mode))
+
+    setattr(_evaluate_with_bound_review, "_morning_content_quality_hook", True)
+    setattr(_evaluate_with_bound_review, "_morning_content_quality_original", original)
+    content_quality_reviewer.evaluate_content_quality = _evaluate_with_bound_review
+
+
+def attach_candidate_send_snapshot(candidate: dict[str, Any]) -> dict[str, Any]:
+    """Attach transient, hash-bound morning-send artifacts and semantic review.
+
+    Nothing added here is persisted back to OSS. The archived plain/html output is
+    treated as the canonical send artifact while the public brief hash is
+    unchanged. The stored semantic review is reused only if all three review
+    binding hashes still match the current brief and source evidence.
     """
     if not isinstance(candidate, dict):
         return candidate
@@ -74,7 +109,13 @@ def attach_candidate_send_snapshot(candidate: dict[str, Any]) -> dict[str, Any]:
         "html_body": html_body,
     }
     candidate["quality"] = quality
+
+    stored_review = _stored_content_quality(candidate)
+    if content_quality_review_binding_is_current(brief, stored_review):
+        brief[BOUND_CONTENT_REVIEW_KEY] = copy.deepcopy(stored_review)
+
     _install_render_snapshot_hook()
+    _install_content_quality_hook()
     return candidate
 
 
