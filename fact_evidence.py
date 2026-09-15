@@ -311,6 +311,18 @@ def _flatten_text(value: Any) -> str:
     return _clean(value)
 
 
+def _featured_fact_check_text(candidate_payload: dict[str, Any]) -> str:
+    """Flatten only source-bound prose, excluding identity metadata such as title/URL."""
+    featured = candidate_payload.get("featured_article") if isinstance(candidate_payload.get("featured_article"), dict) else {}
+    return _flatten_text({
+        "one_sentence": featured.get("one_sentence"),
+        "core_viewpoint": featured.get("core_viewpoint"),
+        "original_overview": featured.get("original_overview"),
+        "article_framework": featured.get("article_framework"),
+        "article_framework_map": featured.get("article_framework_map"),
+    })
+
+
 def deterministic_fact_issues(brief: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
     issues: list[dict[str, Any]] = []
     items = bundle.get("items") if isinstance(bundle.get("items"), dict) else {}
@@ -319,7 +331,7 @@ def deterministic_fact_issues(brief: dict[str, Any], bundle: dict[str, Any]) -> 
     evidence = items.get(featured_key) if isinstance(items.get(featured_key), dict) else {}
     source_text = " ".join(_clean(p.get("text")) for p in evidence.get("paragraphs") or [] if isinstance(p, dict))
     candidate_payload = source_bound_candidate_payload(brief)
-    candidate_text = _flatten_text(candidate_payload.get("featured_article"))
+    candidate_text = _featured_fact_check_text(candidate_payload)
     if source_text and any(term in source_text for term in SOURCE_PERSISTENCE_TERMS):
         if any(term in candidate_text for term in RECURRENCE_TERMS) and any(term in candidate_text for term in STRONG_SCOPE_TERMS):
             issues.append({
