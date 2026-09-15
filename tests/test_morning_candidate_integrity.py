@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import copy
 
-from fact_evidence import current_fact_review_binding
 from morning_candidate_integrity import (
     SEND_SNAPSHOT_KEY,
     attach_candidate_send_snapshot,
     content_quality_review_binding_is_current,
+    current_content_quality_binding,
     get_bound_stored_content_quality,
     restore_bound_render_snapshot,
     validate_live_content_quality_review,
@@ -29,7 +29,7 @@ def _brief() -> dict:
 
 
 def _review(brief: dict) -> dict:
-    binding = current_fact_review_binding(brief)
+    binding = current_content_quality_binding(brief)
     return {
         "ok": True,
         "status": "ok",
