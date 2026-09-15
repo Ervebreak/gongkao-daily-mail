@@ -21,6 +21,16 @@
 
 阿里云 FC 入口：`main.handler`。本地入口：`python main.py`。
 
+### Agent 编排层（人工确认后发送）
+
+`agent/` 目录提供独立的 AI Agent 编排入口（`fc_agent_orchestrator.handler`），
+把现有能力包装成受控工具，由 Orchestrator 动态编排（模型只在选文和质检放行
+两个决策点调用），候选通过门禁后**先发预览给管理员，确认后才发送**。
+不重写业务算法，与 `main.handler` 共用同一套 Schema / 质检 / 渲染 / 发送链路。
+详见 `docs/agent_architecture.md`、`docs/agent_deploy.md`。
+修改 Agent 编排 / 工具 / 确认闸门时，必读：`agent/orchestrator.py`、
+`agent/tools.py`、`agent/confirm.py`、`agent/prompts/orchestrator.md`。
+
 ## 2. 修改类型与必读文件
 
 | 修改类型 | 必读文件 |
