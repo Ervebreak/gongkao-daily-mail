@@ -3,7 +3,13 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from lite_paid_cta import BANNED_LITE_CTA_WORDS, GENERIC_BENEFIT_WORDS, SAFE_LITE_CTA_FALLBACK, resolve_lite_paid_cta_payload
+from lite_paid_cta import (
+    BANNED_LITE_CTA_WORDS,
+    BLACKLISTED_LITE_ANSWER_MODULE_TERMS,
+    GENERIC_BENEFIT_WORDS,
+    SAFE_LITE_CTA_FALLBACK,
+    resolve_lite_paid_cta_payload,
+)
 from question_quality import _looks_incomplete
 
 
@@ -158,6 +164,17 @@ def evaluate_lite_email_quality(
 
     if any(word in hook for word in BANNED_LITE_CTA_WORDS):
         issues.append(_issue("medium", "lite_cta_over_sales", "简版 CTA 出现过强销售话术，建议回退到更克制的文案。", bad_text=hook))
+
+    leaked_answer_module = next((term for term in BLACKLISTED_LITE_ANSWER_MODULE_TERMS if term in visible_text), "")
+    if leaked_answer_module:
+        issues.append(
+            _issue(
+                "high",
+                "lite_full_answer_module_named",
+                f"免费简版直接出现完整版答案模块名：{leaked_answer_module}。",
+                bad_text=leaked_answer_module,
+            )
+        )
 
     marker = next((item for item in INTERNAL_MARKERS if item and item.lower() in visible_text.lower()), "")
     if marker:

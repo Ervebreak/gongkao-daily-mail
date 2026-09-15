@@ -5,8 +5,14 @@ from typing import Any
 
 
 BANNED_LITE_CTA_WORDS = (
+    "教你",
+    "转化价值极高",
+    "避免假大空",
+    "干瘪对策词",
+    "必看",
     "押题",
     "必考",
+    "一定会考",
     "保过",
     "上岸",
     "提分神器",
@@ -14,19 +20,38 @@ BANNED_LITE_CTA_WORDS = (
     "不看就亏",
 )
 
-GENERIC_BENEFIT_WORDS = (
+BLACKLISTED_LITE_ANSWER_MODULE_TERMS = (
     "审题关键",
+    "作答主线",
     "完整作答框架",
+    "作答框架",
+    "答题框架",
     "参考答案",
-    "框架图",
-    "考场转化",
-    "金句拆解",
-    "素材迁移",
-    "周末 PDF",
+    "30秒答案",
+    "30 秒答案",
 )
 
+SAFE_LITE_CTA_BENEFIT_WORDS = (
+    "文章框架图",
+    "框架图",
+    "考场转化",
+    "原文问题链",
+    "治理边界辨析",
+    "素材迁移",
+    "表达积累",
+    "周末 PDF",
+    "申论素材",
+    "面试表达",
+    "适用题型",
+    "使用场景",
+)
+
+# Backward-compatible name used by the Lite quality reviewer. Its vocabulary is
+# intentionally restricted to values that do not name Full-only answer modules.
+GENERIC_BENEFIT_WORDS = SAFE_LITE_CTA_BENEFIT_WORDS
+
 SAFE_LITE_CTA_FALLBACK = (
-    "完整版会把今天这道题从读题、搭框架到写成答案完整走一遍，并补充文章框架图、考场转化和金句/素材迁移。"
+    "完整版还会展开文章框架图与考场转化，补充原文问题链、治理边界辨析、素材迁移和表达积累，供申论分析、对策题或面试复盘时按需使用。"
 )
 
 
@@ -84,7 +109,13 @@ def _contains_answer_chain(text: str, brief: dict[str, Any]) -> bool:
     labels = [label for label in _extract_answer_labels(brief) if len(label) >= 2]
     if labels and sum(1 for label in labels if label in text) >= 2:
         return True
-    return bool(re.search(r"[\w\u4e00-\u9fff]{2,}[—→-][\w\u4e00-\u9fff]{2,}[—→-][\w\u4e00-\u9fff]{2,}", text))
+    chain_patterns = (
+        r"[\w\u4e00-\u9fff]{2,}[—→-][\w\u4e00-\u9fff]{2,}[—→-][\w\u4e00-\u9fff]{2,}",
+        r"(?:先|首先).{1,28}(?:再|然后|其次).{1,28}(?:最后|最终)",
+        r"(?:一是|第一).{1,32}(?:二是|第二).{1,32}(?:三是|第三)",
+        r"(?:读题|审题).{0,12}(?:搭|列|写).{0,8}(?:框架|提纲).{0,12}(?:写成|形成|完成).{0,8}(?:答案|作答)",
+    )
+    return any(re.search(pattern, text) for pattern in chain_patterns)
 
 
 def _coordinate_quote_text(value: Any) -> str:
@@ -103,11 +134,12 @@ def build_lite_paid_cta_prompt(brief: dict[str, Any]) -> str:
         "只输出 JSON，对象结构必须包含：hook_type、hook、source_module。",
         "约束：",
         "1. hook 用 1 句中文，控制在 60-120 字。",
-        "2. 可以写模块名：审题关键、完整作答框架、参考答案、文章框架图、考场转化、金句/素材迁移。",
-        "3. 必须基于当天已有内容，不得虚构外部案例、政策、人物或数据。",
-        "4. 不得写出 answer_framework 的具体分点标签、作答链条、candidate_answer 内容或任何完整答案表达。",
-        "5. 不得出现押题、必考、保过、上岸、提分神器、内部资料、不看就亏。",
-        "6. 语气像自然提示，不要写成促销广告。",
+        "2. 只可从这些安全价值类别中选择：文章框架图、考场转化、原文问题链、治理边界辨析、素材迁移、表达积累、周末 PDF，或不涉及答案链的同类表述。",
+        "3. 不得直接出现审题关键、作答主线、完整作答框架、参考答案、30秒答案等完整版答案模块名，也不得用同义包装披露答案链。",
+        "4. 必须基于当天已有内容，不得虚构外部案例、政策、人物或数据。",
+        "5. 不得写出 answer_framework 的具体分点标签、作答链条、candidate_answer 内容或任何完整答案表达。",
+        "6. 不得出现教你、转化价值极高、避免假大空、干瘪对策词、必看、押题、必考、一定会考、保过、上岸、提分神器、内部资料、不看就亏。",
+        "7. 语气像自然提示，不要写成促销广告。",
         "",
         f"今日主题：{brief.get('today_theme') or ''}",
         f"精读标题：{featured.get('title') or ''}",
@@ -150,6 +182,8 @@ def is_valid_lite_paid_cta_hook(hook: str, brief: dict[str, Any]) -> bool:
         return False
     if len(text) < 24 or len(text) > 130:
         return False
+    if any(term in text for term in BLACKLISTED_LITE_ANSWER_MODULE_TERMS):
+        return False
     if any(word in text for word in BANNED_LITE_CTA_WORDS):
         return False
     if _contains_answer_chain(text, brief):
@@ -187,6 +221,7 @@ def finalize_lite_paid_cta_payload(value: Any, brief: dict[str, Any]) -> dict[st
 
 def resolve_lite_paid_cta_payload(latest_json: dict[str, Any], brief: dict[str, Any]) -> dict[str, Any]:
     candidates = [
+        {"hook": latest_json.get("_lite_paid_highlight") or "", "hook_type": "cache", "source_module": _infer_source_module(brief)},
         _ensure_dict(_ensure_dict(brief.get("lite_paid_cta"))),
         _ensure_dict(_ensure_dict(latest_json.get("lite_paid_cta"))),
         {"hook": brief.get("lite_paid_highlight") or "", "hook_type": "legacy", "source_module": _infer_source_module(brief)},
