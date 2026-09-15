@@ -7,7 +7,6 @@ from fact_evidence import candidate_content_hash, current_fact_review_binding
 
 
 SEND_SNAPSHOT_KEY = "_morning_send_snapshot"
-BOUND_CONTENT_REVIEW_KEY = "_morning_bound_content_quality"
 _BINDING_KEYS = ("source_set_hash", "candidate_fact_hash", "candidate_content_hash")
 _REQUIRED_SCORE_KEYS = (
     "topic_fit",
@@ -19,6 +18,40 @@ _REQUIRED_SCORE_KEYS = (
     "module_coherence",
     "cleanliness",
 )
+_MAX_BOUND_REVIEWS = 8
+_BOUND_CONTENT_REVIEWS: dict[tuple[str, str, str], dict[str, Any]] = {}
+
+
+def _binding_key(brief: dict[str, Any]) -> tuple[str, str, str]:
+    binding = current_fact_review_binding(brief)
+    return tuple(str(binding.get(key) or "") for key in _BINDING_KEYS)  # type: ignore[return-value]
+
+
+def _register_bound_content_quality(brief: dict[str, Any], review: dict[str, Any]) -> None:
+    if not content_quality_review_binding_is_current(brief, review):
+        return
+    key = _binding_key(brief)
+    if not all(key):
+        return
+    _BOUND_CONTENT_REVIEWS[key] = copy.deepcopy(review)
+    while len(_BOUND_CONTENT_REVIEWS) > _MAX_BOUND_REVIEWS:
+        oldest_key = next(iter(_BOUND_CONTENT_REVIEWS))
+        _BOUND_CONTENT_REVIEWS.pop(oldest_key, None)
+
+
+def _lookup_bound_content_quality(brief: dict[str, Any]) -> dict[str, Any] | None:
+    key = _binding_key(brief)
+    if not all(key):
+        return None
+    review = _BOUND_CONTENT_REVIEWS.get(key)
+    if not content_quality_review_binding_is_current(brief, review):
+        return None
+    reused = copy.deepcopy(review)
+    checks = dict(reused.get("checks") or {}) if isinstance(reused.get("checks"), dict) else {}
+    checks["morning_review_reused"] = True
+    checks["morning_review_reuse_reason"] = "stored_content_quality_binding_current"
+    reused["checks"] = checks
+    return reused
 
 
 def _install_render_snapshot_hook() -> None:
@@ -70,14 +103,9 @@ def _install_content_quality_hook() -> None:
         html_body: str,
         test_mode: bool = False,
     ) -> dict[str, Any]:
-        stored = brief.get(BOUND_CONTENT_REVIEW_KEY) if isinstance(brief, dict) else None
-        if content_quality_review_binding_is_current(brief, stored if isinstance(stored, dict) else None):
-            reused = copy.deepcopy(stored)
-            checks = dict(reused.get("checks") or {}) if isinstance(reused.get("checks"), dict) else {}
-            checks["morning_review_reused"] = True
-            checks["morning_review_reuse_reason"] = "stored_content_quality_binding_current"
-            reused["checks"] = checks
-            return reused
+        stored = _lookup_bound_content_quality(brief)
+        if stored is not None:
+            return stored
         return validate_live_content_quality_review(original(brief, plain_text, html_body, test_mode=test_mode))
 
     setattr(_evaluate_with_bound_review, "_morning_content_quality_hook", True)
@@ -111,9 +139,7 @@ def attach_candidate_send_snapshot(candidate: dict[str, Any]) -> dict[str, Any]:
     candidate["quality"] = quality
 
     stored_review = _stored_content_quality(candidate)
-    if content_quality_review_binding_is_current(brief, stored_review):
-        brief[BOUND_CONTENT_REVIEW_KEY] = copy.deepcopy(stored_review)
-
+    _register_bound_content_quality(brief, stored_review)
     _install_render_snapshot_hook()
     _install_content_quality_hook()
     return candidate
