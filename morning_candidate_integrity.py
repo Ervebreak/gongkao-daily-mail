@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy
 from typing import Any
 
-from fact_evidence import candidate_content_hash, current_fact_review_binding
+from fact_evidence import candidate_content_hash, candidate_fact_hash
 
 
 SEND_SNAPSHOT_KEY = "_morning_send_snapshot"
@@ -22,9 +22,22 @@ _MAX_BOUND_REVIEWS = 8
 _BOUND_CONTENT_REVIEWS: dict[tuple[str, str, str], dict[str, Any]] = {}
 
 
+def current_content_quality_binding(brief: dict[str, Any]) -> dict[str, str]:
+    bundle = brief.get("_source_evidence") if isinstance(brief.get("_source_evidence"), dict) else {}
+    return {
+        "source_set_hash": str(bundle.get("source_set_hash") or ""),
+        "candidate_fact_hash": candidate_fact_hash(brief),
+        "candidate_content_hash": candidate_content_hash(brief),
+    }
+
+
 def _binding_key(brief: dict[str, Any]) -> tuple[str, str, str]:
-    binding = current_fact_review_binding(brief)
-    return tuple(str(binding.get(key) or "") for key in _BINDING_KEYS)  # type: ignore[return-value]
+    binding = current_content_quality_binding(brief)
+    return (
+        binding["source_set_hash"],
+        binding["candidate_fact_hash"],
+        binding["candidate_content_hash"],
+    )
 
 
 def _register_bound_content_quality(brief: dict[str, Any], review: dict[str, Any]) -> None:
@@ -185,7 +198,7 @@ def content_quality_review_binding_is_current(brief: dict[str, Any], review: dic
     if not isinstance(brief, dict) or not isinstance(review, dict):
         return False
     checks = review.get("checks") if isinstance(review.get("checks"), dict) else {}
-    current = current_fact_review_binding(brief)
+    current = current_content_quality_binding(brief)
     for key in _BINDING_KEYS:
         stored_value = str(checks.get(key) or "")
         current_value = str(current.get(key) or "")
