@@ -20,6 +20,36 @@ _REQUIRED_SCORE_KEYS = (
 )
 
 
+def _install_render_snapshot_hook() -> None:
+    """Make the morning cleanliness pass preserve a bound archived render.
+
+    `send_saved_candidate` imports the cleanliness module before loading the
+    candidate. Installing this idempotent hook at load time changes only the
+    private render-sync step. If the brief changes during cleanliness repair, the
+    stored hash no longer matches and the original renderer is used instead.
+    """
+    try:
+        import pre_send_cleanliness
+    except Exception:
+        return
+
+    current = getattr(pre_send_cleanliness, "_sync_rendered_outputs", None)
+    if not callable(current) or getattr(current, "_morning_snapshot_hook", False):
+        return
+
+    original = current
+
+    def _sync_with_bound_snapshot(data: dict[str, Any]) -> dict[str, Any]:
+        restored, reused = restore_bound_render_snapshot(data)
+        if reused:
+            return restored
+        return original(data)
+
+    setattr(_sync_with_bound_snapshot, "_morning_snapshot_hook", True)
+    setattr(_sync_with_bound_snapshot, "_morning_snapshot_original", original)
+    pre_send_cleanliness._sync_rendered_outputs = _sync_with_bound_snapshot
+
+
 def attach_candidate_send_snapshot(candidate: dict[str, Any]) -> dict[str, Any]:
     """Attach an in-memory snapshot of the already-audited rendered candidate.
 
@@ -44,6 +74,7 @@ def attach_candidate_send_snapshot(candidate: dict[str, Any]) -> dict[str, Any]:
         "html_body": html_body,
     }
     candidate["quality"] = quality
+    _install_render_snapshot_hook()
     return candidate
 
 
