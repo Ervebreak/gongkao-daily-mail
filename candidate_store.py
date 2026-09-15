@@ -197,6 +197,16 @@ def save_candidate(payload: dict[str, Any]) -> dict[str, Any]:
     return meta
 
 
+def _prepare_candidate_for_morning_send(data: dict[str, Any]) -> dict[str, Any]:
+    """Add transient send-integrity metadata without changing persisted JSON."""
+    try:
+        from morning_candidate_integrity import attach_candidate_send_snapshot
+
+        return attach_candidate_send_snapshot(data)
+    except Exception:
+        return data
+
+
 def load_candidate(delivery_date: str | None = None) -> tuple[dict[str, Any] | None, dict[str, Any]]:
     delivery_date = (delivery_date or "").strip()
     if settings.candidate_storage == "oss":
@@ -204,7 +214,7 @@ def load_candidate(delivery_date: str | None = None) -> tuple[dict[str, Any] | N
         payload, meta = _get_oss_json(object_key)
         if payload:
             meta["candidate_storage"] = "oss"
-            return payload, meta
+            return _prepare_candidate_for_morning_send(payload), meta
     path = candidate_local_path(delivery_date) if delivery_date else latest_local_path()
     meta: dict[str, Any] = {
         "candidate_storage": "local",
@@ -235,4 +245,4 @@ def load_candidate(delivery_date: str | None = None) -> tuple[dict[str, Any] | N
         meta["candidate_bundled_read_ok"] = True
     else:
         meta["candidate_local_read_ok"] = True
-    return data, meta
+    return _prepare_candidate_for_morning_send(data), meta
