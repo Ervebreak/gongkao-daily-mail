@@ -13,7 +13,7 @@ agent/
 ├── state.py             # 状态机 + 运行断点（run.json）
 ├── tools.py             # 受控工具层（8 个工具，包装现有模块）
 ├── orchestrator.py      # 主循环（选文 / 质检放行两个模型决策点）
-├── confirm.py           # 人工确认闸门（预览邮件 + hmac 确认链接）
+├── confirm.py           # 预览 + 取消闸门（次日自动发送 + hmac 取消链接）
 ├── instructions.py      # 读取系统提示词
 ├── prompts/
 │   └── orchestrator.md  # 职责边界与决策格式（Agent instructions）
@@ -27,13 +27,15 @@ tests/test_agent_orchestrator.py   # 编排集成测试（确定性 Planner + mo
 
 | 变量 | 必填 | 说明 |
 |---|---|---|
-| `AGENT_CONFIRM_SECRET` | 是 | 确认链接签名密钥（高熵随机串，建议 32+ 位） |
+| `AGENT_CONFIRM_SECRET` | 是 | 取消链接签名密钥（高熵随机串，建议 32+ 位） |
 | `AGENT_CONFIRM_BASE_URL` | 是 | 函数 HTTP 触发域名，如 `https://xxx.cn-hangzhou.fcapp.run` |
+| `AGENT_MORNING_SEND_HINT` | 否 | 预览邮件里提示的发送时间，默认"次日早晨 07:30" |
 | `AGENT_MAX_MODEL_CALLS` | 否 | 模型调用次数上限，默认 8 |
 | `AGENT_MAX_TOOL_CALLS` | 否 | 工具调用次数上限，默认 20 |
 | `AGENT_MAX_REPAIR_ROUNDS` | 否 | 定点修复轮次上限，默认 2 |
 
 其余复用现有环境变量（`DASHSCOPE_API_KEY` / `SMTP_*` / `CANDIDATE_STORAGE` 等）。
+`CANDIDATE_STORAGE=oss` 时 `save_candidate` 写入正式 OSS 候选，次日发送链路读取。
 
 ## 3. 部署步骤（阿里云 FC）
 
@@ -66,9 +68,10 @@ bash scripts/build_fc_package.sh
   ```json
   { "mode": "agent_nightly" }
   ```
-  不传 `delivery_date` 时默认生成**次日**晨读（20:00 生成 → 发预览 → 你确认 → 群发）。
+  不传 `delivery_date` 时默认生成**次日**晨读（20:00 生成 → 保存候选 + 发预览 →
+  次日早晨自动发送）。
 
-**HTTP 触发器（用于确认链接）**：
+**HTTP 触发器（用于取消链接）**：
 - 认证：无需认证（链接本身带 hmac token）
 - 创建后得到访问域名，填入 `AGENT_CONFIRM_BASE_URL`
 
@@ -79,12 +82,17 @@ bash scripts/build_fc_package.sh
    ↓
 Agent：搜索文章 → 模型选文 → 生成 brief → 渲染 → 质检
    ↓（P0 门禁失败自动定点修复，最多 2 轮）
-通过门禁 → 保存候选 → 发送【预览邮件】到你的邮箱（SMTP_USER）
+通过门禁 → 保存候选（正式存储）→ 发送【预览邮件】到你的邮箱（SMTP_USER）
    ↓
-你在邮箱里检查预览：
-   ├─ 满意 → 点【确认发送】→ 系统调用现有发送链路群发 → 状态 SENT
-   └─ 不满意 → 点【拒绝】→ 状态 BLOCKED，不会发送
+状态 PUBLISHED：等待次日早晨发送链路自动群发
+   ↓
+你在邮箱里检查预览（可选项）：
+   ├─ 没问题 → 什么都不用做，次日早晨 07:30 自动发送
+   └─ 有问题 → 点【取消次日发送】→ 候选门禁置 fail → 次日发送链路自动阻断
 ```
+
+与方式一（FC 夜间流水线）、方式二（ChatGPT 技能）的发送完全一致：
+**都是生成候选 → 存正式候选 → 次日早晨 morning_send 自动群发**。
 
 运行状态与断点保存在 `agent-runs/{delivery_date}/run.json`
 （`OUTPUT_DIR` 下；若 `CANDIDATE_STORAGE=oss` 建议同步备份该目录）。
@@ -107,10 +115,13 @@ TEST_LLM_MODEL=mock python -m agent.run_local --date 2026-09-16 --test
 走完整个状态机但不调模型、不发邮件（预览发送在本地 dry run 中会真实执行，
 如需跳过可临时注释 `agent/orchestrator.py` 中 `send_preview_email` 调用）。
 
-### 5.3 生产 dry run（真实模型，不发送）
+### 5.3 模拟取消（本地验证安全网）
 
-把 `SEND_EMAIL` 保持默认，先注释确认链接前的发送调用，或使用测试收件人
-（`TEST_RECIPIENTS`）小范围验证预览。
+```bash
+TEST_LLM_MODEL=mock python -m agent.run_local --date 2026-09-16 --test --cancel
+```
+
+会模拟管理员点击取消链接，验证候选被标记、状态进入 BLOCKED。
 
 ## 6. 回滚
 

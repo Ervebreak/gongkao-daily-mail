@@ -1,6 +1,6 @@
 """Agent Orchestrator 集成测试（确定性 Planner + mock 依赖）。
 
-测的是「编排正确性」：状态机推进顺序、工具调用序列、人工确认闸门、
+测的是「编排正确性」：状态机推进顺序、工具调用序列、预览/取消闸门、
 幂等与阻断路径。质检内部逻辑由项目既有测试覆盖，不在此重复。
 """
 from __future__ import annotations
@@ -14,8 +14,8 @@ from unittest import mock
 from agent.orchestrator import DeterministicPlanner, run
 from agent.state import (
     STATE_BLOCKED,
+    STATE_PUBLISHED,
     STATE_SENT,
-    STATE_WAITING_FOR_APPROVAL,
     load_run,
     save_run,
 )
@@ -40,7 +40,7 @@ def _mock_articles():
 
 
 def _fake_preview(delivery_date):
-    """与真实 send_preview_email 一致：更新 state.preview_sent / confirm_token。"""
+    """与真实 send_preview_email 一致：更新 state.preview_sent / cancel_token。"""
     import os
 
     from agent.state import load_run, save_run
@@ -52,14 +52,14 @@ def _fake_preview(delivery_date):
         if os.environ.get("AGENT_CONFIRM_SECRET"):
             from agent.confirm import build_confirm_token
 
-            state.confirm_token = build_confirm_token(delivery_date, "approve")
+            state.confirm_token = build_confirm_token(delivery_date, "cancel")
         else:
             state.confirm_token = "mock-token"
         save_run(state)
     return {
         "preview_sent": True,
         "to": "admin@example.com",
-        "approve_url": f"https://fc.example.com/agent-confirm?date={delivery_date}&action=approve&token=t",
+        "cancel_url": f"https://fc.example.com/agent-confirm?date={delivery_date}&action=cancel&token=t",
     }
 
 
@@ -138,12 +138,12 @@ class AgentRunTempDirMixin(unittest.TestCase):
 
 
 class TestOrchestratorPipeline(AgentRunTempDirMixin):
-    def test_full_pipeline_reaches_waiting_for_approval(self):
+    def test_full_pipeline_reaches_published(self):
         with _patch_pipeline():
             result = run("2026-09-16", test_mode=True, planner=DeterministicPlanner())
 
-        self.assertEqual(result["status"], "waiting_for_approval")
-        self.assertEqual(result["state"], STATE_WAITING_FOR_APPROVAL)
+        self.assertEqual(result["status"], "published")
+        self.assertEqual(result["state"], STATE_PUBLISHED)
         state = load_run("2026-09-16")
         self.assertIsNotNone(state)
         self.assertTrue(state.candidate_saved)
@@ -158,16 +158,23 @@ class TestOrchestratorPipeline(AgentRunTempDirMixin):
     def test_terminal_state_is_idempotent(self):
         with _patch_pipeline():
             first = run("2026-09-17", test_mode=True, planner=DeterministicPlanner())
-            self.assertEqual(first["status"], "waiting_for_approval")
+            self.assertEqual(first["status"], "published")
+            self.assertEqual(first["state"], STATE_PUBLISHED)
 
             state = load_run("2026-09-17")
-            state.transition("PUBLISHED", note="approved")
-            state.transition("SENT", note="sent")
+            state.transition("SENT", note="sent by morning pipeline")
             save_run(state)
 
             second = run("2026-09-17", test_mode=True, planner=DeterministicPlanner())
             self.assertEqual(second["status"], "already_terminal")
             self.assertEqual(second["state"], STATE_SENT)
+
+    def test_published_does_not_rerun(self):
+        with _patch_pipeline():
+            first = run("2026-09-19", test_mode=True, planner=DeterministicPlanner())
+            self.assertEqual(first["status"], "published")
+            second = run("2026-09-19", test_mode=True, planner=DeterministicPlanner())
+            self.assertEqual(second["status"], "already_published")
 
     def test_p0_gate_failure_blocks_after_repair_rounds(self):
         with _patch_pipeline(gate_overall="fail", p0_count=1):
@@ -179,21 +186,32 @@ class TestOrchestratorPipeline(AgentRunTempDirMixin):
         self.assertEqual(state.repair_round, 2)
         self.assertFalse(state.candidate_saved)
 
-    def test_waiting_for_approval_does_not_rerun(self):
-        with _patch_pipeline():
-            first = run("2026-09-19", test_mode=True, planner=DeterministicPlanner())
-            self.assertEqual(first["status"], "waiting_for_approval")
-            second = run("2026-09-19", test_mode=True, planner=DeterministicPlanner())
-            self.assertEqual(second["status"], "waiting_for_approval")
-
 
 class TestConfirmFlow(AgentRunTempDirMixin):
-    def test_confirm_approve_marks_sent(self):
+    def test_confirm_cancel_marks_blocked_and_gate_fail(self):
+        cancelled = {}
+
+        def _fake_load(delivery_date):
+            return (
+                {
+                    "subject": "测试晨读",
+                    "plain_text": "正文",
+                    "html_body": "<html/>",
+                    "quality_gate": {"overall": "ok", "p0_count": 0, "p0_issues": []},
+                },
+                {},
+            )
+
+        def _fake_save(candidate):
+            cancelled["candidate"] = candidate
+
         with _patch_pipeline(), mock.patch.dict(
             "os.environ", {"AGENT_CONFIRM_SECRET": "test-secret"}, clear=False
-        ), mock.patch("main.send_saved_candidate", lambda event: {"status": "ok", "delivery_date": "2026-09-20"}):
+        ), mock.patch("candidate_store.load_candidate", _fake_load), mock.patch(
+            "candidate_store.save_candidate", _fake_save
+        ):
             result = run("2026-09-20", test_mode=True, planner=DeterministicPlanner())
-            self.assertEqual(result["status"], "waiting_for_approval")
+            self.assertEqual(result["status"], "published")
 
             from agent.confirm import handle_confirm
 
@@ -203,55 +221,55 @@ class TestConfirmFlow(AgentRunTempDirMixin):
                     "path": "/agent-confirm",
                     "query": {
                         "date": "2026-09-20",
-                        "action": "approve",
+                        "action": "cancel",
                         "token": state.confirm_token,
                     },
                 }
             )
         self.assertEqual(page["statusCode"], 200)
-        self.assertIn("已确认发送", page["body"])
+        self.assertIn("已取消次日发送", page["body"])
         final = load_run("2026-09-20")
-        self.assertEqual(final.state, STATE_SENT)
-        self.assertTrue(final.sent)
+        self.assertEqual(final.state, STATE_BLOCKED)
+        self.assertEqual(cancelled["candidate"]["quality_gate"]["overall"], "fail")
+        self.assertTrue(cancelled["candidate"].get("_agent_cancelled"))
 
     def test_confirm_bad_token_rejected(self):
         with _patch_pipeline(), mock.patch.dict(
             "os.environ", {"AGENT_CONFIRM_SECRET": "test-secret"}, clear=False
         ):
             result = run("2026-09-21", test_mode=True, planner=DeterministicPlanner())
-            self.assertEqual(result["status"], "waiting_for_approval")
+            self.assertEqual(result["status"], "published")
 
             from agent.confirm import handle_confirm
 
             page = handle_confirm(
                 {
                     "path": "/agent-confirm",
-                    "query": {"date": "2026-09-21", "action": "approve", "token": "forged-token"},
+                    "query": {"date": "2026-09-21", "action": "cancel", "token": "forged-token"},
                 }
             )
         self.assertIn("校验失败", page["body"])
-        self.assertEqual(load_run("2026-09-21").state, STATE_WAITING_FOR_APPROVAL)
+        self.assertEqual(load_run("2026-09-21").state, STATE_PUBLISHED)
 
-    def test_confirm_reject_marks_blocked(self):
-        with _patch_pipeline(), mock.patch.dict(
+    def test_confirm_cancel_rejected_when_not_published(self):
+        with mock.patch.dict(
             "os.environ", {"AGENT_CONFIRM_SECRET": "test-secret"}, clear=False
         ):
-            run("2026-09-22", test_mode=True, planner=DeterministicPlanner())
-
             from agent.confirm import build_confirm_token, handle_confirm
 
+            state = load_run("2026-09-23")
+            self.assertIsNone(state)  # 无运行记录
             page = handle_confirm(
                 {
                     "path": "/agent-confirm",
                     "query": {
-                        "date": "2026-09-22",
-                        "action": "reject",
-                        "token": build_confirm_token("2026-09-22", "reject"),
+                        "date": "2026-09-23",
+                        "action": "cancel",
+                        "token": build_confirm_token("2026-09-23", "cancel"),
                     },
                 }
             )
-        self.assertIn("已拒绝", page["body"])
-        self.assertEqual(load_run("2026-09-22").state, STATE_BLOCKED)
+        self.assertIn("运行不存在", page["body"])
 
 
 if __name__ == "__main__":

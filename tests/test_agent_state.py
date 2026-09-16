@@ -105,10 +105,10 @@ class TestConfirmToken(unittest.TestCase):
 
         os.environ["AGENT_CONFIRM_SECRET"] = "test-secret"
         try:
-            token = build_confirm_token("2026-09-16", "approve")
-            self.assertTrue(verify_confirm_token("2026-09-16", "approve", token))
-            self.assertFalse(verify_confirm_token("2026-09-16", "approve", "wrong"))
-            self.assertFalse(verify_confirm_token("2026-09-16", "reject", token))
+            token = build_confirm_token("2026-09-16", "cancel")
+            self.assertTrue(verify_confirm_token("2026-09-16", "cancel", token))
+            self.assertFalse(verify_confirm_token("2026-09-16", "cancel", "wrong"))
+            self.assertFalse(verify_confirm_token("2026-09-16", "approve", token))
         finally:
             os.environ.pop("AGENT_CONFIRM_SECRET", None)
 
@@ -117,7 +117,7 @@ class TestConfirmToken(unittest.TestCase):
 
         os.environ.pop("AGENT_CONFIRM_SECRET", None)
         with self.assertRaises(RuntimeError):
-            build_confirm_token("2026-09-16", "approve")
+            build_confirm_token("2026-09-16", "cancel")
 
 
 if __name__ == "__main__":

@@ -11,13 +11,12 @@ from typing import Any
 
 # 模型允许输出的决策类型
 DECISION_CONTINUE = "CONTINUE"          # 继续调用下一个工具
-DECISION_PASS = "PASS"                  # 质检通过，进入人工确认
+DECISION_PASS = "PASS"                  # 质检通过，保存候选并发送预览
 DECISION_REPAIR = "REPAIR"              # 需要定点修复
 DECISION_BLOCKED = "BLOCKED"            # 无法通过，阻断
-DECISION_WAIT_APPROVAL = "WAIT_APPROVAL"  # 等待人工确认
 
 VALID_DECISIONS = frozenset(
-    {DECISION_CONTINUE, DECISION_PASS, DECISION_REPAIR, DECISION_BLOCKED, DECISION_WAIT_APPROVAL}
+    {DECISION_CONTINUE, DECISION_PASS, DECISION_REPAIR, DECISION_BLOCKED}
 )
 
 

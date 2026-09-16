@@ -1,8 +1,8 @@
 """Agent 运行状态机与断点持久化。
 
 状态机的意义：模型可以自由选择工具，但不能发明状态。所有状态迁移
-必须经过 transition()，非法迁移直接抛错，防止 Agent 跳过人工确认
-或绕过质量门禁直接发布。
+必须经过 transition()，非法迁移直接抛错，防止 Agent 跳过质检门禁
+或绕过候选保存直接发布。
 """
 from __future__ import annotations
 
@@ -19,7 +19,8 @@ STATE_SELECTING = "SELECTING"
 STATE_GENERATING = "GENERATING"
 STATE_AUDITING = "AUDITING"
 STATE_REPAIRING = "REPAIRING"
-STATE_WAITING_FOR_APPROVAL = "WAITING_FOR_APPROVAL"
+# PUBLISHED：候选已保存到正式存储（OSS/本地）且预览已发，等待次日早晨
+# 发送链路（main.handler morning_send）读取候选后发送；Agent 不再人工触发发送。
 STATE_PUBLISHED = "PUBLISHED"
 STATE_SENT = "SENT"
 STATE_BLOCKED = "BLOCKED"
@@ -33,13 +34,12 @@ MAIN_STATES = [
     STATE_GENERATING,
     STATE_AUDITING,
     STATE_REPAIRING,
-    STATE_WAITING_FOR_APPROVAL,
     STATE_PUBLISHED,
     STATE_SENT,
 ]
 
 # 终态：进入后不允许再被模型驱动前进
-TERMINAL_STATES = frozenset({STATE_SENT, STATE_BLOCKED, STATE_FAILED})
+TERMINAL_STATES = frozenset({STATE_PUBLISHED, STATE_SENT, STATE_BLOCKED, STATE_FAILED})
 
 # 允许从任意主链状态进入的异常态
 FAILED_FROM = set(MAIN_STATES)
@@ -51,10 +51,9 @@ TRANSITIONS: dict[str, frozenset[str]] = {
     STATE_SEARCHING: frozenset({STATE_SELECTING, STATE_BLOCKED, STATE_FAILED}),
     STATE_SELECTING: frozenset({STATE_GENERATING, STATE_BLOCKED, STATE_FAILED}),
     STATE_GENERATING: frozenset({STATE_AUDITING, STATE_BLOCKED, STATE_FAILED}),
-    STATE_AUDITING: frozenset({STATE_REPAIRING, STATE_WAITING_FOR_APPROVAL, STATE_BLOCKED, STATE_FAILED}),
+    STATE_AUDITING: frozenset({STATE_REPAIRING, STATE_PUBLISHED, STATE_BLOCKED, STATE_FAILED}),
     STATE_REPAIRING: frozenset({STATE_AUDITING, STATE_BLOCKED, STATE_FAILED}),
-    STATE_WAITING_FOR_APPROVAL: frozenset({STATE_PUBLISHED, STATE_BLOCKED, STATE_FAILED}),
-    STATE_PUBLISHED: frozenset({STATE_SENT, STATE_FAILED}),
+    STATE_PUBLISHED: frozenset({STATE_SENT, STATE_BLOCKED, STATE_FAILED}),
     STATE_SENT: frozenset(),          # 终态
     STATE_BLOCKED: frozenset(),       # 终态
     STATE_FAILED: frozenset(),        # 终态

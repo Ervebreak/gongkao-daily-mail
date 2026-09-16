@@ -2,11 +2,12 @@
 
 职责：接收 delivery_date → 按状态机推进 → 在「选文」和「质检放行」
 两个决策点调用模型 → 其余步骤全部执行受控工具（复用生产链路）→
-候选通过门禁后进入人工确认（WAITING_FOR_APPROVAL）。
+候选通过门禁后保存到正式候选存储并发送预览（PUBLISHED），次日早晨
+由现有发送链路自动群发，与方式一/方式二完全一致。
 
 安全控制：
 - 模型不能发明状态（迁移必须经过 state.transition 校验）
-- 模型不能调用发布/发送工具（发布只能由人工确认触发）
+- 模型不能调用发布/发送工具（发送由次日早晨链路执行，可被预览邮件取消）
 - 修复最多两轮；模型调用 / 工具调用有预算上限；异常立即 FAILED
 """
 from __future__ import annotations
@@ -28,7 +29,6 @@ from agent.state import (
     STATE_REPAIRING,
     STATE_SEARCHING,
     STATE_SELECTING,
-    STATE_WAITING_FOR_APPROVAL,
     STATE_SENT,
     STATE_PUBLISHED,
     TERMINAL_STATES,
@@ -159,7 +159,7 @@ def _audit_prompt(delivery_date: str, audit: dict[str, Any], repair_round: int) 
         f"当前修复轮次：{repair_round}（上限 {MAX_REPAIR_ROUNDS}）\n"
         f"质检结果：\n{json.dumps(audit, ensure_ascii=False, indent=2)}\n\n"
         "请决策：\n"
-        "- 若 overall=ok：输出 {\"decision\":\"PASS\"}（系统随后自动保存候选并进入人工确认）。\n"
+        "- 若 overall=ok：输出 {\"decision\":\"PASS\"}（系统随后自动保存候选、发送预览，次日早晨自动发送）。\n"
         "- 若存在可修复问题且未达轮次上限：输出 {\"decision\":\"REPAIR\",\"next_tool\":\"repair_candidate\","
         "\"issues\":[{\"module\":\"模块key\",\"severity\":\"P0|P1\",\"reason\":\"问题\"}]}。\n"
         "- 若无法修复或已达轮次上限：输出 {\"decision\":\"BLOCKED\",\"reason\":\"原因\"}。\n"
@@ -183,13 +183,13 @@ def run(
         raise ValueError("delivery_date is required.")
 
     state = load_run(delivery_date)
-    if state is not None and state.state == STATE_WAITING_FOR_APPROVAL:
+    if state is not None and state.state == STATE_PUBLISHED:
         return {
-            "status": "waiting_for_approval",
+            "status": "already_published",
             "delivery_date": delivery_date,
             "run_id": state.run_id,
             "state": state.state,
-            "message": "本轮候选已生成并提交人工确认，请查收预览邮件。",
+            "message": "本轮候选已生成并保存，预览邮件已发送，将按次日早晨发送链路自动发送。",
         }
     if state is not None and state.state in TERMINAL_STATES:
         return {
@@ -357,18 +357,21 @@ def _run_pipeline(
         save_run(state)
         return _result(state, "blocked", decision.reason or "blocked by model")
 
-    # 6) PASS：保存候选 → 发预览 → 等待人工确认
+    # 6) PASS：保存候选到正式存储（OSS/本地）→ 发预览 → PUBLISHED（等次日早晨自动发送）
     _guard()
     execute_tool("save_candidate", {}, delivery_date=delivery_date, test_mode=test_mode)
     _refresh()
     from agent.confirm import send_preview_email
 
     preview = send_preview_email(delivery_date)
-    _refresh()  # send_preview_email 会写入 confirm_token，必须重新加载
-    state.transition(STATE_WAITING_FOR_APPROVAL, note="preview sent, waiting approval")
+    _refresh()  # send_preview_email 会写入 cancel_token，必须重新加载
+    state.transition(
+        STATE_PUBLISHED,
+        note="candidate saved and preview sent; morning send pipeline will deliver",
+    )
     save_run(state)
     return {
-        "status": "waiting_for_approval",
+        "status": "published",
         "delivery_date": delivery_date,
         "run_id": state.run_id,
         "state": state.state,

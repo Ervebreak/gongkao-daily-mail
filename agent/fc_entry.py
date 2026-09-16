@@ -3,7 +3,7 @@
 独立于 main.handler 部署，避免影响现有生产流水线。
 
 路由：
-- HTTP 请求（路径含 agent-confirm）→ 人工确认处理（agent/confirm.handle_confirm）
+- HTTP 请求（路径含 agent-confirm）→ 取消次日发送（agent/confirm.handle_confirm）
 - 定时触发（mode=agent_nightly）→ 执行 Agent 编排（agent/orchestrator.run）
 - 其他 → blocked
 """

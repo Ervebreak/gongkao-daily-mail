@@ -1,34 +1,35 @@
-"""人工确认闸门（Human-in-the-loop）。
+"""预览邮件与取消闸门。
 
-Agent 生成候选并质检通过后，不会自动发布/发送；系统先发送一封
-「预览邮件」给管理员本人，邮件内带确认 / 拒绝链接（hmac 签名，
-仅当天有效）。管理员点击确认后，系统才调用现有发送链路群发。
-拒绝则进入 BLOCKED 终态。
+Agent 候选通过门禁后：保存到正式候选存储（OSS/本地）→ 发送预览邮件
+给管理员本人。次日早晨由现有发送链路（main.handler morning_send）
+自动读取候选并群发，与方式一/方式二完全一致。
 
-发布/发送工具不注册给模型——只能通过这里的人工确认触发，这是
-Agent 无法绕过的安全边界。
+预览邮件是「安全网」：如果管理员发现内容有问题，可点击【取消次日发送】，
+系统会把候选的质量门禁标记为 fail，次日早晨发送链路读到门禁失败即自动
+阻断，不会发出去。不点击则照常自动发送。
+
+取消链接使用 hmac 签名，仅当天有效；发送/取消均不注册为模型工具。
 """
 from __future__ import annotations
 
 import hashlib
 import hmac
 import html as _html
-import json
 import os
-import time
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import parse_qs
 
 from config import settings
 from agent.state import (
-    RunState,
     STATE_BLOCKED,
     STATE_PUBLISHED,
     STATE_SENT,
-    STATE_WAITING_FOR_APPROVAL,
     load_run,
     save_run,
 )
+
+# 预览邮件里提示的次日发送时间（与部署的 morning_send 定时器一致，纯提示用）
+MORNING_SEND_HINT = os.environ.get("AGENT_MORNING_SEND_HINT", "次日早晨 07:30")
 
 
 def _secret() -> str:
@@ -40,7 +41,7 @@ def build_confirm_token(delivery_date: str, action: str) -> str:
     secret = _secret()
     if not secret:
         raise RuntimeError(
-            "AGENT_CONFIRM_SECRET is not configured; cannot build confirm token."
+            "AGENT_CONFIRM_SECRET is not configured; cannot build cancel token."
         )
     message = f"{delivery_date}|{action}".encode("utf-8")
     return hmac.new(secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
@@ -57,7 +58,7 @@ def _base_url() -> str:
     base = (os.environ.get("AGENT_CONFIRM_BASE_URL") or "").strip().rstrip("/")
     if not base:
         raise RuntimeError(
-            "AGENT_CONFIRM_BASE_URL is not configured; preview email cannot include confirm links."
+            "AGENT_CONFIRM_BASE_URL is not configured; preview email cannot include cancel link."
         )
     return base
 
@@ -68,7 +69,7 @@ def confirm_url(delivery_date: str, action: str) -> str:
 
 
 def send_preview_email(delivery_date: str) -> dict[str, Any]:
-    """把已保存候选渲染成预览邮件，发给管理员本人，附带确认/拒绝链接。"""
+    """把已保存候选渲染成预览邮件发给管理员本人，附带「取消次日发送」链接。"""
     from candidate_store import load_candidate
     from email_sender import send_email_to_recipients
 
@@ -78,23 +79,23 @@ def send_preview_email(delivery_date: str) -> dict[str, Any]:
     subject = str(candidate.get("subject") or "")
     plain_text = str(candidate.get("plain_text") or "")
     html_body = str(candidate.get("html_body") or "")
-    approve = confirm_url(delivery_date, "approve")
-    reject = confirm_url(delivery_date, "reject")
+    cancel = confirm_url(delivery_date, "cancel")
 
     footer_html = (
         '<div style="margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;'
         'font-family:sans-serif;font-size:14px;color:#374151;">'
-        '<p><strong>这是发给管理员的预览，尚未发送给订阅用户。</strong></p>'
-        '<p>确认无误后点击发送：<a href="%s" '
-        'style="display:inline-block;padding:8px 18px;background:#16a34a;color:#fff;'
-        'text-decoration:none;border-radius:6px;">✅ 确认发送</a></p>'
-        '<p style="color:#9ca3af;">如内容有问题，请点击：'
-        '<a href="%s" style="color:#dc2626;">拒绝并标记失败</a>（链接仅当天有效）</p>'
+        "<p><strong>✅ 本邮件是给管理员的预览，已保存为次日候选。</strong></p>"
+        f"<p>如无问题，系统将于 <b>{_html.escape(MORNING_SEND_HINT)}</b> 自动发送给订阅用户，"
+        "你无需任何操作。</p>"
+        '<p style="color:#dc2626;">如内容有问题，请点击取消：'
+        f'<a href="{_html.escape(cancel, quote=True)}" '
+        'style="color:#dc2626;font-weight:600;">❌ 取消次日发送</a>'
+        "（链接仅当天有效）</p>"
         "</div>"
-    ) % (_html.escape(approve, quote=True), _html.escape(reject, quote=True))
+    )
 
     preview_html = html_body + footer_html
-    preview_subject = f"【预览·请确认】{subject}"
+    preview_subject = f"【预览·次日自动发送】{subject}"
     result = send_email_to_recipients(
         preview_subject,
         plain_text,
@@ -105,7 +106,7 @@ def send_preview_email(delivery_date: str) -> dict[str, Any]:
     state = load_run(delivery_date)
     if state is not None:
         state.preview_sent = bool(result.get("success_count", 0) > 0)
-        state.confirm_token = build_confirm_token(delivery_date, "approve")
+        state.confirm_token = build_confirm_token(delivery_date, "cancel")
         state.log_event(
             "preview_email_sent",
             to=settings.smtp_user,
@@ -117,14 +118,13 @@ def send_preview_email(delivery_date: str) -> dict[str, Any]:
         "preview_sent": True,
         "to": settings.smtp_user,
         "subject": preview_subject,
-        "approve_url": approve,
-        "reject_url": reject,
+        "cancel_url": cancel,
         "send_result": result,
     }
 
 
 # ---------------------------------------------------------------------------
-# HTTP 确认处理（FC 入口路由到此处）
+# HTTP 取消处理（FC 入口路由到此处）
 # ---------------------------------------------------------------------------
 
 
@@ -146,8 +146,34 @@ def _page(title: str, body: str) -> dict[str, Any]:
     }
 
 
+def _cancel_candidate(delivery_date: str) -> None:
+    """把已保存候选的质量门禁标记为 fail，使次日发送链路自动阻断。
+
+    发送链路（send_saved_candidate）读取候选时校验 quality_gate，
+    overall != ok 即阻断，不会发出。不需要改动生产发送代码。
+    """
+    from candidate_store import load_candidate, save_candidate
+
+    candidate, _ = load_candidate(delivery_date)
+    if candidate is None:
+        return
+    candidate["quality_gate"] = {
+        "overall": "fail",
+        "p0_count": 1,
+        "p0_issues": [
+            {
+                "module": "agent_cancel",
+                "severity": "P0",
+                "reason": "管理员在预览中取消次日发送",
+            }
+        ],
+    }
+    candidate["_agent_cancelled"] = True
+    save_candidate(candidate)
+
+
 def handle_confirm(event: Any) -> dict[str, Any]:
-    """处理 /agent-confirm 请求。event 需为已 normalize 的 dict，含 query 参数。"""
+    """处理 /agent-confirm 请求（当前仅支持 cancel 动作）。"""
     query = event.get("query") or event.get("queryStringParameters") or {}
     if isinstance(query, str):
         query = parse_qs(query)
@@ -162,8 +188,8 @@ def handle_confirm(event: Any) -> dict[str, Any]:
     action = (params.get("action") or "").strip().lower()
     token = (params.get("token") or "").strip()
 
-    if not delivery_date or action not in {"approve", "reject"}:
-        return _page("参数错误", "<p>缺少 date / action / token 参数。</p>")
+    if not delivery_date or action not in {"cancel"}:
+        return _page("参数错误", "<p>缺少 date / action / token 参数，或不支持该动作。</p>")
 
     if not verify_confirm_token(delivery_date, action, token):
         return _page("校验失败", "<p>链接无效或已过期（仅当天有效）。</p>")
@@ -171,47 +197,20 @@ def handle_confirm(event: Any) -> dict[str, Any]:
     state = load_run(delivery_date)
     if state is None:
         return _page("运行不存在", f"<p>日期 {delivery_date} 没有 Agent 运行记录。</p>")
-    if state.state != STATE_WAITING_FOR_APPROVAL:
+    if state.state not in {STATE_PUBLISHED, STATE_SENT}:
         return _page(
             "状态不允许",
-            f"<p>当前状态为 <b>{state.state}</b>，不是 WAITING_FOR_APPROVAL，无法执行该操作。</p>",
+            f"<p>当前状态为 <b>{state.state}</b>，无法执行取消操作。</p>",
         )
+    if state.state == STATE_SENT:
+        return _page("已发送", "<p>该日候选已发送，无法取消。</p>")
 
-    if action == "reject":
-        state.transition(STATE_BLOCKED, note="rejected by admin")
-        save_run(state)
-        return _page("已拒绝", f"<p>{delivery_date} 候选已被标记为 BLOCKED，不会发送。</p>")
-
-    # approve：调用现有发送链路（读候选 → 门禁复查 → 分段发送）
-    from main import send_saved_candidate
-
-    state.published = True
-    state.transition(STATE_PUBLISHED, note="approved by admin, sending")
+    # cancel：标记候选门禁 fail + 运行状态 BLOCKED
+    _cancel_candidate(delivery_date)
+    state.transition(STATE_BLOCKED, note="cancelled by admin from preview")
     save_run(state)
-    try:
-        send_result = send_saved_candidate(
-            {"mode": "candidate_send", "delivery_date": delivery_date}
-        )
-    except Exception as exc:
-        state.last_error = str(exc)[:2000]
-        state.transition(STATE_BLOCKED, note=f"send failed after approval: {exc}")
-        save_run(state)
-        return _page(
-            "发送失败",
-            f"<p>发送链路异常：{_html.escape(str(exc))}。状态已标记 BLOCKED。</p>",
-        )
-
-    sent = bool(send_result and send_result.get("status") == "ok")
-    if sent:
-        state.sent = True
-        state.transition(STATE_SENT, note="sent to subscribers")
-        save_run(state)
-    else:
-        state.transition(STATE_BLOCKED, note=f"send blocked by pipeline: {send_result}")
-        save_run(state)
-    reason = (send_result or {}).get("reason") or send_result.get("status") or "unknown"
-    body = (
-        f"<p>发送结果：<b>{'成功' if sent else '未发送'}</b></p>"
-        f"<p>流水线返回：{_html.escape(str(reason))}</p>"
+    return _page(
+        "已取消次日发送",
+        f"<p>{delivery_date} 的候选已被标记为取消，次日早晨不会发送。</p>"
+        "<p>如需重新生成，可删除对应候选后重新触发。</p>",
     )
-    return _page("已确认发送", body)
