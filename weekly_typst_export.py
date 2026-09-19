@@ -300,6 +300,9 @@ PREVIEW_GENERIC_POINTS = {
     "创新",
 }
 
+MATERIAL_TITLE_PREFIX = "作文素材积累·"
+MATERIAL_TITLE_SUFFIX = "（一例多用）"
+
 
 def clip_complete_sentence(text: Any, limit: int = 180) -> str:
     raw = clean(text)
@@ -321,6 +324,24 @@ def strip_field_label(text: Any) -> str:
     if not value:
         return ""
     return re.sub(r"^[\u4e00-\u9fffA-Za-z]{1,12}[：:]\s*", "", value).strip()
+
+
+def material_title_core(value: Any) -> str:
+    """Return the semantic title without the template-owned prefix/suffix."""
+
+    title = clean(value)
+    while title.startswith(MATERIAL_TITLE_PREFIX):
+        title = title[len(MATERIAL_TITLE_PREFIX) :].strip()
+    while title.endswith(MATERIAL_TITLE_SUFFIX):
+        title = title[: -len(MATERIAL_TITLE_SUFFIX)].strip()
+    return title.strip(" ·")
+
+
+def canonical_material_title(value: Any) -> str:
+    core = material_title_core(value)
+    if not core:
+        return ""
+    return f"{MATERIAL_TITLE_PREFIX}{core}{MATERIAL_TITLE_SUFFIX}"
 
 
 def unique_non_empty(values: list[str], limit: int) -> list[str]:
@@ -405,7 +426,7 @@ def preview_material_fragment(data: dict[str, Any]) -> dict[str, str]:
         if not isinstance(row, dict):
             continue
         summary = clip_complete_sentence(row.get("material_summary"), 160) or clean(row.get("material_summary"))
-        title = clean(row.get("title") or row.get("source_title") or "本周素材片段")
+        title = canonical_material_title(row.get("title") or row.get("source_title")) or "本周素材片段"
         source = "、".join(unique_non_empty(as_list(row.get("source_article") or row.get("source_articles")), 2))
         if summary:
             return {"title": title, "source": source, "summary": summary}
@@ -426,22 +447,18 @@ def preview_practice_fragment(data: dict[str, Any]) -> dict[str, str]:
         if not isinstance(row, dict):
             continue
         question = clean(row.get("question"))
-        direction = clean(row.get("answer_hint") or row.get("use_hint") or row.get("target_topics"))
         if question:
             return {
                 "title": clean(row.get("title") or "本周训练题片段"),
                 "question": question,
-                "direction": clip_complete_sentence(direction, 90) or direction,
             }
     for day in data.get("days") or []:
         question = day.get("question") if isinstance(day.get("question"), dict) else {}
         stem = clean(question.get("question"))
-        framework = [clean(item) for item in as_list(question.get("answer_framework")) if clean(item)]
         if stem:
             return {
                 "title": "本周训练题片段",
                 "question": stem,
-                "direction": "；".join(framework[:2]),
             }
     return {}
 
@@ -478,7 +495,9 @@ def t_badges(items: list[str], limit: int = 8) -> str:
 
 
 def table_cell(value: Any) -> str:
-    return f"[{typst_text(value)}]"
+    # A table may move this block to the next page, but it must not split a
+    # single logical row into a tiny trailing fragment on the current page.
+    return f"[#block(breakable: false)[{typst_text(value)}]]"
 
 
 def render_typst(data: dict[str, Any]) -> str:
@@ -655,7 +674,7 @@ def render_typst(data: dict[str, Any]) -> str:
     for idx, row in enumerate((data.get("material_cards") or [])[:3], start=1):
         if not isinstance(row, dict):
             continue
-        title = row_value(row, "title", "source_title", "theme") or f"素材卡 {idx:02d}"
+        title = material_title_core(row_value(row, "title", "source_title", "theme")) or f"素材卡 {idx:02d}"
         material_type = row_value(row, "material_type", "type")
         source_dates = row_value(row, "source_date", "source_dates", "date")
         source_articles = row_value(row, "source_article", "source_articles", "source_title")
@@ -943,7 +962,6 @@ def render_preview_typst(data: dict[str, Any]) -> str:
     practice_preview = data.get("practice_preview") if isinstance(data.get("practice_preview"), dict) else {}
     practice_title = typst_text(practice_preview.get("title") or "本周训练题片段")
     practice_question = typst_text(practice_preview.get("question") or "完整版资料包会附上本周 3 道考场迁移训练题，帮助你把一周内容转成作答表达。")
-    practice_direction = typst_text(practice_preview.get("direction") or "预览版只保留题干或思考方向，不展示完整参考答案。")
     cta_url = clean(data.get("cta_url"))
     cta_line = (
         f"如果你想看完整周 PDF，可以回复邮件，或通过这个入口了解完整版：{typst_text(cta_url)}"
@@ -1008,7 +1026,6 @@ def render_preview_typst(data: dict[str, Any]) -> str:
   #v(5pt)
   {practice_title}
   #linebreak(){practice_question}
-  #if "{practice_direction}" != "" [#linebreak()#muted[思考方向：{practice_direction}]]
 ]
 
 #v(10pt)
