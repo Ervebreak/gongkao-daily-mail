@@ -1,5 +1,31 @@
 # Harness Change Log
 
+## 2026-09-19 - Harden weekly PDF pagination, material titles, and Lite whitelist
+
+Reason:
+
+- Weekly PDF visual QA still found long table rows split across a page boundary, producing tiny trailing fragments and large empty areas.
+- Material-card titles supplied in their canonical `作文素材积累·…（一例多用）` form were wrapped a second time by the Typst template.
+- Lite Preview derived `思考方向` from Full-only `answer_hint` or daily answer frameworks, which could reveal most of the intended answer structure.
+
+Files changed:
+
+- `weekly_typst_export.py`
+- `tests/test_weekly_typst_export_materials.py`
+- `tests/test_weekly_pdf_quality.py`
+- `CHANGELOG_HARNESS.md`
+
+Latest behavior:
+
+- Each logical table cell is rendered as a non-breakable block, so a row moves to the next page instead of leaving a small fragment behind.
+- Material-card title wrappers are normalized before rendering; the template remains the only owner of the visible prefix and suffix.
+- Lite Preview practice fragments now use an explicit question-only whitelist and ignore `answer_hint`, `use_hint`, `target_topics`, daily `answer_framework`, and reference answers.
+- The existing non-breakable material-card opening from PR #70 remains intact.
+
+Validation boundary:
+
+- Focused regressions cover table-cell pagination guards, canonical title normalization, preservation of the material-card opening block, and absence of Full-only answer content in Lite Typst output.
+
 ## 2026-09-15 - Make morning send use audited candidate artifacts directly
 
 Reason:
