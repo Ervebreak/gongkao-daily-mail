@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from weekly_typst_export import render_preview_typst, render_typst
+from weekly_typst_export import build_preview_data_from_full_data, render_preview_typst, render_typst
 
 
 def _base_data() -> dict:
@@ -88,6 +88,60 @@ def test_render_typst_keeps_material_card_opening_with_heading() -> None:
     assert text.index(opening) < text.index('#if examples != "" [')
 
 
+def test_render_typst_normalizes_template_owned_material_title_wrappers() -> None:
+    data = _base_data()
+    data["material_cards"] = [
+        {
+            "title": "作文素材积累·招聘背调划清信息使用边界（一例多用）",
+            "material_summary": "招聘核验需要守住信息使用边界。",
+        }
+    ]
+
+    text = render_typst(data)
+
+    assert "#material-card[招聘背调划清信息使用边界]" in text
+    assert "#material-card[作文素材积累·招聘背调划清信息使用边界（一例多用）]" not in text
+
+
+def test_render_typst_wraps_table_cells_as_unbreakable_rows() -> None:
+    data = _base_data()
+    data["days"] = [
+        {
+            "day_no": 1,
+            "date": "2026-06-10",
+            "short_date": "06.10",
+            "weekday": "周三",
+            "theme": "公共空间治理",
+            "focus": "把闲置边角空间转化为居民可达、可用、可持续的公共服务场景。",
+            "featured": {
+                "title": "盘活城市边角空间",
+                "source": "人民日报",
+                "published_at": "2026-06-10",
+                "url": "https://example.com/article",
+                "theme": "公共服务",
+                "one_sentence": "以精细治理提升空间使用效率。",
+                "rewritable_expression": "",
+                "article_type": "",
+                "main_thread": "",
+            },
+            "question": {
+                "question_type": "综合分析题",
+                "question": "",
+                "answer_framework": [],
+            },
+            "takeaway": {"golden_sentences": [], "framework": ""},
+            "steps": [],
+            "tags": [],
+            "quick_reads": [],
+        }
+    ]
+
+    text = render_typst(data)
+
+    assert "[#block(breakable: false)[06.10\n周三]]" in text
+    assert "[#block(breakable: false)[公共空间治理\n把闲置边角空间转化为居民可达、可用、可持续的公共服务场景。]]" in text
+
+
 
 def test_render_typst_shows_at_most_three_material_cards() -> None:
     data = _base_data()
@@ -153,3 +207,30 @@ def test_render_preview_typst_keeps_frontend_copy_clean() -> None:
     assert "内部测试" not in text
     assert "quality gate" not in text.lower()
     assert "candidate" not in text.lower()
+    assert "思考方向" not in text
+    assert "先摸清诉求，再公开反馈。" not in text
+
+
+def test_preview_practice_whitelist_excludes_answer_fields() -> None:
+    data = _base_data()
+    data["practice_questions"] = [
+        {
+            "title": "招聘背调边界题",
+            "question": "请谈谈招聘背调应如何划清边界。",
+            "target_topics": ["信息核验边界"],
+            "answer_hint": "先肯定合理核验价值，再从调查范围、决定说明和异议更正展开。",
+            "mini_reference_answer": "这是一份不应出现在 Lite 中的完整答案。",
+        }
+    ]
+
+    preview = build_preview_data_from_full_data(data)
+    text = render_preview_typst(preview)
+
+    assert preview["practice_preview"] == {
+        "title": "招聘背调边界题",
+        "question": "请谈谈招聘背调应如何划清边界。",
+    }
+    assert "请谈谈招聘背调应如何划清边界。" in text
+    assert "先肯定合理核验价值" not in text
+    assert "这是一份不应出现在 Lite 中的完整答案" not in text
+    assert "思考方向" not in text
