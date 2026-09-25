@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from weekly_typst_export import build_preview_data_from_full_data, render_preview_typst, render_typst
+from weekly_typst_export import (
+    _balanced_table_chunks,
+    _render_table_chunks,
+    build_preview_data_from_full_data,
+    render_preview_typst,
+    render_typst,
+)
 
 
 def _base_data() -> dict:
@@ -140,6 +146,40 @@ def test_render_typst_wraps_table_cells_as_unbreakable_rows() -> None:
 
     assert "[#block(breakable: false)[06.10\n周三]]" in text
     assert "[#block(breakable: false)[公共空间治理\n把闲置边角空间转化为居民可达、可用、可持续的公共服务场景。]]" in text
+
+
+def test_balanced_table_chunks_never_leave_a_single_row_tail() -> None:
+    chunks = _balanced_table_chunks([str(index) for index in range(7)], max_rows=4)
+
+    assert [len(chunk) for chunk in chunks] == [4, 3]
+    assert all(len(chunk) != 1 for chunk in chunks)
+    assert [len(chunk) for chunk in _balanced_table_chunks([str(index) for index in range(9)], max_rows=8)] == [5, 4]
+    assert [len(chunk) for chunk in _balanced_table_chunks([str(index) for index in range(12)], max_rows=8)] == [6, 6]
+
+
+def test_render_table_chunks_repeat_headers_and_force_page_boundaries() -> None:
+    rows = [f"[row-{index}]," for index in range(7)]
+
+    text = _render_table_chunks(
+        rows,
+        columns="(1fr,)",
+        headers=["日期"],
+        max_rows=4,
+        continuation_label="测试表",
+    )
+
+    assert text.count("#table(columns:") == 2
+    assert text.count("[日期]") == 2
+    assert text.count("#pagebreak()") == 1
+    assert text.count("#block(breakable: false)[\n#table") == 2
+    assert "[测试表（续）]" in text
+
+
+def test_render_typst_starts_long_tables_on_fresh_pages() -> None:
+    text = render_typst(_base_data())
+
+    assert "#pagebreak()\n#block-title[本周主题总览]" in text
+    assert "#pagebreak()\n#block-title[补充阅读清单]" in text
 
 
 
