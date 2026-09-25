@@ -1,5 +1,29 @@
 # Harness Change Log
 
+## 2026-09-25 - Prevent orphan rows in weekly PDF tables
+
+Reason:
+
+- The six-row weekly overview and the supplementary-reading index could leave a final `09.19` row alone on a continuation page under FC font metrics, creating a mostly blank page without a repeated table header.
+- Wrapping each cell as non-breakable prevented row fragments but did not control table-level widows.
+
+Files changed:
+
+- `weekly_typst_export.py`
+- `tests/test_weekly_typst_export_materials.py`
+- `CHANGELOG_HARNESS.md`
+
+Latest behavior:
+
+- The weekly overview and featured-article index start with a fresh-page budget and render as bounded non-breakable table groups.
+- Supplementary-reading rows start on a fresh page and are balanced into groups of at most eight rows; larger tables split evenly (for example `9 → 5 + 4` and `12 → 6 + 6`) instead of leaving a single trailing row.
+- Every table group owns its header; continuation pages also display a concise `（续）` section label, and explicit page boundaries make FC pagination stable across font-metric differences.
+- The content payload, enrichment contract, Full/Lite boundary, offline renderer attestation and side-effect-free FC behavior are unchanged.
+
+Validation boundary:
+
+- Focused regressions cover balanced row grouping without one-row tails, repeated headers, explicit chunk page boundaries and fresh-page placement for both previously failing table sections.
+
 ## 2026-09-19 - Harden weekly PDF pagination, material titles, and Lite whitelist
 
 Reason:
