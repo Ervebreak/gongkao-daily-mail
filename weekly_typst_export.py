@@ -500,10 +500,64 @@ def table_cell(value: Any) -> str:
     return f"[#block(breakable: false)[{typst_text(value)}]]"
 
 
+def _balanced_table_chunks(rows: list[str], max_rows: int) -> list[list[str]]:
+    """Split table rows into balanced page groups without a one-row tail."""
+
+    if max_rows < 3:
+        raise ValueError("max_rows must be at least 3")
+    if not rows or len(rows) <= max_rows:
+        return [rows]
+
+    chunk_count = (len(rows) + max_rows - 1) // max_rows
+    base_size, larger_chunks = divmod(len(rows), chunk_count)
+    chunks: list[list[str]] = []
+    start = 0
+    for index in range(chunk_count):
+        size = base_size + (1 if index < larger_chunks else 0)
+        chunks.append(rows[start : start + size])
+        start += size
+    return chunks
+
+
+def _render_table_chunks(
+    rows: list[str],
+    *,
+    columns: str,
+    headers: list[str],
+    max_rows: int,
+    continuation_label: str,
+) -> str:
+    """Render bounded, non-breakable table chunks with a header on each page."""
+
+    header_cells = ", ".join(
+        f'[#text(fill: brand, weight: "bold")[{typst_text(header)}]]' for header in headers
+    )
+    tables: list[str] = []
+    for index, chunk in enumerate(_balanced_table_chunks(rows, max_rows)):
+        body = "\n".join(chunk)
+        continuation = (
+            f'#text(size: 12pt, weight: "bold", fill: brand)[{typst_text(continuation_label)}（续）]\n#v(7pt)\n'
+            if index > 0 and continuation_label
+            else ""
+        )
+        tables.append(
+            f"""{continuation}#block(breakable: false)[
+#table(columns: {columns}, inset: (x: 7pt, y: 5.5pt), stroke: 0.45pt + line, fill: (x, y) => if y == 0 {{ table-head }} else if calc.odd(y) {{ rgb(\"#f8fafc\") }} else {{ white }},
+  {header_cells},
+  {body}
+)
+]"""
+        )
+    # A hard page boundary between bounded chunks makes pagination independent
+    # of the FC font metrics and guarantees that every continuation has a
+    # visible table header.
+    return "\n#pagebreak()\n".join(tables)
+
+
 def render_typst(data: dict[str, Any]) -> str:
     days = data["days"]
     stats = data["stats"]
-    overview_rows = "\n".join(
+    overview_row_items = [
         ", ".join(
             [
                 table_cell(f'{day["short_date"]}\n{day["weekday"]}'),
@@ -514,6 +568,13 @@ def render_typst(data: dict[str, Any]) -> str:
         )
         + ","
         for day in days
+    ]
+    overview_table = _render_table_chunks(
+        overview_row_items,
+        columns="(0.9fr, 1.7fr, 2.4fr, 2fr)",
+        headers=["日期", "主题", "精读文章", "训练方向"],
+        max_rows=6,
+        continuation_label="本周主题总览",
     )
     if data.get("exam_map_cards"):
         map_cards = "][\n".join(
@@ -598,7 +659,7 @@ def render_typst(data: dict[str, Any]) -> str:
         f'#frame-row[{typst_text(row["date"])}｜{typst_text(row["theme"])}][{typst_text(row["framework"])}]'
         for row in data["framework_rows"]
     )
-    featured_index_rows = "\n".join(
+    featured_index_row_items = [
         ", ".join(
             [
                 table_cell(day["short_date"]),
@@ -609,11 +670,18 @@ def render_typst(data: dict[str, Any]) -> str:
         )
         + ","
         for day in days
+    ]
+    featured_index_table = _render_table_chunks(
+        featured_index_row_items,
+        columns="(0.8fr, 2.6fr, 1.2fr, 2.8fr)",
+        headers=["日期", "文章", "主题", "一句话价值"],
+        max_rows=6,
+        continuation_label="精读原文入口",
     )
-    quick_index_rows: list[str] = []
+    quick_index_row_items: list[str] = []
     for day in days:
         for item in day["quick_reads"]:
-            quick_index_rows.append(
+            quick_index_row_items.append(
                 ", ".join(
                     [
                         table_cell(day["short_date"]),
@@ -624,7 +692,17 @@ def render_typst(data: dict[str, Any]) -> str:
                 )
                 + ","
             )
-    quick_index = "\n".join(quick_index_rows)
+    if not quick_index_row_items:
+        quick_index_row_items.append(
+            ", ".join([table_cell(""), table_cell("暂无补充阅读"), table_cell(""), table_cell("")]) + ","
+        )
+    quick_index_table = _render_table_chunks(
+        quick_index_row_items,
+        columns="(0.8fr, 2.6fr, 1.2fr, 2.8fr)",
+        headers=["日期", "文章", "主题", "考试价值"],
+        max_rows=8,
+        continuation_label="补充阅读清单",
+    )
 
     def row_value(row: dict[str, Any], *keys: str) -> str:
         for key in keys:
@@ -897,13 +975,11 @@ def render_typst(data: dict[str, Any]) -> str:
   #panel[最值得练][{overview_practice}]
 ]
 
+#pagebreak()
 #block-title[本周主题总览]
 #info-strip[复盘方式][{typst_text(review_method_text)}]
 
-#table(columns: (0.9fr, 1.7fr, 2.4fr, 2fr), inset: 7pt, stroke: 0.45pt + line, fill: (x, y) => if y == 0 {{ table-head }} else if calc.odd(y) {{ rgb("#f8fafc") }} else {{ white }},
-  [#text(fill: brand, weight: "bold")[日期]], [#text(fill: brand, weight: "bold")[主题]], [#text(fill: brand, weight: "bold")[精读文章]], [#text(fill: brand, weight: "bold")[训练方向]],
-  {overview_rows}
-)
+{overview_table}
 
 #pagebreak()
 #block-title[02｜本周高频考点地图]
@@ -937,15 +1013,10 @@ def render_typst(data: dict[str, Any]) -> str:
 = {quick_section_no:02d}｜延伸阅读索引
 #info-strip[说明][本页只做“摘要 + 原文入口”。如需阅读全文，请复制链接或搜索原文题目打开原文；PDF 不收录延伸阅读全文。]
 #block-title[精读原文入口]
-#table(columns: (0.8fr, 2.6fr, 1.2fr, 2.8fr), inset: 7pt, stroke: 0.45pt + line, fill: (x, y) => if y == 0 {{ table-head }} else if calc.odd(y) {{ rgb("#f8fafc") }} else {{ white }},
-  [#text(fill: brand, weight: "bold")[日期]], [#text(fill: brand, weight: "bold")[文章]], [#text(fill: brand, weight: "bold")[主题]], [#text(fill: brand, weight: "bold")[一句话价值]],
-  {featured_index_rows}
-)
+{featured_index_table}
+#pagebreak()
 #block-title[补充阅读清单]
-#table(columns: (0.8fr, 2.6fr, 1.2fr, 2.8fr), inset: 7pt, stroke: 0.45pt + line, fill: (x, y) => if y == 0 {{ table-head }} else if calc.odd(y) {{ rgb("#f8fafc") }} else {{ white }},
-  [#text(fill: brand, weight: "bold")[日期]], [#text(fill: brand, weight: "bold")[文章]], [#text(fill: brand, weight: "bold")[主题]], [#text(fill: brand, weight: "bold")[考试价值]],
-  {quick_index if quick_index else table_cell("") + "," + table_cell("暂无补充阅读") + "," + table_cell("") + "," + table_cell("") + ","}
-)
+{quick_index_table}
 """
 
 
