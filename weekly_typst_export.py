@@ -255,6 +255,11 @@ def build_data(
                 "warnings": [f"weekly enrichment failed open: {type(exc).__name__}: {exc}"],
             }
     warnings.extend(enrichment.get("warnings") or [])
+    practice_questions = [
+        row
+        for row in as_list(enrichment.get("practice_questions"))
+        if isinstance(row, dict)
+    ]
     return {
         "start_date": start_date,
         "end_date": end_date,
@@ -264,7 +269,7 @@ def build_data(
         "warnings": warnings,
         "stats": {
             "featured_count": len(days),
-            "questions_count": sum(1 for day in days if day["question"]["question"]),
+            "questions_count": sum(1 for row in practice_questions if clean(row.get("question"))),
             "golden_count": len(expression_rows),
             "quick_count": quick_count,
         },
@@ -275,7 +280,7 @@ def build_data(
         "exam_map_cards": enrichment.get("exam_map_cards") or [],
         "selected_expression_rows": enrichment.get("selected_expression_rows") or [],
         "material_cards": enrichment.get("material_cards") or [],
-        "practice_questions": enrichment.get("practice_questions") or [],
+        "practice_questions": practice_questions,
     }
 
 
@@ -356,6 +361,44 @@ def unique_non_empty(values: list[str], limit: int) -> list[str]:
         if len(result) >= limit:
             break
     return result
+
+
+def _cover_training_mainline(data: dict[str, Any]) -> str:
+    """Build the cover training summary from this week's reviewed enrichment."""
+
+    practice_rows = [
+        row
+        for row in as_list(data.get("practice_questions"))
+        if isinstance(row, dict) and clean(row.get("question"))
+    ]
+    topics = unique_non_empty(
+        [
+            clean(topic)
+            for row in practice_rows
+            for topic in as_list(row.get("target_topics"))
+        ],
+        4,
+    )
+    if not topics:
+        topics = unique_non_empty(
+            [clean(row.get("title")) for row in data.get("exam_map_cards") or [] if isinstance(row, dict)],
+            4,
+        )
+    question_types = unique_non_empty(
+        [clean(row.get("question_type")) for row in practice_rows],
+        4,
+    )
+    count = len(practice_rows)
+    if not count:
+        return "本周暂未生成稳定训练题，建议先复盘高频考点与表达库。"
+
+    parts: list[str] = []
+    if topics:
+        parts.append(f'围绕“{"、".join(topics)}”等本周主题')
+    parts.append(f"共设置 {count} 道训练")
+    if question_types:
+        parts.append(f'覆盖{"、".join(question_types)}')
+    return "，".join(parts) + "，重点练习把材料转化为考场表达。"
 
 
 def is_specific_preview_point(text: str) -> bool:
@@ -557,6 +600,9 @@ def _render_table_chunks(
 def render_typst(data: dict[str, Any]) -> str:
     days = data["days"]
     stats = data["stats"]
+    training_count = int(stats.get("questions_count") or 0)
+    training_task_text = f"本周 {training_count} 道考场迁移训练" if training_count else "本周考场迁移训练"
+    cover_training_mainline = _cover_training_mainline(data)
     overview_row_items = [
         ", ".join(
             [
@@ -813,9 +859,9 @@ def render_typst(data: dict[str, Any]) -> str:
     )
     overview_keywords = t_badges(data.get("hot_keywords") or [], 8)
     review_order_text = (
-        "先看本页速览，再看作文素材积累和金句表达库，再做本周 3 道考场迁移训练；周内没怎么看邮件的同学，再看每日内容压缩回看。"
+        f"先看本页速览，再看作文素材积累和金句表达库，再做{training_task_text}；周内没怎么看邮件的同学，再看每日内容压缩回看。"
         if has_material_cards
-        else "先看本页速览，再看金句表达库，再做本周 3 道考场迁移训练；周内没怎么看邮件的同学，再看每日内容压缩回看。"
+        else f"先看本页速览，再看金句表达库，再做{training_task_text}；周内没怎么看邮件的同学，再看每日内容压缩回看。"
     )
     review_method_text = (
         "这份 PDF 按“重点优先”重新组织：先抓考点、作文素材、表达和训练题，再回看每日内容。"
@@ -951,11 +997,11 @@ def render_typst(data: dict[str, Any]) -> str:
   #panel[使用说明][
     + 先看本周 3 分钟速览。
     + 再看考场素材库和金句表达库。
-    + 再做本周 3 道考场迁移训练。
+    + 再做{training_task_text}。
     + 周内没怎么看邮件的同学，再看每日内容压缩回看。
   ]
 ][
-  #panel[本周训练主线][从“技术治理、执法规范、专业纠纷、生态边界”四类问题切入，训练申论对策题与面试综合分析题的材料转化能力。#v(5pt){t_badges(data["hot_keywords"], 8)}]
+  #panel[本周训练主线][{typst_text(cover_training_mainline)}#v(5pt){t_badges(data["hot_keywords"], 8)}]
 ]
 
 #pagebreak()
