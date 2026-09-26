@@ -1,5 +1,29 @@
 # Harness Change Log
 
+## 2026-09-26 - Bind weekly PDF cover copy to reviewed practice data
+
+Reason:
+
+- The Full PDF cover counted the six daily questions as “6 道考场训练” even though the reviewed weekly enrichment contains exactly three migration exercises.
+- The “本周训练主线” panel still used a fixed historical sentence about technology governance, enforcement, professional disputes and ecological boundaries, so the cover could contradict the current week's content.
+
+Files changed:
+
+- `weekly_typst_export.py`
+- `tests/test_weekly_typst_export_materials.py`
+- `CHANGELOG_HARNESS.md`
+
+Latest behavior:
+
+- Cover training counts now come from non-empty `enrichment.practice_questions`, not from each day's `daily_question`.
+- Cover instructions reuse the same reviewed count instead of hard-coding three independently.
+- The training-mainline sentence is generated deterministically from the current week's practice `target_topics` and `question_type` values, with exam-map titles only as a fallback when practice topics are absent.
+- No model call, source fetch, Full/Lite boundary, renderer attestation or side-effect-free FC behavior changes.
+
+Validation boundary:
+
+- Regressions prove six daily questions plus three weekly exercises render a cover count of three, and the cover mainline uses only current-week practice topics and types without the stale fixed sentence.
+
 ## 2026-09-25 - Prevent orphan rows in weekly PDF tables
 
 Reason:
