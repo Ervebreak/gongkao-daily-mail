@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from weekly_typst_export import (
     _balanced_table_chunks,
+    _cover_training_mainline,
     _render_table_chunks,
+    build_data,
     build_preview_data_from_full_data,
     render_preview_typst,
     render_typst,
@@ -180,6 +182,77 @@ def test_render_typst_starts_long_tables_on_fresh_pages() -> None:
 
     assert "#pagebreak()\n#block-title[本周主题总览]" in text
     assert "#pagebreak()\n#block-title[补充阅读清单]" in text
+
+
+def test_build_data_counts_reviewed_weekly_practice_questions_for_cover() -> None:
+    payloads = []
+    for day in range(21, 27):
+        date = f"2026-09-{day:02d}"
+        payloads.append(
+            {
+                "delivery_date": date,
+                "brief": {
+                    "date": date,
+                    "featured_article": {"title": f"精读文章 {day}"},
+                    "daily_question": {"question": f"每日题目 {day}"},
+                },
+            }
+        )
+    enrichment = {
+        "exam_map_cards": [],
+        "selected_expression_rows": [],
+        "material_cards": [],
+        "practice_questions": [
+            {"question_type": "面试综合分析题", "question": "题目一"},
+            {"question_type": "对策建议题", "question": "题目二"},
+            {"question_type": "申论作文分论点展开题", "question": "题目三"},
+        ],
+        "warnings": [],
+    }
+
+    data = build_data(
+        payloads,
+        "2026-09-21",
+        "2026-09-26",
+        [],
+        enrichment_override=enrichment,
+    )
+
+    assert data["stats"]["featured_count"] == 6
+    assert data["stats"]["questions_count"] == 3
+
+
+def test_cover_training_mainline_comes_from_current_week_practice() -> None:
+    data = _base_data()
+    data["stats"]["questions_count"] = 3
+    data["practice_questions"] = [
+        {
+            "question_type": "面试综合分析题",
+            "question": "题目一",
+            "target_topics": ["城市治理"],
+        },
+        {
+            "question_type": "对策建议题",
+            "question": "题目二",
+            "target_topics": ["网络内容治理"],
+        },
+        {
+            "question_type": "申论作文分论点展开题",
+            "question": "题目三",
+            "target_topics": ["高质量发展"],
+        },
+    ]
+
+    mainline = _cover_training_mainline(data)
+    text = render_typst(data)
+
+    assert mainline == (
+        "围绕“城市治理、网络内容治理、高质量发展”等本周主题，共设置 3 道训练，"
+        "覆盖面试综合分析题、对策建议题、申论作文分论点展开题，重点练习把材料转化为考场表达。"
+    )
+    assert mainline in text
+    assert "技术治理、执法规范、专业纠纷、生态边界" not in text
+    assert "再做本周 3 道考场迁移训练" in text
 
 
 
