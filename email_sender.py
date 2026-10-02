@@ -10,6 +10,7 @@ import json
 import re
 import smtplib
 import ssl
+import time
 from pathlib import Path
 from typing import Any
 from email.header import Header
@@ -22,9 +23,15 @@ from email.utils import formataddr, parseaddr
 import requests
 
 from config import settings
-from email_renderer import render_plain_unsubscribe_text, render_unsubscribe_button
+from email_renderer import (
+    render_plain_unsubscribe_text,
+    render_practice_html,
+    render_practice_plain,
+    render_unsubscribe_button,
+)
 from history import oss_config, oss_headers, oss_ready, oss_url
 from weekly_pdf_tracking import replace_weekly_pdf_tracking_placeholders
+from practice_links import has_email_marker, remove_practice_cta, replace_email_markers
 
 EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
 FEEDBACK_UID_PLACEHOLDER = "__FEEDBACK_UID__"
@@ -908,6 +915,32 @@ def _insert_html_before_unsubscribe(html_body: str, addition: str, recipient: di
     return html_body + addition
 
 
+def inject_practice_cta(
+    plain_text: str,
+    html_body: str,
+    brief: dict[str, Any] | None,
+) -> tuple[str, str]:
+    if not brief or not settings.practice_enabled:
+        return plain_text, html_body
+    plain_addition = "\n".join(render_practice_plain(brief)).strip()
+    html_addition = render_practice_html(brief).strip()
+    if not plain_addition or not html_addition:
+        return plain_text, html_body
+    unsubscribe_text = render_plain_unsubscribe_text(brief)
+    if unsubscribe_text and unsubscribe_text in plain_text:
+        plain_text = plain_text.replace(unsubscribe_text, f"{plain_addition}\n\n{unsubscribe_text}", 1)
+    else:
+        plain_text = f"{plain_text.rstrip()}\n\n{plain_addition}"
+    unsubscribe_button = render_unsubscribe_button(brief)
+    if unsubscribe_button and unsubscribe_button in html_body:
+        html_body = html_body.replace(unsubscribe_button, f"{html_addition}\n{unsubscribe_button}", 1)
+    elif "</body>" in html_body:
+        html_body = html_body.replace("</body>", f"{html_addition}\n</body>", 1)
+    else:
+        html_body += html_addition
+    return plain_text, html_body
+
+
 def personalize_email_payload_for_recipient(
     plain_text: str,
     html_body: str,
@@ -915,6 +948,24 @@ def personalize_email_payload_for_recipient(
 ) -> tuple[str, str]:
     personalized_plain_text = personalize_plain_text_for_recipient(plain_text, recipient)
     personalized_html = personalize_html_for_recipient(html_body, recipient)
+    if has_email_marker(personalized_plain_text) or has_email_marker(personalized_html):
+        uid = str(recipient.get("uid") or "").strip()
+        secret = settings.practice_link_secret.encode("utf-8")
+        if not uid or len(secret) < 32:
+            raise RuntimeError("PRACTICE_LINK_SECRET and recipient uid are required for personalized training links.")
+        expires_at = int(time.time()) + max(1, settings.practice_link_days) * 86400
+        personalized_plain_text = replace_email_markers(
+            personalized_plain_text,
+            uid=uid,
+            secret=secret,
+            expires_at=expires_at,
+        )
+        personalized_html = replace_email_markers(
+            personalized_html,
+            uid=uid,
+            secret=secret,
+            expires_at=expires_at,
+        )
     referral_plain_text = _render_referral_plain_text(recipient)
     referral_html = _render_referral_html(recipient)
     personalized_plain_text = _insert_plain_text_before_unsubscribe(personalized_plain_text, referral_plain_text, recipient)
@@ -923,9 +974,15 @@ def personalize_email_payload_for_recipient(
 
 
 def personalize_html_for_bcc(html_body: str) -> str:
-    return replace_weekly_pdf_tracking_placeholders(
+    return remove_practice_cta(replace_weekly_pdf_tracking_placeholders(
         html_body.replace(FEEDBACK_UID_PLACEHOLDER, "bcc").replace(FEEDBACK_EMAIL_HASH_PLACEHOLDER, ""),
         "bcc",
+    ))
+
+
+def personalize_plain_text_for_bcc(plain_text: str) -> str:
+    return remove_practice_cta(
+        plain_text.replace(FEEDBACK_UID_PLACEHOLDER, "bcc").replace(FEEDBACK_EMAIL_HASH_PLACEHOLDER, "")
     )
 
 
@@ -1015,7 +1072,7 @@ def _send_email_to_records(
             try:
                 to_header = settings.mail_from or settings.smtp_user
                 shared_html = personalize_html_for_bcc(html_body)
-                message = build_message(subject, plain_text, shared_html, to_header, attachments=attachments)
+                message = build_message(subject, personalize_plain_text_for_bcc(plain_text), shared_html, to_header, attachments=attachments)
                 server.sendmail(settings.smtp_user, [recipient["email"] for recipient in recipients], message.as_string())
                 result["success_count"] = len(recipients)
                 result["recipient_status"] = [{"email": recipient["email"], "status": "sent_bcc"} for recipient in recipients]
@@ -1101,6 +1158,7 @@ def send_segmented_email(
     recipient_source: str | None = None,
     enable_trial_reminders: bool = False,
     subscribers_table: dict[str, Any] | None = None,
+    practice_brief: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if segments is None:
         segments, recipient_source = split_effective_recipient_records(test_mode=test_mode, today=delivery_date)
@@ -1160,6 +1218,12 @@ def send_segmented_email(
             }
             continue
         payload = variant_payloads[variant]
+        if variant in FULL_VARIANTS:
+            payload["plain_text"], payload["html_body"] = inject_practice_cta(
+                payload["plain_text"],
+                payload["html_body"],
+                practice_brief,
+            )
         variant_source = variant_source_labels.get(variant, variant)
         send_kwargs: dict[str, Any] = {
             "recipient_source": f"{recipient_source}:{variant_source}",
@@ -1294,7 +1358,7 @@ def send_email(subject: str, plain_text: str, html_body: str, test_mode: bool = 
             try:
                 to_header = settings.mail_from or settings.smtp_user
                 shared_html = personalize_html_for_bcc(html_body)
-                message = build_message(subject, plain_text, shared_html, to_header, attachments=attachments)
+                message = build_message(subject, personalize_plain_text_for_bcc(plain_text), shared_html, to_header, attachments=attachments)
                 server.sendmail(settings.smtp_user, [recipient["email"] for recipient in recipients], message.as_string())
                 result["success_count"] = len(recipients)
                 result["recipient_status"] = [{"email": recipient["email"], "status": "sent_bcc"} for recipient in recipients]
@@ -1344,7 +1408,13 @@ def send_email_to_recipients(
         server.login(settings.smtp_user, settings.smtp_password)
         try:
             to_header = settings.mail_from or settings.smtp_user
-            message = build_message(subject, plain_text, personalize_html_for_bcc(html_body), to_header, attachments=attachments)
+            message = build_message(
+                subject,
+                personalize_plain_text_for_bcc(plain_text),
+                personalize_html_for_bcc(html_body),
+                to_header,
+                attachments=attachments,
+            )
             server.sendmail(settings.smtp_user, recipients, message.as_string())
             result["success_count"] = len(recipients)
             result["recipient_status"] = [{"email": recipient, "status": "sent_bcc"} for recipient in recipients]

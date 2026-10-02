@@ -6,6 +6,7 @@ from typing import Any
 from urllib.parse import quote, urlencode
 
 from config import settings
+from practice_links import create_email_marker
 from exam_transfer_card import build_exam_transfer_card
 from lite_paid_cta import SAFE_LITE_CTA_FALLBACK, resolve_lite_paid_cta_payload
 
@@ -1157,6 +1158,36 @@ def render_lite_email(latest_json: dict[str, Any]) -> str:
 </html>"""
 
 
+def practice_training_url(brief: dict[str, Any]) -> str:
+    if not settings.practice_enabled or not settings.practice_base_url:
+        return ""
+    question = brief.get("daily_question") if isinstance(brief.get("daily_question"), dict) else {}
+    delivery_date = str(brief.get("date") or "").strip()
+    if not delivery_date or not str(question.get("question") or "").strip():
+        return ""
+    marker = create_email_marker(delivery_date, question)
+    return f"{settings.practice_base_url}/t/{marker}"
+
+
+def render_practice_plain(brief: dict[str, Any]) -> list[str]:
+    url = practice_training_url(brief)
+    if not url:
+        return []
+    return ["", "今天这道题，你能在30秒内说出3个点吗？", f"开始训练：{url}"]
+
+
+def render_practice_html(brief: dict[str, Any]) -> str:
+    url = practice_training_url(brief)
+    if not url:
+        return ""
+    return f"""<!-- PRACTICE_CTA_START -->
+      <div style="margin-top:13px;padding:13px 14px;background:#eef6ff;border:1px solid #bfdbfe;border-radius:12px;">
+        <div style="font-size:15px;line-height:1.7;color:#1e3a5f;font-weight:900;margin-bottom:9px;">今天这道题，你能在30秒内说出3个点吗？</div>
+        <a href="{h(url)}" target="_blank" style="display:inline-block;background:#175cd3;color:#fff;text-decoration:none;border-radius:10px;padding:10px 16px;font-size:14px;font-weight:800;">开始训练 →</a>
+      </div>
+<!-- PRACTICE_CTA_END -->"""
+
+
 def render_plain_text(brief: dict[str, Any]) -> str:
     featured = brief["featured_article"]
     question = brief["daily_question"]
@@ -1261,7 +1292,6 @@ def render_email_html(brief: dict[str, Any]) -> str:
             450,
         )
     )
-
     return f"""<!doctype html>
 <html>
 <body style="margin:0;padding:0;background:#f6f8fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif;color:#0f172a;">

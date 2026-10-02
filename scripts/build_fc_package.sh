@@ -41,4 +41,10 @@ zip -r "$ZIP_PATH" . \
   -x "*.log"
 
 cd "$ROOT_DIR"
+for required in main.py fc_practice.py practice_coach.py practice_demo.py practice_links.py practice_store.py requirements.txt; do
+  if ! unzip -Z1 "$ZIP_PATH" | grep -Fxq "$required"; then
+    echo "Package check failed. Missing required entry: $required" >&2
+    exit 1
+  fi
+done
 echo "Built package: $ZIP_PATH"

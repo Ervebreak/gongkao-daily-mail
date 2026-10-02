@@ -284,6 +284,67 @@ python main.py
 
 输出会写入 `OUTPUT_DIR`，默认本地或 FC 的 `/tmp/gongkao-morning-mailer`。
 
+### 30 秒申论表达教练：本地验收
+
+当前本地验收版验证“审核通过的今日一题 → 测试邮件按钮 → 专属训练页 →
+填写三个要点 → 模拟点评 → 保存记录与扣减次数”链路。它不会调用大模型、
+不会发送邮件，也不会写订阅表。
+
+```powershell
+python practice_demo.py --candidate candidates/latest.json --uid demo-user
+```
+
+启动后打开 `http://127.0.0.1:8765/demo-email`，点击“开始训练”。训练页应显示
+与候选件一致的今日一题和“今日剩余 2 次评价”。成功提交后显示规则化模拟点评、
+参考框架和考生版参考答案，并将次数扣减一次。练习记录保存在被 Git 忽略的
+`output/practice_demo_attempts.json`，刷新页面后仍可查看；可删除该本地文件重置演示次数。
+
+每次启动都会生成新的临时签名密钥，因此旧链接在服务重启后失效；这符合本地演示用途，
+正式部署时将改用 FC 环境变量中的长期密钥和并发安全的持久存储。
+
+真实 AI 点评复用项目现有的百炼 OpenAI 兼容接口。先在测试环境设置：
+
+```powershell
+$env:PRACTICE_COACH_MODE="api"
+$env:PRACTICE_COACH_MODEL="qwen-plus"
+$env:PRACTICE_COACH_TIMEOUT="60"
+$env:DASHSCOPE_API_KEY="在本地环境或 FC 控制台配置，不要写入仓库"
+python practice_demo.py --candidate candidates/latest.json --uid demo-user
+```
+
+API 返回值会经过固定结构校验后才保存并扣减次数；超时、接口错误或返回结构不完整时，
+页面保留用户输入并提示重试，本次不扣次数。浏览器只访问训练后端，不会接触模型密钥。
+
+### 30 秒申论表达教练：Render 新加坡部署版
+
+正式训练网页推荐部署到 Render 新加坡 Web Service。Render 运行 `render_practice:app`，
+直接复用签名验证、PASS 候选读取、AI 点评和 OSS 次数记录，不再经过会强制下载
+`.customization` 文件的 FC 默认公网地址。它不会生成或修改每日候选件，也不会发送邮件或改订阅表。
+
+部署顺序：
+
+1. 将本仓库包含 `render.yaml` 的分支推送到 GitHub，在 Render 创建 Blueprint 或 Python Web Service，区域选 Singapore。
+2. Build Command 使用 `pip install -r requirements-render.txt`，Start Command 使用
+   `gunicorn --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120 render_practice:app`。
+3. Render 服务设置 `CANDIDATE_STORAGE=oss`、现有 OSS 读取配置、`PRACTICE_LINK_SECRET`、
+   `PRACTICE_MAX_REVIEWS=2` 和练习记录 OSS 配置。跨地域部署时，`OSS_ENDPOINT` 必须是 Render 服务可访问的公网地址。
+4. 初次验证使用 `PRACTICE_COACH_MODE=mock`；页面、签名、次数和 OSS 写入验收通过后，
+   再在 Render 控制台新增 `DASHSCOPE_API_KEY`，并设置 `PRACTICE_COACH_MODE=api` 和模型名。
+5. 在早晨发送函数设置同一个 `PRACTICE_LINK_SECRET`，并设置
+   `PRACTICE_ENABLED=true`、`PRACTICE_BASE_URL=<Render onrender.com HTTPS 地址>`、`PRACTICE_LINK_DAYS=7`。
+6. 重新部署早晨发送函数后先发测试邮件。训练按钮只在发送阶段注入完整版邮件，
+   再按收件人 `uid` 签名；候选件中的已审核 `plain_text` / `html_body` 不会被改写，
+   因而不会影响 Publisher 的确定性重渲染门禁。
+
+同一链接默认允许 2 次成功评价。模型失败、返回结构无效或 OSS 保存失败不会扣次数。
+共享 BCC 邮件不会附带训练入口；当前分层发送本身强制逐人发送，适合专属链接。
+练习记录所在 bucket 必须未启用、也未暂停 OSS 版本控制；如现有 bucket 使用版本控制，
+应通过 `PRACTICE_OSS_*` 改用一个未开启版本控制的独立 bucket，确保并发条件写有效。
+完整环境变量和上线检查见 `docs/deploy_aliyun_fc.md`。已有香港 FC 可以暂时保留用于对照测试，
+但不要把其默认 `fcapp.run` 地址配置为正式 `PRACTICE_BASE_URL`。
+`render.yaml` 默认使用 Free 方案用于验收；Free 服务空闲后会休眠，第一位用户打开可能出现冷启动等待。
+正式向订阅者开放前应切换为不会休眠的付费实例，或接受并明确测试阶段的首次打开延迟。
+
 ## 阿里云 FC 配置
 
 1. 运行环境选 Python 3.10。
