@@ -149,3 +149,23 @@ WEEKLY_RENDER_MAX_ZIP_BYTES=4000000
 7. 部署前运行：
    `python -m py_compile fc_weekly_render.py scripts/build_weekly_package.py weekly_typst_export.py`
    和 `python -m pytest -q tests/test_fc_weekly_render.py tests/test_build_weekly_package.py tests/test_weekly_typst_export_materials.py`。
+
+## 7. Render 新加坡表达教练服务
+
+“30 秒申论表达教练”的正式网页部署到 Render Singapore Web Service，WSGI 入口为
+`render_practice:app`。阿里云香港事件函数的默认公网地址会强制下载 `.customization`，
+只保留为测试入口，不能用作正式邮件中的 `PRACTICE_BASE_URL`。
+
+部署门禁：
+
+1. `PRACTICE_LINK_SECRET` 至少 32 字节，只保存在环境变量中；邮件发送 FC 与 Render 服务的值必须相同。
+2. `CANDIDATE_STORAGE=oss`；Render 服务不得从包内或本地缓存候选件回退，且只接受 `quality_gate.overall=ok`、`p0_count=0` 的候选件。
+3. 练习记录必须写 OSS。默认复用 `OSS_*`，对象前缀为 `PRACTICE_OSS_PREFIX`；生产账号权限应限制到候选读取和练习前缀读写。
+4. 每次评价使用不可覆盖 slot，并用参与 OSS 签名的 `x-oss-forbid-overwrite: true` 条件写，避免跨实例并发覆盖。练习记录 bucket 不得开启或暂停版本控制；否则该请求头无效，必须改用独立 bucket。邮箱和原始 `uid` 不得写入对象键或记录正文。
+5. 初次上线必须先用 `PRACTICE_COACH_MODE=mock` 验证，再切换 `api`。模型错误和存储失败不得扣次数。
+6. 早晨邮件必须保持逐人发送。共享 BCC 路径必须移除训练 CTA，不能生成多人共用 token。
+7. 训练 CTA 只允许在发送层注入；不得写回 canonical candidate，不能改变 Publisher 的 plain/HTML 严格一致校验。
+8. Render 必须监听 `0.0.0.0:$PORT`，健康检查为 `/healthz`；生产入口使用 Gunicorn，不能使用本地 demo server。
+9. 部署前运行：
+   `python -m py_compile fc_practice.py practice_coach.py practice_demo.py practice_links.py practice_store.py email_sender.py main.py`
+   和相关 `tests/test_practice_*.py`、`tests/test_fc_practice.py`、`tests/test_render_practice.py`。

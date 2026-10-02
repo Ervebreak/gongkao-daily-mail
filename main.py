@@ -2426,6 +2426,7 @@ def send_saved_candidate(event: Any | None = None) -> dict[str, Any]:
             recipient_source=recipient_source,
             enable_trial_reminders=True,
             subscribers_table=subscribers_table,
+            practice_brief=brief,
         )
         logger.info("candidate email send result", subject=subject, **send_result)
     else:
@@ -3691,6 +3692,7 @@ def run_daily_brief(event: Any | None = None, context: Any | None = None) -> dic
             recipient_source=recipient_source,
             enable_trial_reminders=True,
             subscribers_table=subscribers_table,
+            practice_brief=brief,
         )
         logger.info("email send result", subject=subject, **send_result)
     else:

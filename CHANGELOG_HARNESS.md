@@ -1,5 +1,122 @@
 # Harness Change Log
 
+## 2026-10-02 - Add deployable Hong Kong FC practice coach
+
+Reason:
+
+- The accepted local “30 秒申论表达教练” loop now needs a production-safe HTTP entrypoint, recipient-specific email links, cross-instance persistence, and a deployment path that does not weaken the audited candidate gate.
+
+Files changed:
+
+- `fc_practice.py`
+- `render_practice.py`
+- `render.yaml`
+- `requirements-render.txt`
+- `practice_store.py`
+- `practice_links.py`
+- `practice_coach.py`
+- `practice_demo.py`
+- `config.py`
+- `email_renderer.py`
+- `email_sender.py`
+- `main.py`
+- `scripts/build_fc_package.ps1`
+- `scripts/build_fc_package.sh`
+- `.env.example`
+- `README.md`
+- `docs/deploy_aliyun_fc.md`
+- `content_harness/deployment_rules.md`
+- practice-focused tests
+- `CHANGELOG_HARNESS.md`
+
+Latest behavior:
+
+- A production WSGI entrypoint and Render Blueprint now deploy the interactive page as a Singapore Web Service. It binds through Gunicorn to `0.0.0.0:$PORT`, exposes `/healthz`, and reuses the same signed-link, PASS-candidate, coach, and OSS-attempt logic.
+- The Alibaba Hong Kong event-function public URL remains test-only because the platform forces custom responses to download as `.customization`; official email links must point to the Render HTTPS URL instead.
+- A separate `fc_practice.handler` serves signed training links from a Hong Kong FC HTTP function, reads only an OSS-backed PASS candidate, and returns same-page coaching results with security and no-cache headers.
+- Morning individual delivery injects the CTA after candidate publication and replaces an opaque question marker with an HMAC-signed, expiring, recipient-specific token. Canonical Full plain/HTML artifacts remain unchanged, so Publisher render equality stays deterministic.
+- Successful attempts use anonymous per-user OSS paths and create-only numbered slots. The signed `x-oss-forbid-overwrite: true` request prevents two FC instances from overwriting the same slot when the practice bucket has versioning disabled; duplicate request IDs are idempotent, completed quota is rejected before another model call, and model/storage failures do not consume an attempt.
+- BCC paths strip the CTA. The feature is disabled by default and can be rolled back with `PRACTICE_ENABLED=false` without modifying candidates.
+- HTTP responses explicitly set `Content-Disposition: inline` so the FC public endpoint renders JSON and training HTML in the browser instead of forcing a file download.
+
+Validation boundary:
+
+- Focused tests cover token binding, send-time CTA injection, HTTP routing, OSS-only candidate loading, conditional OSS writes, idempotency, quota behavior, provider failure, and package contents. No production deployment, email send, OSS write, or paid model call occurs during validation.
+
+## 2026-09-30 - Add opt-in semantic AI coaching
+
+Reason:
+
+- The persisted two-attempt practice loop now needs a real semantic evaluation path while retaining a no-cost local mode and ensuring provider failures never consume an attempt.
+
+Files changed:
+
+- `practice_coach.py`
+- `practice_demo.py`
+- `tests/test_practice_demo.py`
+- `.env.example`
+- `README.md`
+- `CHANGELOG_HARNESS.md`
+
+Latest behavior:
+
+- `PRACTICE_COACH_MODE=api` sends the question, audited reference framework, candidate answer, and three student points to the existing server-side DashScope OpenAI-compatible client.
+- AI feedback is normalized into four 1-5 scores, strengths, improvements, three revised points, and a 30-second sample answer before it can be stored or displayed.
+- The API key remains server-side. Provider timeouts, invalid JSON, incomplete feedback, and other evaluation errors preserve the submitted text and do not consume an attempt.
+- The default mode remains `mock`, so local demos and automated tests make no paid model calls.
+
+Validation boundary:
+
+- Tests inject an API-shaped coach response and a provider failure without network access, covering rendering, schema rejection, quota deduction after success, and no deduction after failure.
+
+## 2026-09-30 - Persist two mock-coached practice submissions
+
+Reason:
+
+- After validating the recipient-specific question link, the next acceptance milestone needs the full local submit, result, persistence, and quota loop before any paid model API is connected.
+
+Files changed:
+
+- `practice_demo.py`
+- `tests/test_practice_demo.py`
+- `README.md`
+- `CHANGELOG_HARNESS.md`
+
+Latest behavior:
+
+- The local training page accepts three required text points and returns deterministic mock coaching, the audited reference framework, and the candidate answer on the same page.
+- Successful attempts are stored locally by a hashed user-and-question key, survive refreshes, and reduce the two-attempt allowance; invalid submissions and processing failures do not consume an attempt.
+- Request IDs make browser resubmissions idempotent, and a third distinct successful submission is rejected.
+- The mock coach performs no semantic model call. Production email, subscriber segmentation, candidate quality gates, OSS, and FC deployment remain unchanged.
+
+Validation boundary:
+
+- Focused tests cover persistence, quota deduction, two-attempt enforcement, incomplete input, idempotent resubmission, signed links, expiry, tampering, and candidate gate rejection.
+
+## 2026-09-30 - Add the first local practice-link acceptance demo
+
+Reason:
+
+- The daily mail needs a small, independently testable path from an audited daily question to a recipient-specific “30 秒申论表达教练” page before model evaluation or production deployment is introduced.
+
+Files changed:
+
+- `practice_demo.py`
+- `tests/test_practice_demo.py`
+- `README.md`
+- `CHANGELOG_HARNESS.md`
+
+Latest behavior:
+
+- A local server renders a test-email preview whose CTA opens a signed recipient-specific training link.
+- The training page reads only an already-audited candidate whose stored `quality_gate.overall` is `ok`, binds the link to the candidate delivery date and a stable daily-question version, and displays the matching question plus a two-review allowance.
+- Tampered, expired, missing-user, date-drifted, and question-version-drifted links fail closed.
+- This milestone does not call a model, accept an answer, persist attempts, send email, change subscriber segmentation, or alter the production candidate/morning-send flow.
+
+Validation boundary:
+
+- Focused tests cover the email-to-training link, matching-question display, two-review copy, tampering, expiry, and candidate quality-gate rejection.
+
 ## 2026-09-26 - Bind weekly PDF cover copy to reviewed practice data
 
 Reason:

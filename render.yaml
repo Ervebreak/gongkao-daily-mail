@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: gongkao-practice
+    runtime: python
+    region: singapore
+    plan: free
+    buildCommand: pip install -r requirements-render.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120 render_practice:app
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.10
+      - key: CANDIDATE_STORAGE
+        value: oss
+      - key: CANDIDATE_PREFIX
+        value: gongkao-morning-mailer/candidates
+      - key: PRACTICE_MAX_REVIEWS
+        value: "2"
+      - key: PRACTICE_COACH_MODE
+        value: mock
+      - key: PRACTICE_COACH_MODEL
+        value: qwen-plus
+      - key: PRACTICE_COACH_TIMEOUT
+        value: "60"
+      - key: PRACTICE_OSS_PREFIX
+        value: gongkao-morning-mailer/practice
+      - key: PRACTICE_LINK_SECRET
+        sync: false
+      - key: OSS_ENDPOINT
+        sync: false
+      - key: OSS_BUCKET
+        sync: false
+      - key: OSS_ACCESS_KEY_ID
+        sync: false
+      - key: OSS_ACCESS_KEY_SECRET
+        sync: false
