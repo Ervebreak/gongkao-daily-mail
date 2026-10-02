@@ -14,7 +14,7 @@ mkdir -p "$BUILD_DIR"
 # Keep this list explicit so generated outputs, private data, and .git metadata never enter the package.
 find . -maxdepth 1 -type f \( -name "*.py" -o -name "requirements.txt" \) -exec cp {} "$BUILD_DIR" \;
 
-for dir in content_harness knowledge scripts examples data; do
+for dir in agent content_harness knowledge scripts examples data; do
   if [ -d "$dir" ]; then
     mkdir -p "$BUILD_DIR/$dir"
     rsync -a \

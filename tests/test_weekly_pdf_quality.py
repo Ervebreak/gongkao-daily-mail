@@ -98,7 +98,7 @@ def test_preview_material_title_comes_from_full_material_cards() -> None:
         }
     )
 
-    assert preview["material_preview"]["title"] == card["title"]
+    assert preview["material_preview"]["title"] == "作文素材积累·平台投诉治理素材卡（一例多用）"
 
 
 def test_render_typst_supports_new_material_card_fields() -> None:

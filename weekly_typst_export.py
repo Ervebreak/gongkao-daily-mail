@@ -255,6 +255,11 @@ def build_data(
                 "warnings": [f"weekly enrichment failed open: {type(exc).__name__}: {exc}"],
             }
     warnings.extend(enrichment.get("warnings") or [])
+    practice_questions = [
+        row
+        for row in as_list(enrichment.get("practice_questions"))
+        if isinstance(row, dict)
+    ]
     return {
         "start_date": start_date,
         "end_date": end_date,
@@ -264,7 +269,7 @@ def build_data(
         "warnings": warnings,
         "stats": {
             "featured_count": len(days),
-            "questions_count": sum(1 for day in days if day["question"]["question"]),
+            "questions_count": sum(1 for row in practice_questions if clean(row.get("question"))),
             "golden_count": len(expression_rows),
             "quick_count": quick_count,
         },
@@ -275,7 +280,7 @@ def build_data(
         "exam_map_cards": enrichment.get("exam_map_cards") or [],
         "selected_expression_rows": enrichment.get("selected_expression_rows") or [],
         "material_cards": enrichment.get("material_cards") or [],
-        "practice_questions": enrichment.get("practice_questions") or [],
+        "practice_questions": practice_questions,
     }
 
 
@@ -300,6 +305,9 @@ PREVIEW_GENERIC_POINTS = {
     "创新",
 }
 
+MATERIAL_TITLE_PREFIX = "作文素材积累·"
+MATERIAL_TITLE_SUFFIX = "（一例多用）"
+
 
 def clip_complete_sentence(text: Any, limit: int = 180) -> str:
     raw = clean(text)
@@ -323,6 +331,24 @@ def strip_field_label(text: Any) -> str:
     return re.sub(r"^[\u4e00-\u9fffA-Za-z]{1,12}[：:]\s*", "", value).strip()
 
 
+def material_title_core(value: Any) -> str:
+    """Return the semantic title without the template-owned prefix/suffix."""
+
+    title = clean(value)
+    while title.startswith(MATERIAL_TITLE_PREFIX):
+        title = title[len(MATERIAL_TITLE_PREFIX) :].strip()
+    while title.endswith(MATERIAL_TITLE_SUFFIX):
+        title = title[: -len(MATERIAL_TITLE_SUFFIX)].strip()
+    return title.strip(" ·")
+
+
+def canonical_material_title(value: Any) -> str:
+    core = material_title_core(value)
+    if not core:
+        return ""
+    return f"{MATERIAL_TITLE_PREFIX}{core}{MATERIAL_TITLE_SUFFIX}"
+
+
 def unique_non_empty(values: list[str], limit: int) -> list[str]:
     result: list[str] = []
     seen: set[str] = set()
@@ -335,6 +361,44 @@ def unique_non_empty(values: list[str], limit: int) -> list[str]:
         if len(result) >= limit:
             break
     return result
+
+
+def _cover_training_mainline(data: dict[str, Any]) -> str:
+    """Build the cover training summary from this week's reviewed enrichment."""
+
+    practice_rows = [
+        row
+        for row in as_list(data.get("practice_questions"))
+        if isinstance(row, dict) and clean(row.get("question"))
+    ]
+    topics = unique_non_empty(
+        [
+            clean(topic)
+            for row in practice_rows
+            for topic in as_list(row.get("target_topics"))
+        ],
+        4,
+    )
+    if not topics:
+        topics = unique_non_empty(
+            [clean(row.get("title")) for row in data.get("exam_map_cards") or [] if isinstance(row, dict)],
+            4,
+        )
+    question_types = unique_non_empty(
+        [clean(row.get("question_type")) for row in practice_rows],
+        4,
+    )
+    count = len(practice_rows)
+    if not count:
+        return "本周暂未生成稳定训练题，建议先复盘高频考点与表达库。"
+
+    parts: list[str] = []
+    if topics:
+        parts.append(f'围绕“{"、".join(topics)}”等本周主题')
+    parts.append(f"共设置 {count} 道训练")
+    if question_types:
+        parts.append(f'覆盖{"、".join(question_types)}')
+    return "，".join(parts) + "，重点练习把材料转化为考场表达。"
 
 
 def is_specific_preview_point(text: str) -> bool:
@@ -405,7 +469,7 @@ def preview_material_fragment(data: dict[str, Any]) -> dict[str, str]:
         if not isinstance(row, dict):
             continue
         summary = clip_complete_sentence(row.get("material_summary"), 160) or clean(row.get("material_summary"))
-        title = clean(row.get("title") or row.get("source_title") or "本周素材片段")
+        title = canonical_material_title(row.get("title") or row.get("source_title")) or "本周素材片段"
         source = "、".join(unique_non_empty(as_list(row.get("source_article") or row.get("source_articles")), 2))
         if summary:
             return {"title": title, "source": source, "summary": summary}
@@ -426,22 +490,18 @@ def preview_practice_fragment(data: dict[str, Any]) -> dict[str, str]:
         if not isinstance(row, dict):
             continue
         question = clean(row.get("question"))
-        direction = clean(row.get("answer_hint") or row.get("use_hint") or row.get("target_topics"))
         if question:
             return {
                 "title": clean(row.get("title") or "本周训练题片段"),
                 "question": question,
-                "direction": clip_complete_sentence(direction, 90) or direction,
             }
     for day in data.get("days") or []:
         question = day.get("question") if isinstance(day.get("question"), dict) else {}
         stem = clean(question.get("question"))
-        framework = [clean(item) for item in as_list(question.get("answer_framework")) if clean(item)]
         if stem:
             return {
                 "title": "本周训练题片段",
                 "question": stem,
-                "direction": "；".join(framework[:2]),
             }
     return {}
 
@@ -478,13 +538,72 @@ def t_badges(items: list[str], limit: int = 8) -> str:
 
 
 def table_cell(value: Any) -> str:
-    return f"[{typst_text(value)}]"
+    # A table may move this block to the next page, but it must not split a
+    # single logical row into a tiny trailing fragment on the current page.
+    return f"[#block(breakable: false)[{typst_text(value)}]]"
+
+
+def _balanced_table_chunks(rows: list[str], max_rows: int) -> list[list[str]]:
+    """Split table rows into balanced page groups without a one-row tail."""
+
+    if max_rows < 3:
+        raise ValueError("max_rows must be at least 3")
+    if not rows or len(rows) <= max_rows:
+        return [rows]
+
+    chunk_count = (len(rows) + max_rows - 1) // max_rows
+    base_size, larger_chunks = divmod(len(rows), chunk_count)
+    chunks: list[list[str]] = []
+    start = 0
+    for index in range(chunk_count):
+        size = base_size + (1 if index < larger_chunks else 0)
+        chunks.append(rows[start : start + size])
+        start += size
+    return chunks
+
+
+def _render_table_chunks(
+    rows: list[str],
+    *,
+    columns: str,
+    headers: list[str],
+    max_rows: int,
+    continuation_label: str,
+) -> str:
+    """Render bounded, non-breakable table chunks with a header on each page."""
+
+    header_cells = ", ".join(
+        f'[#text(fill: brand, weight: "bold")[{typst_text(header)}]]' for header in headers
+    )
+    tables: list[str] = []
+    for index, chunk in enumerate(_balanced_table_chunks(rows, max_rows)):
+        body = "\n".join(chunk)
+        continuation = (
+            f'#text(size: 12pt, weight: "bold", fill: brand)[{typst_text(continuation_label)}（续）]\n#v(7pt)\n'
+            if index > 0 and continuation_label
+            else ""
+        )
+        tables.append(
+            f"""{continuation}#block(breakable: false)[
+#table(columns: {columns}, inset: (x: 7pt, y: 5.5pt), stroke: 0.45pt + line, fill: (x, y) => if y == 0 {{ table-head }} else if calc.odd(y) {{ rgb(\"#f8fafc\") }} else {{ white }},
+  {header_cells},
+  {body}
+)
+]"""
+        )
+    # A hard page boundary between bounded chunks makes pagination independent
+    # of the FC font metrics and guarantees that every continuation has a
+    # visible table header.
+    return "\n#pagebreak()\n".join(tables)
 
 
 def render_typst(data: dict[str, Any]) -> str:
     days = data["days"]
     stats = data["stats"]
-    overview_rows = "\n".join(
+    training_count = int(stats.get("questions_count") or 0)
+    training_task_text = f"本周 {training_count} 道考场迁移训练" if training_count else "本周考场迁移训练"
+    cover_training_mainline = _cover_training_mainline(data)
+    overview_row_items = [
         ", ".join(
             [
                 table_cell(f'{day["short_date"]}\n{day["weekday"]}'),
@@ -495,6 +614,13 @@ def render_typst(data: dict[str, Any]) -> str:
         )
         + ","
         for day in days
+    ]
+    overview_table = _render_table_chunks(
+        overview_row_items,
+        columns="(0.9fr, 1.7fr, 2.4fr, 2fr)",
+        headers=["日期", "主题", "精读文章", "训练方向"],
+        max_rows=6,
+        continuation_label="本周主题总览",
     )
     if data.get("exam_map_cards"):
         map_cards = "][\n".join(
@@ -579,7 +705,7 @@ def render_typst(data: dict[str, Any]) -> str:
         f'#frame-row[{typst_text(row["date"])}｜{typst_text(row["theme"])}][{typst_text(row["framework"])}]'
         for row in data["framework_rows"]
     )
-    featured_index_rows = "\n".join(
+    featured_index_row_items = [
         ", ".join(
             [
                 table_cell(day["short_date"]),
@@ -590,11 +716,18 @@ def render_typst(data: dict[str, Any]) -> str:
         )
         + ","
         for day in days
+    ]
+    featured_index_table = _render_table_chunks(
+        featured_index_row_items,
+        columns="(0.8fr, 2.6fr, 1.2fr, 2.8fr)",
+        headers=["日期", "文章", "主题", "一句话价值"],
+        max_rows=6,
+        continuation_label="精读原文入口",
     )
-    quick_index_rows: list[str] = []
+    quick_index_row_items: list[str] = []
     for day in days:
         for item in day["quick_reads"]:
-            quick_index_rows.append(
+            quick_index_row_items.append(
                 ", ".join(
                     [
                         table_cell(day["short_date"]),
@@ -605,7 +738,17 @@ def render_typst(data: dict[str, Any]) -> str:
                 )
                 + ","
             )
-    quick_index = "\n".join(quick_index_rows)
+    if not quick_index_row_items:
+        quick_index_row_items.append(
+            ", ".join([table_cell(""), table_cell("暂无补充阅读"), table_cell(""), table_cell("")]) + ","
+        )
+    quick_index_table = _render_table_chunks(
+        quick_index_row_items,
+        columns="(0.8fr, 2.6fr, 1.2fr, 2.8fr)",
+        headers=["日期", "文章", "主题", "考试价值"],
+        max_rows=8,
+        continuation_label="补充阅读清单",
+    )
 
     def row_value(row: dict[str, Any], *keys: str) -> str:
         for key in keys:
@@ -655,7 +798,7 @@ def render_typst(data: dict[str, Any]) -> str:
     for idx, row in enumerate((data.get("material_cards") or [])[:3], start=1):
         if not isinstance(row, dict):
             continue
-        title = row_value(row, "title", "source_title", "theme") or f"素材卡 {idx:02d}"
+        title = material_title_core(row_value(row, "title", "source_title", "theme")) or f"素材卡 {idx:02d}"
         material_type = row_value(row, "material_type", "type")
         source_dates = row_value(row, "source_date", "source_dates", "date")
         source_articles = row_value(row, "source_article", "source_articles", "source_title")
@@ -716,9 +859,9 @@ def render_typst(data: dict[str, Any]) -> str:
     )
     overview_keywords = t_badges(data.get("hot_keywords") or [], 8)
     review_order_text = (
-        "先看本页速览，再看作文素材积累和金句表达库，再做本周 3 道考场迁移训练；周内没怎么看邮件的同学，再看每日内容压缩回看。"
+        f"先看本页速览，再看作文素材积累和金句表达库，再做{training_task_text}；周内没怎么看邮件的同学，再看每日内容压缩回看。"
         if has_material_cards
-        else "先看本页速览，再看金句表达库，再做本周 3 道考场迁移训练；周内没怎么看邮件的同学，再看每日内容压缩回看。"
+        else f"先看本页速览，再看金句表达库，再做{training_task_text}；周内没怎么看邮件的同学，再看每日内容压缩回看。"
     )
     review_method_text = (
         "这份 PDF 按“重点优先”重新组织：先抓考点、作文素材、表达和训练题，再回看每日内容。"
@@ -854,11 +997,11 @@ def render_typst(data: dict[str, Any]) -> str:
   #panel[使用说明][
     + 先看本周 3 分钟速览。
     + 再看考场素材库和金句表达库。
-    + 再做本周 3 道考场迁移训练。
+    + 再做{training_task_text}。
     + 周内没怎么看邮件的同学，再看每日内容压缩回看。
   ]
 ][
-  #panel[本周训练主线][从“技术治理、执法规范、专业纠纷、生态边界”四类问题切入，训练申论对策题与面试综合分析题的材料转化能力。#v(5pt){t_badges(data["hot_keywords"], 8)}]
+  #panel[本周训练主线][{typst_text(cover_training_mainline)}#v(5pt){t_badges(data["hot_keywords"], 8)}]
 ]
 
 #pagebreak()
@@ -878,13 +1021,11 @@ def render_typst(data: dict[str, Any]) -> str:
   #panel[最值得练][{overview_practice}]
 ]
 
+#pagebreak()
 #block-title[本周主题总览]
 #info-strip[复盘方式][{typst_text(review_method_text)}]
 
-#table(columns: (0.9fr, 1.7fr, 2.4fr, 2fr), inset: 7pt, stroke: 0.45pt + line, fill: (x, y) => if y == 0 {{ table-head }} else if calc.odd(y) {{ rgb("#f8fafc") }} else {{ white }},
-  [#text(fill: brand, weight: "bold")[日期]], [#text(fill: brand, weight: "bold")[主题]], [#text(fill: brand, weight: "bold")[精读文章]], [#text(fill: brand, weight: "bold")[训练方向]],
-  {overview_rows}
-)
+{overview_table}
 
 #pagebreak()
 #block-title[02｜本周高频考点地图]
@@ -918,15 +1059,10 @@ def render_typst(data: dict[str, Any]) -> str:
 = {quick_section_no:02d}｜延伸阅读索引
 #info-strip[说明][本页只做“摘要 + 原文入口”。如需阅读全文，请复制链接或搜索原文题目打开原文；PDF 不收录延伸阅读全文。]
 #block-title[精读原文入口]
-#table(columns: (0.8fr, 2.6fr, 1.2fr, 2.8fr), inset: 7pt, stroke: 0.45pt + line, fill: (x, y) => if y == 0 {{ table-head }} else if calc.odd(y) {{ rgb("#f8fafc") }} else {{ white }},
-  [#text(fill: brand, weight: "bold")[日期]], [#text(fill: brand, weight: "bold")[文章]], [#text(fill: brand, weight: "bold")[主题]], [#text(fill: brand, weight: "bold")[一句话价值]],
-  {featured_index_rows}
-)
+{featured_index_table}
+#pagebreak()
 #block-title[补充阅读清单]
-#table(columns: (0.8fr, 2.6fr, 1.2fr, 2.8fr), inset: 7pt, stroke: 0.45pt + line, fill: (x, y) => if y == 0 {{ table-head }} else if calc.odd(y) {{ rgb("#f8fafc") }} else {{ white }},
-  [#text(fill: brand, weight: "bold")[日期]], [#text(fill: brand, weight: "bold")[文章]], [#text(fill: brand, weight: "bold")[主题]], [#text(fill: brand, weight: "bold")[考试价值]],
-  {quick_index if quick_index else table_cell("") + "," + table_cell("暂无补充阅读") + "," + table_cell("") + "," + table_cell("") + ","}
-)
+{quick_index_table}
 """
 
 
@@ -943,7 +1079,6 @@ def render_preview_typst(data: dict[str, Any]) -> str:
     practice_preview = data.get("practice_preview") if isinstance(data.get("practice_preview"), dict) else {}
     practice_title = typst_text(practice_preview.get("title") or "本周训练题片段")
     practice_question = typst_text(practice_preview.get("question") or "完整版资料包会附上本周 3 道考场迁移训练题，帮助你把一周内容转成作答表达。")
-    practice_direction = typst_text(practice_preview.get("direction") or "预览版只保留题干或思考方向，不展示完整参考答案。")
     cta_url = clean(data.get("cta_url"))
     cta_line = (
         f"如果你想看完整周 PDF，可以回复邮件，或通过这个入口了解完整版：{typst_text(cta_url)}"
@@ -1008,7 +1143,6 @@ def render_preview_typst(data: dict[str, Any]) -> str:
   #v(5pt)
   {practice_title}
   #linebreak(){practice_question}
-  #if "{practice_direction}" != "" [#linebreak()#muted[思考方向：{practice_direction}]]
 ]
 
 #v(10pt)

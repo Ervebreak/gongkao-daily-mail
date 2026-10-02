@@ -117,6 +117,80 @@ Validation boundary:
 
 - Focused tests cover the email-to-training link, matching-question display, two-review copy, tampering, expiry, and candidate quality-gate rejection.
 
+## 2026-09-26 - Bind weekly PDF cover copy to reviewed practice data
+
+Reason:
+
+- The Full PDF cover counted the six daily questions as “6 道考场训练” even though the reviewed weekly enrichment contains exactly three migration exercises.
+- The “本周训练主线” panel still used a fixed historical sentence about technology governance, enforcement, professional disputes and ecological boundaries, so the cover could contradict the current week's content.
+
+Files changed:
+
+- `weekly_typst_export.py`
+- `tests/test_weekly_typst_export_materials.py`
+- `CHANGELOG_HARNESS.md`
+
+Latest behavior:
+
+- Cover training counts now come from non-empty `enrichment.practice_questions`, not from each day's `daily_question`.
+- Cover instructions reuse the same reviewed count instead of hard-coding three independently.
+- The training-mainline sentence is generated deterministically from the current week's practice `target_topics` and `question_type` values, with exam-map titles only as a fallback when practice topics are absent.
+- No model call, source fetch, Full/Lite boundary, renderer attestation or side-effect-free FC behavior changes.
+
+Validation boundary:
+
+- Regressions prove six daily questions plus three weekly exercises render a cover count of three, and the cover mainline uses only current-week practice topics and types without the stale fixed sentence.
+
+## 2026-09-25 - Prevent orphan rows in weekly PDF tables
+
+Reason:
+
+- The six-row weekly overview and the supplementary-reading index could leave a final `09.19` row alone on a continuation page under FC font metrics, creating a mostly blank page without a repeated table header.
+- Wrapping each cell as non-breakable prevented row fragments but did not control table-level widows.
+
+Files changed:
+
+- `weekly_typst_export.py`
+- `tests/test_weekly_typst_export_materials.py`
+- `CHANGELOG_HARNESS.md`
+
+Latest behavior:
+
+- The weekly overview and featured-article index start with a fresh-page budget and render as bounded non-breakable table groups.
+- Supplementary-reading rows start on a fresh page and are balanced into groups of at most eight rows; larger tables split evenly (for example `9 → 5 + 4` and `12 → 6 + 6`) instead of leaving a single trailing row.
+- Every table group owns its header; continuation pages also display a concise `（续）` section label, and explicit page boundaries make FC pagination stable across font-metric differences.
+- The content payload, enrichment contract, Full/Lite boundary, offline renderer attestation and side-effect-free FC behavior are unchanged.
+
+Validation boundary:
+
+- Focused regressions cover balanced row grouping without one-row tails, repeated headers, explicit chunk page boundaries and fresh-page placement for both previously failing table sections.
+
+## 2026-09-19 - Harden weekly PDF pagination, material titles, and Lite whitelist
+
+Reason:
+
+- Weekly PDF visual QA still found long table rows split across a page boundary, producing tiny trailing fragments and large empty areas.
+- Material-card titles supplied in their canonical `作文素材积累·…（一例多用）` form were wrapped a second time by the Typst template.
+- Lite Preview derived `思考方向` from Full-only `answer_hint` or daily answer frameworks, which could reveal most of the intended answer structure.
+
+Files changed:
+
+- `weekly_typst_export.py`
+- `tests/test_weekly_typst_export_materials.py`
+- `tests/test_weekly_pdf_quality.py`
+- `CHANGELOG_HARNESS.md`
+
+Latest behavior:
+
+- Each logical table cell is rendered as a non-breakable block, so a row moves to the next page instead of leaving a small fragment behind.
+- Material-card title wrappers are normalized before rendering; the template remains the only owner of the visible prefix and suffix.
+- Lite Preview practice fragments now use an explicit question-only whitelist and ignore `answer_hint`, `use_hint`, `target_topics`, daily `answer_framework`, and reference answers.
+- The existing non-breakable material-card opening from PR #70 remains intact.
+
+Validation boundary:
+
+- Focused regressions cover table-cell pagination guards, canonical title normalization, preservation of the material-card opening block, and absence of Full-only answer content in Lite Typst output.
+
 ## 2026-09-15 - Make morning send use audited candidate artifacts directly
 
 Reason:

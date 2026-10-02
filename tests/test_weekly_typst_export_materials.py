@@ -1,6 +1,14 @@
 from __future__ import annotations
 
-from weekly_typst_export import render_preview_typst, render_typst
+from weekly_typst_export import (
+    _balanced_table_chunks,
+    _cover_training_mainline,
+    _render_table_chunks,
+    build_data,
+    build_preview_data_from_full_data,
+    render_preview_typst,
+    render_typst,
+)
 
 
 def _base_data() -> dict:
@@ -88,6 +96,165 @@ def test_render_typst_keeps_material_card_opening_with_heading() -> None:
     assert text.index(opening) < text.index('#if examples != "" [')
 
 
+def test_render_typst_normalizes_template_owned_material_title_wrappers() -> None:
+    data = _base_data()
+    data["material_cards"] = [
+        {
+            "title": "作文素材积累·招聘背调划清信息使用边界（一例多用）",
+            "material_summary": "招聘核验需要守住信息使用边界。",
+        }
+    ]
+
+    text = render_typst(data)
+
+    assert "#material-card[招聘背调划清信息使用边界]" in text
+    assert "#material-card[作文素材积累·招聘背调划清信息使用边界（一例多用）]" not in text
+
+
+def test_render_typst_wraps_table_cells_as_unbreakable_rows() -> None:
+    data = _base_data()
+    data["days"] = [
+        {
+            "day_no": 1,
+            "date": "2026-06-10",
+            "short_date": "06.10",
+            "weekday": "周三",
+            "theme": "公共空间治理",
+            "focus": "把闲置边角空间转化为居民可达、可用、可持续的公共服务场景。",
+            "featured": {
+                "title": "盘活城市边角空间",
+                "source": "人民日报",
+                "published_at": "2026-06-10",
+                "url": "https://example.com/article",
+                "theme": "公共服务",
+                "one_sentence": "以精细治理提升空间使用效率。",
+                "rewritable_expression": "",
+                "article_type": "",
+                "main_thread": "",
+            },
+            "question": {
+                "question_type": "综合分析题",
+                "question": "",
+                "answer_framework": [],
+            },
+            "takeaway": {"golden_sentences": [], "framework": ""},
+            "steps": [],
+            "tags": [],
+            "quick_reads": [],
+        }
+    ]
+
+    text = render_typst(data)
+
+    assert "[#block(breakable: false)[06.10\n周三]]" in text
+    assert "[#block(breakable: false)[公共空间治理\n把闲置边角空间转化为居民可达、可用、可持续的公共服务场景。]]" in text
+
+
+def test_balanced_table_chunks_never_leave_a_single_row_tail() -> None:
+    chunks = _balanced_table_chunks([str(index) for index in range(7)], max_rows=4)
+
+    assert [len(chunk) for chunk in chunks] == [4, 3]
+    assert all(len(chunk) != 1 for chunk in chunks)
+    assert [len(chunk) for chunk in _balanced_table_chunks([str(index) for index in range(9)], max_rows=8)] == [5, 4]
+    assert [len(chunk) for chunk in _balanced_table_chunks([str(index) for index in range(12)], max_rows=8)] == [6, 6]
+
+
+def test_render_table_chunks_repeat_headers_and_force_page_boundaries() -> None:
+    rows = [f"[row-{index}]," for index in range(7)]
+
+    text = _render_table_chunks(
+        rows,
+        columns="(1fr,)",
+        headers=["日期"],
+        max_rows=4,
+        continuation_label="测试表",
+    )
+
+    assert text.count("#table(columns:") == 2
+    assert text.count("[日期]") == 2
+    assert text.count("#pagebreak()") == 1
+    assert text.count("#block(breakable: false)[\n#table") == 2
+    assert "[测试表（续）]" in text
+
+
+def test_render_typst_starts_long_tables_on_fresh_pages() -> None:
+    text = render_typst(_base_data())
+
+    assert "#pagebreak()\n#block-title[本周主题总览]" in text
+    assert "#pagebreak()\n#block-title[补充阅读清单]" in text
+
+
+def test_build_data_counts_reviewed_weekly_practice_questions_for_cover() -> None:
+    payloads = []
+    for day in range(21, 27):
+        date = f"2026-09-{day:02d}"
+        payloads.append(
+            {
+                "delivery_date": date,
+                "brief": {
+                    "date": date,
+                    "featured_article": {"title": f"精读文章 {day}"},
+                    "daily_question": {"question": f"每日题目 {day}"},
+                },
+            }
+        )
+    enrichment = {
+        "exam_map_cards": [],
+        "selected_expression_rows": [],
+        "material_cards": [],
+        "practice_questions": [
+            {"question_type": "面试综合分析题", "question": "题目一"},
+            {"question_type": "对策建议题", "question": "题目二"},
+            {"question_type": "申论作文分论点展开题", "question": "题目三"},
+        ],
+        "warnings": [],
+    }
+
+    data = build_data(
+        payloads,
+        "2026-09-21",
+        "2026-09-26",
+        [],
+        enrichment_override=enrichment,
+    )
+
+    assert data["stats"]["featured_count"] == 6
+    assert data["stats"]["questions_count"] == 3
+
+
+def test_cover_training_mainline_comes_from_current_week_practice() -> None:
+    data = _base_data()
+    data["stats"]["questions_count"] = 3
+    data["practice_questions"] = [
+        {
+            "question_type": "面试综合分析题",
+            "question": "题目一",
+            "target_topics": ["城市治理"],
+        },
+        {
+            "question_type": "对策建议题",
+            "question": "题目二",
+            "target_topics": ["网络内容治理"],
+        },
+        {
+            "question_type": "申论作文分论点展开题",
+            "question": "题目三",
+            "target_topics": ["高质量发展"],
+        },
+    ]
+
+    mainline = _cover_training_mainline(data)
+    text = render_typst(data)
+
+    assert mainline == (
+        "围绕“城市治理、网络内容治理、高质量发展”等本周主题，共设置 3 道训练，"
+        "覆盖面试综合分析题、对策建议题、申论作文分论点展开题，重点练习把材料转化为考场表达。"
+    )
+    assert mainline in text
+    assert "技术治理、执法规范、专业纠纷、生态边界" not in text
+    assert "再做本周 3 道考场迁移训练" in text
+
+
 
 def test_render_typst_shows_at_most_three_material_cards() -> None:
     data = _base_data()
@@ -153,3 +320,30 @@ def test_render_preview_typst_keeps_frontend_copy_clean() -> None:
     assert "内部测试" not in text
     assert "quality gate" not in text.lower()
     assert "candidate" not in text.lower()
+    assert "思考方向" not in text
+    assert "先摸清诉求，再公开反馈。" not in text
+
+
+def test_preview_practice_whitelist_excludes_answer_fields() -> None:
+    data = _base_data()
+    data["practice_questions"] = [
+        {
+            "title": "招聘背调边界题",
+            "question": "请谈谈招聘背调应如何划清边界。",
+            "target_topics": ["信息核验边界"],
+            "answer_hint": "先肯定合理核验价值，再从调查范围、决定说明和异议更正展开。",
+            "mini_reference_answer": "这是一份不应出现在 Lite 中的完整答案。",
+        }
+    ]
+
+    preview = build_preview_data_from_full_data(data)
+    text = render_preview_typst(preview)
+
+    assert preview["practice_preview"] == {
+        "title": "招聘背调边界题",
+        "question": "请谈谈招聘背调应如何划清边界。",
+    }
+    assert "请谈谈招聘背调应如何划清边界。" in text
+    assert "先肯定合理核验价值" not in text
+    assert "这是一份不应出现在 Lite 中的完整答案" not in text
+    assert "思考方向" not in text
