@@ -1,5 +1,13 @@
 # Harness Change Log
 
+## 2026-10-03 - Support bound Skill audits without a second model request
+
+- Add explicit `--skill-review` validation and `content_review_mode="skill"`; this path validates a completed Skill audit without calling Qwen or falling back to an API on failure.
+- Require actual dimension/section judgments and binding to verified evidence, the current public brief and Full/plain/Lite renderer outputs. Missing, stale, incomplete or mock audits block; existing score thresholds and all deterministic modules remain active.
+- Keep API auditing as the default for existing autonomous generation/send callers. Publisher, OSS, SMTP and subscriptions are unchanged.
+- Preserve Skill audit evidence inside the content-quality result; do not use fixed PASS values or overwrite API failures. See `docs/skill_content_audit.md`.
+- Validation: offline tests cover zero API calls, missing/stale audits, date/score mismatches, Lite failures, low safety scores and unchanged default API selection. No production candidate is published during tests.
+
 ## 2026-10-02 - Add deployable Hong Kong FC practice coach
 
 Reason:

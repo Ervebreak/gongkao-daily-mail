@@ -455,6 +455,8 @@ def evaluate_all_quality(
     selection_quality: dict[str, Any] | None = None,
     cleanliness_quality: dict[str, Any] | None = None,
     latest_json: dict[str, Any] | None = None,
+    content_review_mode: str = "api",
+    skill_review: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     from brief_quality import evaluate_brief_cleanliness
     from content_quality_reviewer import evaluate_content_quality
@@ -479,7 +481,14 @@ def evaluate_all_quality(
         cleanliness_quality = {}
     lite_payload = latest_json if isinstance(latest_json, dict) else {"brief": brief}
     lite_rendered = render_lite_email(lite_payload)
-    content_quality = evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation)
+    if content_review_mode == "skill":
+        from skill_content_review import evaluate_skill_content_review
+
+        content_quality = evaluate_skill_content_review(brief, plain_text, html_body, skill_review)
+    elif content_review_mode == "api":
+        content_quality = evaluate_content_quality(brief, plain_text, html_body, test_mode=test_invocation)
+    else:
+        raise ValueError("Unknown content review mode")
     fact_consistency = build_fact_review(brief, semantic_review=content_quality)
     brief["_fact_review"] = fact_consistency
     return {

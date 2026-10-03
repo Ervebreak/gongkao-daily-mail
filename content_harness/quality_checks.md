@@ -1,5 +1,7 @@
 # 公考晨读邮件质量检查清单 Quality Checks
 
+技能生产链路可显式使用已完成、绑定最终证据和 Full/Lite 的技能审稿记录，运行 `scripts/validate_daily_brief.py --skill-review ...`，不再额外调用模型 API。记录必须包含真实逐项审核和评分依据，缺失、过期或内容仍有问题继续阻断。全部程序门禁仍执行；默认 API 审稿流程不变。具体合同见 `../docs/skill_content_audit.md`。
+
 ## 1. 文件定位
 
 本文件用于定义“公考晨读邮件”项目的质量检查标准。  
