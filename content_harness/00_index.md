@@ -1,5 +1,7 @@
 # Content Harness Index
 
+技能生成审核的无额外模型调用合同：`../docs/skill_content_audit.md`。显式技能审稿模式保留全部确定性门禁和失败阻断，不使用 mock 或覆盖失败结果。
+
 本文件串联 `content_harness/` 下的产品、规则、技能、工作流和评估文档。AI Coding 工具修改项目前，应先读根目录 `CHANGELOG_HARNESS.md`，再读根目录 `AGENTS.md`，最后按本索引读取对应文档。
 
 ## 1. 总览顺序

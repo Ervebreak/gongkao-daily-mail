@@ -358,3 +358,7 @@ API 返回值会经过固定结构校验后才保存并扣减次数；超时、�
 程序流程是：抓取人民日报/新华社候选文章 -> 规则筛选 -> 调用百炼兼容接口生成 JSON -> 校验 JSON -> 渲染 HTML 邮件 -> SMTP 发送。
 
 大模型只生成 JSON，不直接生成 HTML，避免邮件样式失控。
+
+## 技能审核无需重复调用 Qwen
+
+已在对话技能中完成真实审核的候选件，可使用绑定最终证据和成品的技能审稿记录执行统一校验：`python scripts/validate_daily_brief.py --input candidate.json --skill-review skill_content_review.json --output repo_gate_report.json`。记录无效仍阻断，全部程序门禁保留；默认程序 API 审稿不变。详见 [技能审稿合同](docs/skill_content_audit.md)。
