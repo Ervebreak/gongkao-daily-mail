@@ -32,7 +32,7 @@ function Assert-Entry {
         [string[]]$Names
     )
     foreach ($name in $Names) {
-        if ($ZipArchive.GetEntry($name) -or $ZipArchive.GetEntry($name.Replace("/", "\"))) {
+        if ($ZipArchive.GetEntry($name)) {
             return
         }
     }
@@ -65,9 +65,15 @@ python -m pip install `
     --abi "cp$PythonVersion" `
     --only-binary=:all: `
     --upgrade
+if ($LASTEXITCODE -ne 0) {
+    throw "Dependency installation failed; refusing to create a deployment ZIP."
+}
 
 python -m py_compile (Get-ChildItem -LiteralPath $BuildDir -File -Filter "*.py" | ForEach-Object { $_.FullName }) `
     (Get-ChildItem -LiteralPath (Join-Path $BuildDir "scripts") -File -Filter "*.py" | ForEach-Object { $_.FullName })
+if ($LASTEXITCODE -ne 0) {
+    throw "Python compilation failed; refusing to create a deployment ZIP."
+}
 
 Get-ChildItem -LiteralPath $BuildDir -Recurse -Directory |
     Where-Object { $_.Name -in @("__pycache__", ".pytest_cache") } |
@@ -83,14 +89,11 @@ Get-ChildItem -LiteralPath $BuildDir -Recurse -File |
     } |
     Remove-Item -Force
 
-Remove-IfExists $OutputZip
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-[System.IO.Compression.ZipFile]::CreateFromDirectory(
-    $BuildDir,
-    $OutputZip,
-    [System.IO.Compression.CompressionLevel]::Optimal,
-    $false
-)
+python (Join-Path $scriptDir "package_fc_zip.py") $BuildDir $OutputZip
+if ($LASTEXITCODE -ne 0) {
+    throw "Linux FC ZIP construction or validation failed."
+}
 
 $zip = [System.IO.Compression.ZipFile]::OpenRead($OutputZip)
 try {
@@ -102,13 +105,15 @@ try {
     Assert-Entry $zip @("practice_demo.py")
     Assert-Entry $zip @("practice_links.py")
     Assert-Entry $zip @("practice_store.py")
-    Assert-Entry $zip @("scripts/build_weekly_package.py", "scripts\build_weekly_package.py")
+    Assert-Entry $zip @("scripts/__init__.py")
+    Assert-Entry $zip @("weekly_typst_export.py")
+    Assert-Entry $zip @("scripts/build_weekly_package.py")
     Assert-Entry $zip @("requirements.txt")
     Assert-Entry $zip @("question_bank.py")
-    Assert-Entry $zip @("scripts/validate_daily_brief.py", "scripts\validate_daily_brief.py")
-    Assert-Entry $zip @("data/question_bank/shenlun_question_bank_v3_a.csv", "data\question_bank\shenlun_question_bank_v3_a.csv")
-    Assert-Entry $zip @("knowledge_base/policy_corpus/policy_statements_core.jsonl", "knowledge_base\policy_corpus\policy_statements_core.jsonl")
-    Assert-Entry $zip @("knowledge_base/topic_knowledge/article_index.jsonl", "knowledge_base\topic_knowledge\article_index.jsonl")
+    Assert-Entry $zip @("scripts/validate_daily_brief.py")
+    Assert-Entry $zip @("data/question_bank/shenlun_question_bank_v3_a.csv")
+    Assert-Entry $zip @("knowledge_base/policy_corpus/policy_statements_core.jsonl")
+    Assert-Entry $zip @("knowledge_base/topic_knowledge/article_index.jsonl")
 
     $pydCount = ($zip.Entries | Where-Object { $_.FullName -like "*.pyd" }).Count
     $pycacheCount = ($zip.Entries | Where-Object { $_.FullName -like "*__pycache__*" -or $_.FullName -like "*.pyc" }).Count

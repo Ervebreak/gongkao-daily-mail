@@ -1,5 +1,13 @@
 # Harness Change Log
 
+## 2026-10-11 - Reject Linux-incompatible FC deployment packages
+
+- Fix Windows ZIP construction: archive names always use POSIX `/` separators, and required-entry checks no longer accept Windows backslash aliases. This prevents `ModuleNotFoundError: No module named 'scripts'` after Linux FC extraction.
+- Share ZIP construction/validation across Windows and Linux. Require weekly renderer/exporter/package modules, core dependencies, question-bank and knowledge-base assets; reject caches, Windows native extensions and nested ZIPs. Publish the ZIP only after integrity and contents checks pass.
+- Stop Windows packaging after pip, compilation or ZIP failures. Linux also targets CPython 3.10 manylinux2014 x86_64 explicitly and includes the previously omitted `knowledge_base` assets.
+- Run package extraction/import regressions and existing weekly renderer/content regressions before GitHub Actions uploads artifacts. Clarify that the downloaded Actions wrapper must be unpacked and only its inner `function.zip` deployed.
+- Typst provisioning, rendering content, quality gates, production sending and OSS behavior remain unchanged. Local regression tests validate imports and offline contracts; cloud rendering requires deployment verification.
+
 ## 2026-10-03 - Support bound Skill audits without a second model request
 
 - Add explicit `--skill-review` validation and `content_review_mode="skill"`; this path validates a completed Skill audit without calling Qwen or falling back to an API on failure.
