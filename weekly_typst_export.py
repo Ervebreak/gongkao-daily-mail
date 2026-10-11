@@ -591,9 +591,7 @@ def _render_table_chunks(
 )
 ]"""
         )
-    # A hard page boundary between bounded chunks makes pagination independent
-    # of the FC font metrics and guarantees that every continuation has a
-    # visible table header.
+    # Keep each bounded chunk on an independent page with repeated headers.
     return "\n#pagebreak()\n".join(tables)
 
 
@@ -619,8 +617,13 @@ def render_typst(data: dict[str, Any]) -> str:
         overview_row_items,
         columns="(0.9fr, 1.7fr, 2.4fr, 2fr)",
         headers=["日期", "主题", "精读文章", "训练方向"],
-        max_rows=6,
+        # A six-row table is too tall to share the page with the section title
+        # and review hint under FC's bundled fonts. Split it into balanced 3+3
+        # chunks so the opening page always contains actual overview rows.
+        max_rows=3,
         continuation_label="本周主题总览",
+        # Give each group a full page budget; longer weekly focus text must
+        # not push the second group or a following card grid outside the page.
     )
     if data.get("exam_map_cards"):
         map_cards = "][\n".join(
@@ -637,15 +640,22 @@ def render_typst(data: dict[str, Any]) -> str:
         featured = day["featured"]
         question = day["question"]
         takeaway = day["takeaway"]
-        step_blocks = "\n".join(
+        step_rows = [
             f'#step-item("{idx:02d}")[{typst_text(step["label"])}][{typst_text(step["content"])}]'
             for idx, step in enumerate(day["steps"][:6], start=1)
-        )
+        ]
+        opening_step = step_rows[0] if step_rows else "#muted[暂无框架步骤]"
+        remaining_steps = "\n".join(step_rows[1:])
         answer_framework = t_list(question["answer_framework"], 6)
+        # The daily chapter is a compressed review; the full expression bank
+        # already preserves the week's complete selection. Keep one representative
+        # expression here so the final daily takeaway does not become a third
+        # full expression card and orphan itself on a new page.
         golden_blocks = "\n".join(
             f'#quote-card[{typst_text(item["sentence"])}][{typst_text(item["scenario"])}]'
-            for item in takeaway["golden_sentences"][:2]
+            for item in takeaway["golden_sentences"][:1]
         )
+        fallback_expression = featured["rewritable_expression"] if not golden_blocks else ""
         daily_sections.append(
             f"""
 #day-title("DAY {day["day_no"]:02d}", "{typst_text(day["short_date"])}｜{typst_text(day["weekday"])}｜{typst_text(day["theme"])}", "{typst_text(day["focus"])}")
@@ -660,11 +670,14 @@ def render_typst(data: dict[str, Any]) -> str:
 ]
 
 #framework-box[
-  #text(weight: "bold", fill: brand)[文章框架图]
-  #v(3pt)
-  #muted[文章类型：{typst_text(featured["article_type"])}｜主线：{typst_text(featured["main_thread"])}]
-  #v(4pt)
-  {step_blocks if step_blocks else '#muted[暂无框架步骤]'}
+  #block(breakable: false)[
+    #text(weight: "bold", fill: brand)[文章框架图]
+    #v(3pt)
+    #muted[文章类型：{typst_text(featured["article_type"])}｜主线：{typst_text(featured["main_thread"])}]
+    #v(4pt)
+    {opening_step}
+  ]
+  {remaining_steps}
   #v(4pt)
   {t_badges(day["tags"], 8)}
 ]
@@ -681,8 +694,8 @@ def render_typst(data: dict[str, Any]) -> str:
 #block-title[C. 1-2 句可背表达]
 #takeaway-card[
   {golden_blocks if golden_blocks else '#muted[暂无金句]'}
-  #if "{typst_text(featured["rewritable_expression"])}" != "" [
-    #info-strip[可改写表达][{typst_text(featured["rewritable_expression"])}]
+  #if "{typst_text(fallback_expression)}" != "" [
+    #info-strip[可改写表达][{typst_text(fallback_expression)}]
   ]
 ]
 """
@@ -837,7 +850,9 @@ def render_typst(data: dict[str, Any]) -> str:
             f'[{typst_text(suggested_case_materials)}][{typst_text(suggested_policy_expressions)}]'
             f'[{typst_text(answer_hint)}][{typst_text(mini_reference_answer)}][{typst_text(use_boundary)}]'
         )
-    practice_questions = "\n#v(7pt)\n".join(practice_parts)
+    # Each reviewed exercise owns a fresh page budget, so a following question
+    # cannot start in the previous exercise's tail and strand its answer.
+    practice_questions = "\n#pagebreak()\n".join(practice_parts)
 
     overview_exam_points = "\n".join(
         f'- {typst_text(card.get("title"))}：{typst_text(card.get("summary") or card.get("body") or card.get("description"))}'
@@ -920,7 +935,7 @@ def render_typst(data: dict[str, Any]) -> str:
 #let panel(title, body) = block(fill: print-panel, stroke: 0.55pt + line, inset: 12pt, radius: 8pt, width: 100%, breakable: true)[#text(weight: "bold", fill: brand)[#title]#v(7pt)#body]
 #let mini-panel(title, body) = box(fill: rgb("#f8fafc"), stroke: 0.55pt + line, inset: 11pt, radius: 7.5pt, width: 100%)[#text(weight: "bold", fill: brand)[#title]#v(6pt)#body]
 #let article-card(body) = block(fill: white, stroke: 0.6pt + line, inset: 13pt, radius: 9pt, width: 100%, breakable: false)[#body]
-#let framework-box(body) = block(fill: white, stroke: 0.6pt + line, inset: 13pt, radius: 9pt, width: 100%, breakable: false)[#body]
+#let framework-box(body) = block(fill: white, stroke: 0.6pt + line, inset: 13pt, radius: 9pt, width: 100%, breakable: true)[#body]
 #let question-card(body) = block(fill: rgb("#fbfcff"), stroke: 0.6pt + line, inset: 13pt, radius: 9pt, width: 100%, breakable: true)[#body]
 #let takeaway-card(body) = block(fill: white, stroke: 0.6pt + line, inset: 13pt, radius: 9pt, width: 100%, breakable: false)[#body]
 #let reference-answer-card(body) = block(fill: white, stroke: (left: 3pt + brand, rest: 0.55pt + line), inset: 11pt, radius: 6.5pt, width: 100%, breakable: true)[#text(weight: "bold", fill: brand)[考生版参考答案]#v(6pt)#body]
@@ -1067,7 +1082,9 @@ def render_typst(data: dict[str, Any]) -> str:
 
 
 def render_preview_typst(data: dict[str, Any]) -> str:
-    focus_rows = "\n".join(f"- {typst_text(item)}" for item in data.get("focus_points") or [])
+    focus_points = [clean(item) for item in data.get("focus_points") or [] if clean(item)]
+    focus_title = f"本周 {len(focus_points)} 个高频考点方向" if focus_points else "本周高频考点方向"
+    focus_rows = "\n".join(f"- {typst_text(item)}" for item in focus_points)
     if not focus_rows:
         focus_rows = "- 本周重点以精读文章主线、题干拆解和可迁移表达为主，先建立复盘框架。"
     module_rows = "\n".join(f"- {typst_text(item)}" for item in data.get("full_modules") or PREVIEW_FULL_MODULES)
@@ -1119,7 +1136,7 @@ def render_preview_typst(data: dict[str, Any]) -> str:
 #section[本周主题速览][{typst_text(data.get("theme_overview") or "")}]
 
 #v(10pt)
-#section[本周 3 个高频考点方向][{focus_rows}]
+#section[{focus_title}][{focus_rows}]
 
 #v(10pt)
 #section[完整版 PDF 目录预览][
@@ -1214,3 +1231,4 @@ def build_typst_weekly_preview_pdf(
         "template": "weekly_preview_v1",
         "warnings": [],
     }
+

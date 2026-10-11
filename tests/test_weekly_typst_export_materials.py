@@ -36,6 +36,41 @@ def _base_data() -> dict:
     }
 
 
+def _sample_day(day_no: int) -> dict:
+    return {
+        "day_no": day_no,
+        "date": f"2026-06-{8 + day_no:02d}",
+        "short_date": f"06.{8 + day_no:02d}",
+        "weekday": f"周{day_no}",
+        "theme": f"主题 {day_no}",
+        "focus": f"本日重点 {day_no}",
+        "featured": {
+            "title": f"精读文章 {day_no}",
+            "source": "人民日报",
+            "published_at": f"2026-06-{8 + day_no:02d}",
+            "url": "https://example.com/article",
+            "theme": "公共服务",
+            "one_sentence": "以精细治理提升公共服务质效。",
+            "rewritable_expression": "",
+            "article_type": "评论",
+            "main_thread": "发现问题—分析原因—提出对策",
+        },
+        "question": {
+            "question_type": "综合分析题",
+            "question": "请谈谈你的理解。",
+            "answer_framework": [],
+        },
+        "takeaway": {"golden_sentences": [], "framework": ""},
+        "steps": [
+            {"label": "提出问题", "content": "明确治理堵点。"},
+            {"label": "分析原因", "content": "梳理问题成因。"},
+            {"label": "提出对策", "content": "形成闭环方案。"},
+        ],
+        "tags": ["基层治理"],
+        "quick_reads": [],
+    }
+
+
 def test_render_typst_hides_material_section_when_no_cards() -> None:
     text = render_typst(_base_data())
 
@@ -184,6 +219,81 @@ def test_render_typst_starts_long_tables_on_fresh_pages() -> None:
     assert "#pagebreak()\n#block-title[补充阅读清单]" in text
 
 
+def test_render_typst_balances_six_day_overview_without_blank_opening_page() -> None:
+    data = _base_data()
+    data["days"] = [_sample_day(day_no) for day_no in range(1, 7)]
+
+    text = render_typst(data)
+    section = text.split("#block-title[本周主题总览]", 1)[1].split(
+        "#block-title[02｜本周高频考点地图]", 1
+    )[0]
+
+    assert section.count("#table(columns: (0.9fr, 1.7fr, 2.4fr, 2fr)") == 2
+    assert "[本周主题总览（续）]" in section
+    assert section.count("#pagebreak()") == 2
+    assert section.rstrip().endswith("#pagebreak()")
+    assert "#pagebreak()\n#text(size: 12pt, weight: \"bold\", fill: brand)[本周主题总览（续）]" in section
+
+
+def test_daily_framework_can_split_after_atomic_title_and_first_step() -> None:
+    data = _base_data()
+    data["days"] = [_sample_day(1)]
+
+    text = render_typst(data)
+
+    assert '#let framework-box(body) = block(fill: white, stroke: 0.6pt + line, inset: 13pt, radius: 9pt, width: 100%, breakable: true)' in text
+    opening = '#framework-box[\n  #block(breakable: false)[\n    #text(weight: "bold", fill: brand)[文章框架图]'
+    assert opening in text
+    assert text.index(opening) < text.index('#step-item("01")[提出问题][明确治理堵点。]')
+    assert text.index('#step-item("01")[提出问题][明确治理堵点。]') < text.index(
+        '#step-item("02")[分析原因][梳理问题成因。]'
+    )
+
+
+def test_weekly_exercises_each_start_on_a_fresh_page() -> None:
+    data = _base_data()
+    data["practice_questions"] = [
+        {"title": f"训练题 {i}", "question": f"题干 {i}", "mini_reference_answer": f"参考答案 {i}"}
+        for i in range(1, 4)
+    ]
+    text = render_typst(data)
+    section = text.split("｜本周 3 道考场迁移训练\n", 1)[1].split(
+        "｜每日内容压缩回看\n", 1
+    )[0]
+    assert section.count("#practice-card[") == 3
+    assert "[参考答案 1][]\n#pagebreak()\n#practice-card[训练题 2]" in section
+    assert "[参考答案 2][]\n#pagebreak()\n#practice-card[训练题 3]" in section
+    assert "参考答案 3" in section
+
+
+def test_daily_review_keeps_one_representative_expression_without_third_card() -> None:
+    data = _base_data()
+    day = _sample_day(1)
+    day["takeaway"]["golden_sentences"] = [
+        {"sentence": "第一条代表性表达。", "scenario": "基层治理"},
+        {"sentence": "第二条仍保留在完整表达库。", "scenario": "公共服务"},
+    ]
+    day["featured"]["rewritable_expression"] = "第三条可改写表达。"
+    data["days"] = [day]
+
+    text = render_typst(data)
+
+    assert "第一条代表性表达。" in text
+    assert "第二条仍保留在完整表达库。" not in text
+    assert "第三条可改写表达。" not in text
+
+
+def test_daily_review_uses_rewritable_expression_when_no_golden_sentence() -> None:
+    data = _base_data()
+    day = _sample_day(1)
+    day["featured"]["rewritable_expression"] = "可改写表达作为回看兜底。"
+    data["days"] = [day]
+
+    text = render_typst(data)
+
+    assert "可改写表达作为回看兜底。" in text
+
+
 def test_build_data_counts_reviewed_weekly_practice_questions_for_cover() -> None:
     payloads = []
     for day in range(21, 27):
@@ -324,6 +434,17 @@ def test_render_preview_typst_keeps_frontend_copy_clean() -> None:
     assert "先摸清诉求，再公开反馈。" not in text
 
 
+def test_preview_focus_title_counts_only_nonempty_points() -> None:
+    text = render_preview_typst({"focus_points": ["方向甲", "", "  ", "方向乙"]})
+    assert "本周 2 个高频考点方向" in text
+    assert "本周 3 个高频考点方向" not in text
+    assert "方向甲" in text and "方向乙" in text
+
+    empty_text = render_preview_typst({"focus_points": []})
+    assert "#section[本周高频考点方向]" in empty_text
+    assert "本周 0 个高频考点方向" not in empty_text
+
+
 def test_preview_practice_whitelist_excludes_answer_fields() -> None:
     data = _base_data()
     data["practice_questions"] = [
@@ -347,3 +468,4 @@ def test_preview_practice_whitelist_excludes_answer_fields() -> None:
     assert "先肯定合理核验价值" not in text
     assert "这是一份不应出现在 Lite 中的完整答案" not in text
     assert "思考方向" not in text
+

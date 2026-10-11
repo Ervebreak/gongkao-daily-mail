@@ -8,6 +8,30 @@
 - Timestamped backups remain recovery snapshots created for actual subscriber updates (referral backfill, reminder state, trial expiry); existing backups are not deleted.
 - Regression coverage includes GBK/UTF-8/UTF-16, wrong HTTP charset, ten repeated round trips, UID/Chinese preservation, byte-exact backup, unchanged-write suppression, and damaged-data blocking. The older reminder test now accepts the existing referral columns.
 
+## 2026-10-11 - Restore weekly PDF pagination and isolate exercise pages
+
+- Split the six-day theme overview into two three-row tables, each with an independent page budget and repeated headers. Prevent a six-row unbreakable table from stranding its heading and overflowing the footer.
+- Allow daily framework cards to continue across pages while keeping the title, source metadata and first step together. Keep one representative expression in compressed daily review; the full expression bank remains available earlier in the PDF.
+- Start each weekly transfer exercise on a fresh page so the third exercise does not start at the previous exercise's tail and strand its answer. Derive the Lite focus-direction title from the actual nonempty item count.
+- Validate table grouping, framework flow, exercise boundaries and Lite counts with renderer regressions. Reuse the October 4–10 six-day JSON and existing enrichment for a local diagnostic render; inspect all 23 full pages and both preview pages. Local Typst/font diagnostics do not replace FC deployment rendering or final PDF visual QA.
+- Keep the FC request contract, content gates, deployment packager, factual content, production mail and OSS behavior unchanged.
+
+## 2026-10-11 - Reject Linux-incompatible FC deployment packages
+
+- Fix Windows ZIP construction: archive names always use POSIX `/` separators, and required-entry checks no longer accept Windows backslash aliases. This prevents `ModuleNotFoundError: No module named 'scripts'` after Linux FC extraction.
+- Share ZIP construction/validation across Windows and Linux. Require weekly renderer/exporter/package modules, core dependencies, question-bank and knowledge-base assets; reject caches, Windows native extensions and nested ZIPs. Publish the ZIP only after integrity and contents checks pass.
+- Stop Windows packaging after pip, compilation or ZIP failures. Linux also targets CPython 3.10 manylinux2014 x86_64 explicitly and includes the previously omitted `knowledge_base` assets.
+- Run package extraction/import regressions and existing weekly renderer/content regressions before GitHub Actions uploads artifacts. Clarify that the downloaded Actions wrapper must be unpacked and only its inner `function.zip` deployed.
+- Typst provisioning, rendering content, quality gates, production sending and OSS behavior remain unchanged. Local regression tests validate imports and offline contracts; cloud rendering requires deployment verification.
+
+## 2026-10-03 - Support bound Skill audits without a second model request
+
+- Add explicit `--skill-review` validation and `content_review_mode="skill"`; this path validates a completed Skill audit without calling Qwen or falling back to an API on failure.
+- Require actual dimension/section judgments and binding to verified evidence, the current public brief and Full/plain/Lite renderer outputs. Missing, stale, incomplete or mock audits block; existing score thresholds and all deterministic modules remain active.
+- Keep API auditing as the default for existing autonomous generation/send callers. Publisher, OSS, SMTP and subscriptions are unchanged.
+- Preserve Skill audit evidence inside the content-quality result; do not use fixed PASS values or overwrite API failures. See `docs/skill_content_audit.md`.
+- Validation: offline tests cover zero API calls, missing/stale audits, date/score mismatches, Lite failures, low safety scores and unchanged default API selection. No production candidate is published during tests.
+
 ## 2026-10-02 - Add deployable Hong Kong FC practice coach
 
 Reason:

@@ -1,4 +1,80 @@
-# 公考晨读邮件程序
+# 公考晨读邮件
+
+把值得读的权威文章，整理成公考、考编能用的素材、答题思路和表达练习，每天通过邮件送达。
+
+## 这个项目做什么
+
+公考晨读邮件面向需要持续积累申论、面试和公基素材的备考者。每期从权威媒体文章中选出有具体问题与可迁移方法的内容，提炼文章主线、考点、案例、可用表达和一道短练习，帮助读者在约 5—8 分钟内完成一次有效晨读。
+
+## 为什么做
+
+备考者每天需要筛选文章、理解其中的问题和解决方法，还要把内容转成能写进申论或说进面试的材料。这个项目把这些步骤整理成一份可以持续阅读和练习的邮件。
+
+## 一封邮件里有什么
+
+一封邮件重点包含：
+
+- **文章框架图**：看清文章如何展开，提取可迁移的分析角度。
+- **今日一题**：结合当天文章生成独立可答的申论或面试式练习；真题库只提供设问方式参考。
+- **今日可带走**：留下关键词、常识点、可用表达和方法框架。
+- **原文入口与速读**：方便按需深读，并补充相关案例或考点。
+
+项目还支持周度 PDF 汇编和带签名链接的 30 秒申论表达训练；具体功能是否向订阅者开放，取决于部署配置。
+
+## 做法与特点
+
+`来源核验 → 选文 → 公考化拆解 → 内容生成 → 事实与表达质检 → 候选保存 → 定时发送`
+
+- **材料有出处**：保留原文标题、来源和链接，核对正文与关键事实后再生成内容。
+- **练习有针对性**：从文章中的问题和矛盾设计题目，参考真题的提问角度，不照搬整道真题。
+- **质量有门槛**：检查结构、事实、题目、表达和跨模块重复；未通过关键门禁的候选件不会发送。
+- **交付可复核**：夜间生成并审核候选件，早晨读取已审核成品发送，保留归档与质量记录。
+
+## 怎样选文章、生成训练题
+
+**先选文章，再参考真题问法。**选文阶段核对原文来源与正文，重点看文章是否有可转成考题的具体问题、场景、矛盾和作答空间；还会考虑素材提炼价值、来源与时效。评分规则公开在[选文标准](content_harness/article_selection_prompt.md)。此时不会用真题相似度给文章排序。
+
+主文章确定后，程序才从公开的[申论真题结构化题库](data/question_bank/shenlun_question_bank_v3_a.csv)中，按文章主题、场景词和题型轻量匹配问法参考。当前仓库收录的是申论题记录，并非原卷 PDF 或完整面试真题库；面试题型另有[方法总结](knowledge/exam_patterns/interview_patterns.md)。题库只帮助确定题型、设问角度和矛盾设置，不充当新闻事实来源，也不直接复制原题。
+
+最后，把当天文章的核心矛盾转成有**身份、场景、矛盾、任务**的独立题目，确保不看原始申论材料也能作答；再给出审题关键、作答框架、考生版表达和一项 30 秒输出练习。题目与文章的关联、材料依赖、空泛对策和身份权限边界都要接受检查。题库不可用时，会记录原因并回到不依赖题库的生成流程。详细规则见[文章转题方法](knowledge/exam_patterns/article_to_question.md)和[今日一题规则](knowledge/content_insights/daily_question_rules.md)。
+
+## 试读与订阅
+
+项目目前处于公测阶段。想了解邮件样例或订阅方式，可以通过[公考晨读的小红书主页](https://www.xiaohongshu.com/user/profile/69eca3fc000000000103d800)在站内联系维护者。
+
+GitHub Star 是对代码项目的支持，**不会自动订阅邮件**。本仓库也没有面向公众开放的自助订阅 API。
+
+## 自行部署与调用
+
+下面的入口面向自行部署项目的开发者；密钥、邮箱授权码和真实订阅者数据只应配置在自己的运行环境中。
+
+1. 准备 Python 3.10、阿里云函数计算、模型 API Key 和邮件 SMTP 配置；跨实例保存候选件与历史记录时配置 OSS。
+2. 参考 [`.env.example`](.env.example) 在函数计算控制台设置环境变量。先用 `RUN_MODE=test`、`TEST_LLM_MODEL=mock`、`SEND_EMAIL=false` 验证，不发送正式邮件。
+3. Windows 可运行 `powershell -ExecutionPolicy Bypass -File .\scripts\build_fc_package.ps1` 生成 `function.zip`；Linux / WSL 可运行 `bash scripts/build_fc_package.sh`。
+4. 将部署包上传到阿里云函数计算，日常函数入口设为 `main.handler`。完整检查与部署步骤见 [部署说明](docs/deploy_aliyun_fc.md)。
+
+日常邮件使用函数计算**事件调用**。部署后，可在 FC 控制台用“测试函数”提交以下事件，并据此配置定时触发器：
+
+```json
+{"mode":"nightly_candidate"}
+```
+
+```json
+{"mode":"morning_send"}
+```
+
+夜间事件生成并审核次日候选件；早晨事件只发送已通过门禁的当天候选件。生产环境定时触发前，请先按部署说明完成测试收件人和发送开关的检查。
+
+其他入口按用途独立部署：
+
+| 入口 | 调用方式 | 用途 |
+| --- | --- | --- |
+| `fc_weekly_render.handler` | 自行部署后，带 Bearer Token 调用 `POST /weekly-render` | 用 6 份已生成的每日数据离线渲染周 PDF；请求示例见下文 |
+| `render_practice:app` | 订阅邮件中的专属签名链接 | 30 秒申论表达训练网页；部署见 [训练服务说明](docs/deploy_aliyun_fc.md) |
+
+模型 API 由服务端调用；自行部署时在运行环境中配置 `DASHSCOPE_API_KEY` 等参数，订阅邮件的读者无需提供 API Key。本仓库提供代码和调用约定，调用者需使用自己的部署地址与密钥。
+
+## 开发维护说明
 
 AI Coding / Codex / Cursor 接手项目时，请先看 `AGENTS.md`；内容 Harness 文档索引见 `content_harness/00_index.md`。
 
@@ -13,7 +89,7 @@ python scripts\weekly_quality_review.py --metrics output\harness_metrics.jsonl
 
 脚本会输出 `weekly_harness_review_YYYY-WW.md` 和同名 JSON，汇总 P0/P1/P2、模块分布、重写成功率、P0 二次修复成功率、管理员报告和早晨发送成功率，并形成下一周 Harness 升级清单。
 
-这是阿里云函数计算 FC 可部署版本。日常生产入口函数为：
+日常生产入口函数为：
 
 ```text
 main.handler
@@ -90,7 +166,9 @@ Linux / WSL / Git Bash 可执行：
 bash scripts/build_fc_package.sh
 ```
 
-生成 `function.zip` 后上传到阿里云函数计算。详细步骤见 `docs/deploy_aliyun_fc.md`。
+两种脚本都为 FC Python 3.10 Linux x86_64 安装依赖，并通过统一 ZIP 检查：入口、周 PDF 模块、依赖和知识库必须齐全，路径必须使用 `/`，不能包含 Windows `.pyd`、缓存或嵌套 ZIP。安装、编译或检查失败时不能交付部署包。
+
+生成 `function.zip` 后上传到阿里云函数计算。GitHub Actions 下载的 `function-zip.zip` 是产物外层包装，请先解压，上传里面的 `function.zip`；不要将外层包装直接部署，也不要再套一层 ZIP。代码包根目录应直接看到 `fc_weekly_render.py`，`weekly_typst_export.py` 同样放在根目录；`scripts/build_weekly_package.py` 放在 `scripts/`。周 PDF 入口保持 `fc_weekly_render.handler`，Typst 二进制仍须由运行环境或 Layer 提供。详细步骤见 `docs/deploy_aliyun_fc.md`。
 
 ## 必填环境变量
 
@@ -364,3 +442,7 @@ API 返回值会经过固定结构校验后才保存并扣减次数；超时、�
 程序流程是：抓取人民日报/新华社候选文章 -> 规则筛选 -> 调用百炼兼容接口生成 JSON -> 校验 JSON -> 渲染 HTML 邮件 -> SMTP 发送。
 
 大模型只生成 JSON，不直接生成 HTML，避免邮件样式失控。
+
+## 技能审核无需重复调用 Qwen
+
+已在对话技能中完成真实审核的候选件，可使用绑定最终证据和成品的技能审稿记录执行统一校验：`python scripts/validate_daily_brief.py --input candidate.json --skill-review skill_content_review.json --output repo_gate_report.json`。记录无效仍阻断，全部程序门禁保留；默认程序 API 审稿不变。详见 [技能审稿合同](docs/skill_content_audit.md)。

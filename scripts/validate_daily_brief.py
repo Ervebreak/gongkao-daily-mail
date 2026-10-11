@@ -89,13 +89,16 @@ def summarize_report(modules: dict[str, dict[str, Any]], gate: dict[str, Any]) -
     }
 
 
-def build_report(brief: dict[str, Any], plain_text: str | None = None, html_body: str | None = None, today: str | None = None) -> dict[str, Any]:
+def build_report(brief: dict[str, Any], plain_text: str | None = None, html_body: str | None = None, today: str | None = None, *, content_review_mode: str = "api", skill_review: dict[str, Any] | None = None) -> dict[str, Any]:
     today = today or str(brief.get("date") or dt.datetime.now().date())
     brief, schema_warnings = ensure_brief_schema(brief, today)
     if plain_text is None:
         plain_text = render_plain_text(brief)
     if html_body is None:
         html_body = render_email_html(brief)
+    skill_snapshot_mismatch = content_review_mode == "skill" and (
+        plain_text != render_plain_text(brief) or html_body != render_email_html(brief)
+    )
 
     guarded, cleanliness_quality = pre_send_cleanliness_guard(
         {"brief": brief, "subject": str(brief.get("email_subject") or ""), "plain_text": plain_text, "html_body": html_body, "quality": {}}
@@ -112,13 +115,20 @@ def build_report(brief: dict[str, Any], plain_text: str | None = None, html_body
         selection_quality=selection_quality,
         cleanliness_quality=cleanliness_quality,
         latest_json={"brief": brief},
+        content_review_mode=content_review_mode,
+        skill_review=skill_review,
     )
+    if skill_snapshot_mismatch:
+        from skill_content_review import _failure
+
+        raw_results["content_quality"] = _failure("输入候选正文快照与最终 brief 不一致；不得通过自动清洗掩盖过期成品。")
     gate = build_gate_from_quality_map(raw_results, plain_text=plain_text, html_body=html_body)
     gate_p0 = {_issue_key(issue) for issue in (gate.get("p0_issues") or []) if isinstance(issue, dict)}
     modules = {module: normalize_module_result(module, result, gate_p0) for module, result in raw_results.items()}
     summary = summarize_report(modules, gate)
     return {
         "schema_version": 2,
+        "content_review_mode": content_review_mode,
         **summary,
         "schema_warnings": schema_warnings,
         "modules": modules,
@@ -158,6 +168,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", "-o", type=Path, help="Path to write JSON report. Defaults to input directory/latest_quality.json.")
     parser.add_argument("--date", help="Date used when normalizing an incomplete brief. Defaults to brief.date or today.")
     parser.add_argument("--no-exit-code", action="store_true", help="Always exit 0 after writing the report.")
+    parser.add_argument("--skill-review", type=Path, help="Validate a source/artifact-bound Skill audit instead of calling a model API. Missing or invalid audit blocks; never falls back to API.")
     return parser.parse_args()
 
 
@@ -175,7 +186,14 @@ def main() -> int:
     brief, embedded_plain_text, embedded_html_body, embedded_date, input_type = unwrap_input_payload(payload)
     plain_text = args.plain_text.read_text(encoding="utf-8") if args.plain_text else embedded_plain_text
     html_body = args.html.read_text(encoding="utf-8") if args.html else embedded_html_body
-    report = build_report(brief, plain_text=plain_text, html_body=html_body, today=args.date or embedded_date)
+    skill_review = None
+    if args.skill_review is not None:
+        try:
+            skill_review = load_json(args.skill_review)
+        except (OSError, ValueError):
+            skill_review = None
+    report = build_report(brief, plain_text=plain_text, html_body=html_body, today=args.date or embedded_date,
+                          content_review_mode="skill" if args.skill_review is not None else "api", skill_review=skill_review)
     report["input_type"] = input_type
     output = args.output or (args.input.parent / "latest_quality.json")
     write_json(output, report)
