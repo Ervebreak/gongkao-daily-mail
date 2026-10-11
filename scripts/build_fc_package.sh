@@ -7,14 +7,14 @@ ZIP_PATH="$ROOT_DIR/function.zip"
 
 cd "$ROOT_DIR"
 
-rm -rf "$BUILD_DIR" "$ZIP_PATH"
+rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
 # Copy source files and runtime assets.
 # Keep this list explicit so generated outputs, private data, and .git metadata never enter the package.
 find . -maxdepth 1 -type f \( -name "*.py" -o -name "requirements.txt" \) -exec cp {} "$BUILD_DIR" \;
 
-for dir in agent content_harness knowledge scripts examples data; do
+for dir in agent content_harness knowledge knowledge_base scripts examples data; do
   if [ -d "$dir" ]; then
     mkdir -p "$BUILD_DIR/$dir"
     rsync -a \
@@ -31,20 +31,9 @@ for dir in agent content_harness knowledge scripts examples data; do
 done
 
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt -t "$BUILD_DIR"
+python -m pip install -r requirements.txt -t "$BUILD_DIR" \
+  --platform manylinux2014_x86_64 --python-version 310 \
+  --implementation cp --abi cp310 --only-binary=:all: --upgrade
 
-cd "$BUILD_DIR"
-zip -r "$ZIP_PATH" . \
-  -x "*.git*" \
-  -x "__pycache__/*" \
-  -x "*.pyc" \
-  -x "*.log"
-
-cd "$ROOT_DIR"
-for required in main.py fc_practice.py practice_coach.py practice_demo.py practice_links.py practice_store.py requirements.txt; do
-  if ! unzip -Z1 "$ZIP_PATH" | grep -Fxq "$required"; then
-    echo "Package check failed. Missing required entry: $required" >&2
-    exit 1
-  fi
-done
+python "$ROOT_DIR/scripts/package_fc_zip.py" "$BUILD_DIR" "$ZIP_PATH"
 echo "Built package: $ZIP_PATH"

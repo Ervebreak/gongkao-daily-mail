@@ -32,7 +32,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build_fc_package.ps1
 function.zip
 ```
 
-该脚本会安装阿里云 FC Python 3.10 Linux x86_64 兼容依赖，并自动检查入口文件、题库兜底 CSV、Windows `.pyd`、`__pycache__` / `.pyc`。
+Windows 与 Linux 脚本均安装阿里云 FC Python 3.10 Linux x86_64 兼容依赖，并调用 `scripts/package_fc_zip.py` 创建和检查 ZIP。依赖安装、Python 编译或 ZIP 检查失败时必须停止。检查覆盖周 PDF 入口及模块、题库、知识库、bs4/requests/reportlab，拒绝反斜杠路径、Windows `.pyd`、缓存和嵌套 ZIP。
+
+GitHub Actions 的 `function-zip.zip` 是外层产物包装；解压后只部署内部 `function.zip`。部署包根目录必须直接包含 `fc_weekly_render.py` 和 `weekly_typst_export.py`，`scripts/build_weekly_package.py` 位于 `scripts/`，不可再套一层目录或 ZIP。Typst 仍需由运行环境或 Layer 提供。
 
 发布包不得包含：
 

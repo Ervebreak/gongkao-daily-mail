@@ -166,7 +166,9 @@ Linux / WSL / Git Bash 可执行：
 bash scripts/build_fc_package.sh
 ```
 
-生成 `function.zip` 后上传到阿里云函数计算。详细步骤见 `docs/deploy_aliyun_fc.md`。
+两种脚本都为 FC Python 3.10 Linux x86_64 安装依赖，并通过统一 ZIP 检查：入口、周 PDF 模块、依赖和知识库必须齐全，路径必须使用 `/`，不能包含 Windows `.pyd`、缓存或嵌套 ZIP。安装、编译或检查失败时不能交付部署包。
+
+生成 `function.zip` 后上传到阿里云函数计算。GitHub Actions 下载的 `function-zip.zip` 是产物外层包装，请先解压，上传里面的 `function.zip`；不要将外层包装直接部署，也不要再套一层 ZIP。代码包根目录应直接看到 `fc_weekly_render.py`，`weekly_typst_export.py` 同样放在根目录；`scripts/build_weekly_package.py` 放在 `scripts/`。周 PDF 入口保持 `fc_weekly_render.handler`，Typst 二进制仍须由运行环境或 Layer 提供。详细步骤见 `docs/deploy_aliyun_fc.md`。
 
 ## 必填环境变量
 
