@@ -1,5 +1,13 @@
 # Harness Change Log
 
+## 2026-10-11 - Preserve subscriber CSV encoding and original backups
+
+- OSS/local subscriber CSV reads now strictly decode UTF-8, UTF-8 BOM, GB18030, or BOM-marked UTF-16 bytes instead of trusting HTTP charset metadata. Repeated leading BOMs are removed before parsing so UID headers survive repeated round trips.
+- OSS reads with replacement characters or three consecutive question marks stop sending rather than silently falling back to another subscriber list. Damaged text is also blocked before writing.
+- Backups preserve downloaded source bytes exactly. The main table still writes a single UTF-8 BOM for spreadsheet compatibility; identical content skips both backup and main PUT.
+- Timestamped backups remain recovery snapshots created for actual subscriber updates (referral backfill, reminder state, trial expiry); existing backups are not deleted.
+- Regression coverage includes GBK/UTF-8/UTF-16, wrong HTTP charset, ten repeated round trips, UID/Chinese preservation, byte-exact backup, unchanged-write suppression, and damaged-data blocking. The older reminder test now accepts the existing referral columns.
+
 ## 2026-10-11 - Restore weekly PDF pagination and isolate exercise pages
 
 - Split the six-day theme overview into two three-row tables, each with an independent page budget and repeated headers. Prevent a six-row unbreakable table from stranding its heading and overflowing the footer.

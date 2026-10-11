@@ -203,6 +203,12 @@ KNOWLEDGE_OSS_PREFIX=
 
 可选：如果代码根目录存在 `subscribers.csv`，会优先读取其中 `status=active` 的邮箱；如果读取失败或文件不存在，则回退到 `RECIPIENTS`。
 
+订阅 CSV 支持 UTF-8（含 BOM）、GBK/GB18030 和带 BOM 的 UTF-16。OSS 读取直接解码原始字节，不依赖 HTTP 字符集；写回主表统一使用单个 UTF-8 BOM。建议 Excel/WPS 保存时选择“CSV UTF-8”，避免中文或隐藏字符转成问号。
+
+生产主表由 `SUBSCRIBERS_OSS_KEY` 指定（默认 `gongkao-morning-mailer/subscribers.csv`）。`subscribers.backup_日期-时间.csv` 是更新主表前的原始字节备份，不是额外的发送名单；补推荐码、到期提醒或试用状态变化时才需要回写，内容相同则不写入或创建备份。已有备份不会自动删除，可用于恢复历史记录。
+
+如果 OSS 表已有替代字符 `�` 或连续三个以上 `?`，程序停止读取并报错，避免继续覆盖损坏数据。已变成问号的中文需要从健康备份按邮箱恢复；重新选择编码不能还原已经丢失的文字。
+
 `sent_history.json` 默认保存在 `OUTPUT_DIR/sent_history.json`，用于最近 30 天文章去重。阿里云 FC 的本地文件不保证长期稳定，后续如需稳定商业化，应迁移到 OSS 或数据库。
 
 如需让历史去重跨 FC 冷启动稳定生效，把 `HISTORY_STORAGE` 改为 `oss`，并填写 `OSS_ENDPOINT`、`OSS_BUCKET`、`OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`OSS_OBJECT_KEY`。

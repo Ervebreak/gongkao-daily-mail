@@ -244,7 +244,8 @@ def parse_subscribers_csv(csv_text: str) -> list[str]:
 
 
 def parse_subscribers_csv_table(csv_text: str) -> dict[str, Any]:
-    reader = csv.DictReader(io.StringIO(csv_text))
+    # Older OSS round trips accumulated BOM characters in the first header.
+    reader = csv.DictReader(io.StringIO(csv_text.lstrip("\ufeff")))
     source_fieldnames = [str(name or "").strip() for name in (reader.fieldnames or []) if str(name or "").strip()]
     fieldnames = _subscriber_fieldnames(reader.fieldnames)
     if not reader.fieldnames or "email" not in fieldnames:
@@ -314,11 +315,13 @@ def load_subscribers_csv_local_table() -> dict[str, Any] | None:
     if not path.exists():
         return None
     try:
-        raw_text = path.read_text(encoding="utf-8-sig")
+        raw_bytes = path.read_bytes()
+        raw_text = decode_subscribers_csv_bytes(raw_bytes)
         table = parse_subscribers_csv_table(raw_text)
         table["storage"] = "local"
         table["path"] = str(path)
         table["raw_text"] = raw_text
+        table["raw_bytes"] = raw_bytes
         return table
     except Exception:
         return None
@@ -332,6 +335,28 @@ def _subscribers_oss_config(object_key: str | None = None) -> dict[str, str]:
     return cfg
 
 
+def decode_subscribers_csv_bytes(data: bytes) -> str:
+    """Decode CSV bytes strictly, independent of HTTP charset metadata."""
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")):
+        text = data.decode("utf-16", errors="strict")
+    else:
+        try:
+            text = data.decode("utf-8-sig", errors="strict")
+        except UnicodeDecodeError:
+            text = data.decode("gb18030", errors="strict")
+    text = text.lstrip("\ufeff")
+    _validate_subscribers_text(text)
+    return text
+
+
+def _validate_subscribers_text(text: str) -> None:
+    # These markers represent lost characters; never persist them automatically.
+    if "\ufffd" in text or re.search(r"\?{3,}", text):
+        raise ValueError("Subscriber CSV contains damaged text; restore a healthy copy before sending.")
+    if "\x00" in text:
+        raise ValueError("Subscriber CSV contains invalid NUL characters.")
+
+
 def load_subscribers_csv_oss_table() -> dict[str, Any] | None:
     if settings.subscribers_storage != "oss":
         return None
@@ -343,13 +368,18 @@ def load_subscribers_csv_oss_table() -> dict[str, Any] | None:
         if response.status_code == 404:
             return None
         response.raise_for_status()
-        response.encoding = response.encoding or "utf-8"
-        table = parse_subscribers_csv_table(response.text)
+        raw_bytes = response.content
+        raw_text = decode_subscribers_csv_bytes(raw_bytes)
+        table = parse_subscribers_csv_table(raw_text)
         table["storage"] = "oss"
         table["path"] = f"oss://{settings.oss_bucket}/{cfg['object_key']}"
         table["object_key"] = cfg["object_key"]
-        table["raw_text"] = response.text
+        table["raw_text"] = raw_text
+        table["raw_bytes"] = raw_bytes
         return table
+    except (UnicodeError, ValueError) as exc:
+        # Fail closed rather than quietly switching to a different subscriber list.
+        raise ValueError("OSS subscriber CSV is unreadable or damaged; sending stopped.") from exc
     except Exception:
         return None
 
@@ -692,8 +722,22 @@ def backup_and_save_subscribers_table_to_oss(table: dict[str, Any]) -> dict[str,
     records = normalize_recipient_records(table.get("records") or [])
     fieldnames = _subscriber_fieldnames(table.get("fieldnames") or [])
     body_text, body = serialize_subscribers_csv_bytes(records, fieldnames)
+    try:
+        _validate_subscribers_text(body_text)
+    except ValueError as exc:
+        meta["subscribers_error"] = str(exc)
+        return meta
     backup_source_text = str(table.get("raw_text") or body_text)
-    backup_body = backup_source_text.encode("utf-8-sig")
+    if table.get("raw_text") is not None and (
+        backup_source_text.lstrip("\ufeff").replace("\r\n", "\n") == body_text
+    ):
+        meta["subscribers_write_skipped"] = True
+        meta["subscribers_write_skip_reason"] = "no_subscriber_changes"
+        return meta
+    # Preserve exactly what was downloaded, including its original encoding.
+    backup_body = table.get("raw_bytes")
+    if not isinstance(backup_body, bytes):
+        backup_body = backup_source_text.encode("utf-8-sig")
     object_key = str(table.get("object_key") or settings.subscribers_oss_key).strip().lstrip("/")
     backup_key = _subscriber_backup_object_key(object_key)
     source_cfg = _subscribers_oss_config(object_key)
@@ -702,7 +746,7 @@ def backup_and_save_subscribers_table_to_oss(table: dict[str, Any]) -> dict[str,
     meta["subscribers_backup_object_key"] = backup_key
     backup_response = requests.put(
         oss_url(backup_cfg),
-        headers=oss_headers("PUT", backup_cfg, "text/csv; charset=utf-8"),
+        headers=oss_headers("PUT", backup_cfg, "application/octet-stream"),
         data=backup_body,
         timeout=15,
     )
@@ -725,6 +769,7 @@ def backup_and_save_subscribers_table_to_oss(table: dict[str, Any]) -> dict[str,
         meta["subscribers_error"] = str(exc)
         return meta
     table["raw_text"] = body_text
+    table["raw_bytes"] = body
     table["fieldnames"] = fieldnames
     meta["subscribers_write_ok"] = True
     meta["subscribers_record_count"] = len(records)
@@ -1285,8 +1330,8 @@ def send_segmented_email(
             or needs_referral_backfill
         ):
             subscribers_write_meta = backup_and_save_subscribers_table_to_oss(subscribers_table)
-            subscribers_write_meta["subscribers_write_skipped"] = False
-            subscribers_write_meta["subscribers_write_skip_reason"] = ""
+            subscribers_write_meta.setdefault("subscribers_write_skipped", False)
+            subscribers_write_meta.setdefault("subscribers_write_skip_reason", "")
         else:
             subscribers_write_meta["subscribers_write_skip_reason"] = "no_subscriber_changes"
     elif subscribers_table and str(subscribers_table.get("storage") or "").lower() != "oss":
