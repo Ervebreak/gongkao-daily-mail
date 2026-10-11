@@ -58,7 +58,10 @@ def test_validator_rejects_linux_import_and_nested_package_failures(tmp_path: Pa
     with zipfile.ZipFile(output, "w") as archive:
         for name in REQUIRED_ENTRIES:
             archive.writestr(name, "# fixture")
-        archive.writestr(bad_name, "bad")
+        info = zipfile.ZipInfo("placeholder")
+        info.filename = bad_name
+        info.orig_filename = bad_name
+        archive.writestr(info, "bad")
     with pytest.raises(ValueError):
         validate_archive(output)
 

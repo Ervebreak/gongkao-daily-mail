@@ -21,7 +21,9 @@ REQUIRED_ENTRIES = (
 
 def validate_archive(path: Path) -> None:
     with zipfile.ZipFile(path) as archive:
-        names = archive.namelist()
+        # Python's Windows ZIP reader normalizes backslashes in .filename;
+        # inspect the raw stored name so invalid Linux paths cannot be hidden.
+        names = [info.orig_filename for info in archive.infolist()]
         if len(names) != len(set(names)):
             raise ValueError("Duplicate ZIP entries")
         for name in names:

@@ -64,6 +64,21 @@ def _token(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("WEEKLY_RENDER_TOKEN", TOKEN)
 
 
+@pytest.fixture(autouse=True)
+def _fc_temp_directory(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # FC writes to /tmp; Windows CI supplies an isolated equivalent without
+    # changing the production Linux path or skipping renderer tests.
+    original = target.tempfile.TemporaryDirectory
+
+    def temporary_directory(*args, **kwargs):
+        assert kwargs.get("dir") == "/tmp"
+        assert kwargs.get("prefix") == "weekly-render-"
+        kwargs["dir"] = str(tmp_path)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(target.tempfile, "TemporaryDirectory", temporary_directory)
+
+
 def _body(response: dict) -> dict:
     return json.loads(response["body"])
 
