@@ -159,7 +159,9 @@ def test_apply_successful_reminder_updates_and_csv_compat() -> None:
     assert meta["subscribers_reminder_updates"] == 2
     assert table["records"][0]["reminder_sent"] == "d3"
     assert table["records"][1]["reminder_sent"] == "d3|d1"
-    assert csv_text.splitlines()[0].endswith(",reminder_sent")
+    header = csv_text.splitlines()[0].split(",")
+    assert header.count("reminder_sent") == 1
+    assert "referral_code" in header and "referred_by" in header
     assert "d3@example.com" in csv_text
     assert "d3|d1" in csv_text
 
