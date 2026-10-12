@@ -7,6 +7,7 @@ import hashlib
 import inspect
 import io
 import json
+import logging
 import re
 import smtplib
 import ssl
@@ -322,7 +323,10 @@ def load_subscribers_csv_local_table() -> dict[str, Any] | None:
         table["path"] = str(path)
         table["raw_text"] = raw_text
         table["raw_bytes"] = raw_bytes
+        _set_subscriber_warnings(table, raw_text)
         return table
+    except (UnicodeError, ValueError, csv.Error) as exc:
+        raise ValueError("Local subscriber CSV has invalid critical fields; sending stopped.") from exc
     except Exception:
         return None
 
@@ -349,12 +353,55 @@ def decode_subscribers_csv_bytes(data: bytes) -> str:
     return text
 
 
-def _validate_subscribers_text(text: str) -> None:
-    # These markers represent lost characters; never persist them automatically.
-    if "\ufffd" in text or re.search(r"\?{3,}", text):
-        raise ValueError("Subscriber CSV contains damaged text; restore a healthy copy before sending.")
+def _validate_subscribers_text(text: str) -> list[dict[str, Any]]:
+    """Block unsafe routing data; flag damaged descriptive cells as read-only."""
     if "\x00" in text:
         raise ValueError("Subscriber CSV contains invalid NUL characters.")
+    reader = csv.DictReader(io.StringIO(text.lstrip("\ufeff")), strict=True)
+    headers = reader.fieldnames or []
+    if (
+        not headers or "email" not in headers
+        or any(not name or name != name.strip() or "\ufffd" in name or "?" in name or "\ufeff" in name for name in headers)
+        or len(set(headers)) != len(headers)
+    ):
+        raise ValueError("Subscriber CSV has invalid or damaged headers.")
+    descriptive_fields = {"nickname", "source", "created_at", "remark", "note"}
+    warnings = []
+    for row_number, row in enumerate(reader, start=2):
+        if None in row or any(value is None for value in row.values()):
+            raise ValueError(f"Subscriber CSV row {row_number} has an invalid column count.")
+        for field, value in row.items():
+            if "\ufffd" in value or re.search(r"\?{3,}", value):
+                if field not in descriptive_fields:
+                    raise ValueError(f"Subscriber CSV row {row_number} has damaged critical field {field}.")
+                warnings.append({"code": "damaged_descriptive_field", "row": row_number, "field": field})
+        if not EMAIL_RE.fullmatch(row["email"].strip()):
+            raise ValueError(f"Subscriber CSV row {row_number} has an invalid email.")
+        status = row.get("status", "").strip().lower()
+        if status not in {"", "active", "inactive", "unsubscribed", "disabled", "paused", "pending", "bounced"}:
+            raise ValueError(f"Subscriber CSV row {row_number} has an invalid status.")
+        if row.get("plan", "").strip().lower() not in {"", "free", "try", "paid_trial", "paid_monthly"}:
+            raise ValueError(f"Subscriber CSV row {row_number} has an invalid plan.")
+        if row.get("send_mode", "").strip().lower() not in {"", "full", "lite", "none"}:
+            raise ValueError(f"Subscriber CSV row {row_number} has an invalid send_mode.")
+        paid_until = row.get("paid_until", "").strip()
+        if paid_until and (
+            not re.fullmatch(r"\d{4}[-/]\d{1,2}[-/]\d{1,2}", paid_until)
+            or _parse_date(paid_until) is None
+        ):
+            raise ValueError(f"Subscriber CSV row {row_number} has an invalid paid_until.")
+    return warnings
+
+
+def _set_subscriber_warnings(table: dict[str, Any], text: str) -> None:
+    warnings = _validate_subscribers_text(text)
+    table["subscribers_warnings"] = warnings
+    table["subscribers_read_only"] = bool(warnings)
+    if warnings:
+        logging.getLogger(__name__).warning(
+            "Subscriber CSV has %s damaged descriptive cells; valid recipients may receive mail, "
+            "but automatic backup and overwrite are disabled. Details: %s", len(warnings), warnings,
+        )
 
 
 def load_subscribers_csv_oss_table() -> dict[str, Any] | None:
@@ -376,10 +423,11 @@ def load_subscribers_csv_oss_table() -> dict[str, Any] | None:
         table["object_key"] = cfg["object_key"]
         table["raw_text"] = raw_text
         table["raw_bytes"] = raw_bytes
+        _set_subscriber_warnings(table, raw_text)
         return table
-    except (UnicodeError, ValueError) as exc:
+    except (UnicodeError, ValueError, csv.Error) as exc:
         # Fail closed rather than quietly switching to a different subscriber list.
-        raise ValueError("OSS subscriber CSV is unreadable or damaged; sending stopped.") from exc
+        raise ValueError(f"OSS subscriber CSV has invalid critical data; sending stopped: {exc}") from exc
     except Exception:
         return None
 
@@ -719,13 +767,30 @@ def backup_and_save_subscribers_table_to_oss(table: dict[str, Any]) -> dict[str,
     if not oss_ready():
         meta["subscribers_error"] = "OSS config is incomplete."
         return meta
+    # Check the original source as well, so normalization cannot hide corruption.
+    source_warnings = []
+    try:
+        if table.get("raw_text") is not None:
+            source_warnings = _validate_subscribers_text(str(table["raw_text"]))
+    except (ValueError, csv.Error) as exc:
+        meta["subscribers_error"] = str(exc)
+        return meta
+    if table.get("subscribers_read_only") or source_warnings:
+        meta.update(subscribers_write_skipped=True,
+                    subscribers_write_skip_reason="damaged_descriptive_fields",
+                    subscribers_warnings=table.get("subscribers_warnings") or source_warnings)
+        return meta
     records = normalize_recipient_records(table.get("records") or [])
     fieldnames = _subscriber_fieldnames(table.get("fieldnames") or [])
     body_text, body = serialize_subscribers_csv_bytes(records, fieldnames)
     try:
-        _validate_subscribers_text(body_text)
-    except ValueError as exc:
+        warnings = _validate_subscribers_text(body_text)
+    except (ValueError, csv.Error) as exc:
         meta["subscribers_error"] = str(exc)
+        return meta
+    if warnings:
+        meta.update(subscribers_write_skipped=True,
+                    subscribers_write_skip_reason="damaged_descriptive_fields", subscribers_warnings=warnings)
         return meta
     backup_source_text = str(table.get("raw_text") or body_text)
     if table.get("raw_text") is not None and (
@@ -1343,6 +1408,8 @@ def send_segmented_email(
         "send_mode": "individual",
         "recipient_source": recipient_source,
         "valid_recipient_count": audit["full_count"] + audit["lite_count"],
+        "subscribers_warnings": (subscribers_table or {}).get("subscribers_warnings", []),
+        "subscribers_read_only": bool((subscribers_table or {}).get("subscribers_read_only")),
         "full_count": audit["full_count"],
         "lite_count": audit["lite_count"],
         "skipped_count": audit["skipped_count"],
