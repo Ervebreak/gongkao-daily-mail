@@ -25,9 +25,12 @@ def test_repeated_round_trips_preserve_uid_and_single_bom():
 
 
 @pytest.mark.parametrize("text", [CSV.replace("中文昵称", "???"), CSV.replace("中文昵称", "\ufffd")])
-def test_damaged_text_is_rejected(text):
-    with pytest.raises(ValueError, match="damaged"):
-        sender.decode_subscribers_csv_bytes(text.encode("utf-8"))
+def test_damaged_description_is_readable_and_warned(text):
+    decoded = sender.decode_subscribers_csv_bytes(text.encode("utf-8"))
+    assert decoded == text
+    assert sender._validate_subscribers_text(decoded) == [
+        {"code": "damaged_descriptive_field", "row": 2, "field": "nickname"}
+    ]
 
 
 def setup_oss(monkeypatch):
@@ -88,4 +91,66 @@ def test_damaged_table_cannot_be_written(monkeypatch):
     table = sender.parse_subscribers_csv_table(CSV.replace("中文昵称", "???"))
     result = sender.backup_and_save_subscribers_table_to_oss(table)
     assert not result["subscribers_write_ok"]
-    assert "damaged" in result["subscribers_error"]
+    assert result["subscribers_write_skip_reason"] == "damaged_descriptive_fields"
+
+
+@pytest.mark.parametrize("text", [
+    CSV.replace("user@example.com", "bad-email"),
+    CSV.replace("active", "???"),
+    CSV.replace("active", "actve"),
+    CSV.replace("uid,email", "???uid,email"),
+    CSV.replace("uid,email", "email,email"),
+    CSV.replace(",source", ""),
+    'email,status\n"unterminated,active\n',
+    "email,status,plan\nuser@example.com,active,paidd\n",
+    "email,status,send_mode\nuser@example.com,active,all\n",
+    "email,status,paid_until\nuser@example.com,active,2026-02-30\n",
+    "email,status,paid_until\nuser@example.com,active,2026-10-12junk\n",
+])
+def test_invalid_critical_data_stops_oss_read(monkeypatch, text):
+    setup_oss(monkeypatch)
+    monkeypatch.setattr(sender.requests, "get", lambda *args, **kwargs: Response(text.encode("utf-8")))
+    with pytest.raises(ValueError, match="sending stopped"):
+        sender.load_subscriber_table_for_segmentation()
+
+
+def test_descriptive_damage_sends_but_no_backup_or_overwrite(monkeypatch, caplog):
+    setup_oss(monkeypatch)
+    text = CSV.replace("中文昵称", "???")
+    monkeypatch.setattr(sender.requests, "get", lambda *args, **kwargs: Response(text.encode("gb18030")))
+    monkeypatch.setattr(sender.requests, "put", lambda *args, **kwargs: pytest.fail("must not write"))
+    table = sender.load_subscribers_csv_oss_table()
+    assert table["subscribers_read_only"] is True
+    assert "automatic backup and overwrite are disabled" in caplog.text
+    assert "user@example.com" not in caplog.text
+    sent = []
+
+    def fake_send(subject, plain, html, recipients, **kwargs):
+        sent.extend(item["email"] for item in recipients)
+        return {"success_count": len(recipients), "fail_count": 0, "recipient_status": [], "failures": []}
+
+    monkeypatch.setattr(sender, "_send_email_to_records", fake_send)
+    monkeypatch.setattr(sender, "save_send_audit", lambda *args: {"full_count": 0, "lite_count": 1, "skipped_count": 0})
+    monkeypatch.setattr(sender, "update_send_audit_results", lambda date, audit, *args, **kwargs: audit)
+    result = sender.send_segmented_email(
+        "subject", "full", "<p>full</p>", "lite", "<p>lite</p>",
+        delivery_date="2026-10-12", test_mode=False,
+        segments=sender.split_recipient_records(table["records"], today="2026-10-12"),
+        recipient_source="OSS:test", subscribers_table=table,
+    )
+    assert sent == ["user@example.com"]
+    assert result["success_count"] == 1
+    assert result["subscribers_warnings"]
+    assert result["subscribers_read_only"] is True
+    assert result["subscribers_write_skipped"] is True
+    assert not result["subscribers_backup_ok"]
+    assert result["subscribers_write_skip_reason"] == "damaged_descriptive_fields"
+
+
+def test_clearing_warning_does_not_allow_overwriting_damaged_source(monkeypatch):
+    setup_oss(monkeypatch)
+    monkeypatch.setattr(sender.requests, "put", lambda *args, **kwargs: pytest.fail("must not write"))
+    table = sender.parse_subscribers_csv_table(CSV)
+    table["raw_text"] = CSV.replace("中文昵称", "???")
+    result = sender.backup_and_save_subscribers_table_to_oss(table)
+    assert result["subscribers_write_skip_reason"] == "damaged_descriptive_fields"

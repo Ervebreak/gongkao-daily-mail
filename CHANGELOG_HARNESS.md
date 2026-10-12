@@ -1,5 +1,13 @@
 # Harness Change Log
 
+## 2026-10-12 - Send valid recipients when descriptive subscriber cells are damaged
+
+- Replace whole-file damaged-text blocking with field-aware validation. Invalid headers, duplicate headers, email addresses, routing states, plans, delivery modes, expiry dates and CSV column/quote structure stop production loading, including local loading, before normalization can hide bad values.
+- Damaged nickname/source/created_at/remark/note cells produce warnings containing only row numbers and field names. The valid recipient list remains usable while the table is marked read-only; results expose warnings and the read-only flag.
+- Automatic writes check both original source text and outgoing content, and skip all backup/main PUTs for descriptive damage even if referral, reminder or expiry updates are pending. Healthy tables retain byte-exact backups and single-BOM output.
+- Read-only state means reminder/expiry/referral changes cannot persist; restore healthy source data promptly. Damaged headers such as question-mark-prefixed UID remain blocking.
+- Regression tests cover successful mocked delivery without any OSS PUT, privacy-safe warning logs, source-damage write protection, invalid critical values, malformed CSV and the existing encoding/BOM/backup paths.
+
 ## 2026-10-11 - Preserve subscriber CSV encoding and original backups
 
 - OSS/local subscriber CSV reads now strictly decode UTF-8, UTF-8 BOM, GB18030, or BOM-marked UTF-16 bytes instead of trusting HTTP charset metadata. Repeated leading BOMs are removed before parsing so UID headers survive repeated round trips.
