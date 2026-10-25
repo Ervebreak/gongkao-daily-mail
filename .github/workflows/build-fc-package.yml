@@ -32,13 +32,15 @@ jobs:
         run: |
           python -m py_compile main.py config.py candidate_store.py scripts\validate_daily_brief.py
           if ($LASTEXITCODE -ne 0) { throw "Daily source compilation failed" }
+          python -m py_compile agent\fc_entry.py agent\orchestrator.py agent\tools.py agent\confirm.py agent\state.py
+          if ($LASTEXITCODE -ne 0) { throw "Agent source compilation failed" }
           python -m py_compile weekly_report.py weekly_typst_export.py fc_weekly_render.py fc_candidate_publish.py scripts\build_weekly_package.py
           if ($LASTEXITCODE -ne 0) { throw "Weekly source compilation failed" }
 
       - name: Run send-gate, weekly-renderer and deployment regressions
         shell: pwsh
         run: |
-          python -m pytest tests/test_morning_gate_drift.py tests/test_fc_weekly_render.py tests/test_build_weekly_package.py tests/test_weekly_typst_export_materials.py tests/test_fc_package_zip.py -q
+          python -m pytest tests/test_agent_state.py tests/test_agent_orchestrator.py tests/test_morning_gate_drift.py tests/test_fc_weekly_render.py tests/test_build_weekly_package.py tests/test_weekly_typst_export_materials.py tests/test_fc_package_zip.py -q
           if ($LASTEXITCODE -ne 0) { throw "Regression tests failed" }
 
       - name: Build function.zip
