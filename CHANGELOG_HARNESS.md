@@ -1,5 +1,18 @@
 # Harness Change Log
 
+## 2026-10-25 - Make the independent Agent path safe to dry-run and stage
+
+- Add a `VALIDATED` terminal state for Agent test runs. `test_mode` now builds the complete candidate only inside the per-run workspace and never writes the formal local/OSS candidate or sends an administrator preview.
+- Fix the Agent planner model selector so test runs use test model settings and production runs use production selection settings.
+- Preserve the latest persisted state on exceptions instead of overwriting real tool/model counts with the stale entry-state object.
+- Require 3–6 valid unique article IDs at the Agent selection boundary.
+- Treat administrator preview delivery as a hard publication gate. Production sends the preview from the validated workspace candidate first and writes the formal candidate only after the preview succeeds; failed previews return `BLOCKED` and cannot leave a sendable candidate behind. Preview results no longer report success unconditionally.
+- Refuse to overwrite an existing gate-passed candidate for the same date, and require the date-addressed OSS candidate write used by `morning_send` to succeed before reporting `PUBLISHED`.
+- Make preview cancellation work across FC instances by using the formal candidate store as the authority when local `run.json` is unavailable. Limit cancellation links to the evening before delivery and the delivery date.
+- Make cancellation two-step: GET only renders a confirmation page and the explicit POST performs the mutation, preventing email link scanners from cancelling a candidate.
+- Add Agent variables to `.env.example`, compile and test Agent modules in the FC-package workflow, and document an isolated-prefix staging rollout. The original `nightly_candidate` writer must be paused before Agent writes the production candidate prefix; `morning_send` remains unchanged.
+- Validation is side-effect-free: no production OSS write, subscriber change, or email send occurs during local Agent dry runs.
+
 ## 2026-10-12 - Send valid recipients when descriptive subscriber cells are damaged
 
 - Replace whole-file damaged-text blocking with field-aware validation. Invalid headers, duplicate headers, email addresses, routing states, plans, delivery modes, expiry dates and CSV column/quote structure stop production loading, including local loading, before normalization can hide bad values.
