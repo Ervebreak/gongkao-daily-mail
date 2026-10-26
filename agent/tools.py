@@ -105,7 +105,7 @@ def tool_search_articles(delivery_date: str, test_mode: bool = False) -> dict[st
     """抓取当天候选文章池，返回文章摘要列表供模型决策选文。"""
     from fetch_articles import get_candidate_articles_with_stats
 
-    articles, article_stats = get_candidate_articles_with_stats()
+    articles, article_stats = get_candidate_articles_with_stats(test_mode=test_mode)
     items: list[dict[str, Any]] = []
     for idx, article in enumerate(articles):
         body = list(article.body or [])
