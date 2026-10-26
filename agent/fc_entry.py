@@ -106,6 +106,8 @@ def handler(event: Any, context: Any = None) -> dict[str, Any]:
             "tool_calls": result.get("tool_calls"),
             "repair_round": result.get("repair_round"),
             "candidate_saved": result.get("candidate_saved"),
+            "error": result.get("error"),
+            "reason": result.get("reason"),
         }
         print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
         return result
