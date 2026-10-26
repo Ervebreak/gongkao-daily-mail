@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 from typing import Any
 
 
@@ -18,6 +19,19 @@ def _normalize(event: Any) -> dict[str, Any]:
         return {}
     if isinstance(event, dict):
         return event
+    if isinstance(event, (bytes, bytearray)):
+        try:
+            event = bytes(event).decode("utf-8")
+        except UnicodeDecodeError:
+            return {"raw": repr(event)}
+    if isinstance(event, str):
+        try:
+            parsed = json.loads(event)
+        except (TypeError, ValueError):
+            return {"raw": event}
+        if isinstance(parsed, dict):
+            return parsed
+        return {"raw": event}
     return {"raw": str(event)}
 
 
