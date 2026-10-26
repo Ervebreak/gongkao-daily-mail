@@ -19,7 +19,6 @@ import os
 import datetime as dt
 from typing import Any
 from urllib.parse import parse_qs
-from zoneinfo import ZoneInfo
 
 from config import settings
 from agent.state import (
@@ -70,7 +69,8 @@ def _confirm_window_open(delivery_date: str) -> bool:
         return False
     # 预览通常在投递日前一晚发出。取消链接只允许在投递日前一天和
     # 投递日当天使用，避免永久有效的旧链接改写历史候选。
-    today = dt.datetime.now(ZoneInfo("Asia/Shanghai")).date()
+    china_tz = dt.timezone(dt.timedelta(hours=8))
+    today = dt.datetime.now(china_tz).date()
     return today in {target - dt.timedelta(days=1), target}
 
 
