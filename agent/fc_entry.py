@@ -93,11 +93,34 @@ def handler(event: Any, context: Any = None) -> dict[str, Any]:
         delivery_date = _resolve_delivery_date(payload)
         from agent.orchestrator import run
 
-        return run(
+        result = run(
             delivery_date,
             test_mode=_is_test(payload),
         )
+        summary = {
+            "event": "agent_run_complete",
+            "delivery_date": delivery_date,
+            "status": result.get("status"),
+            "state": result.get("state"),
+            "model_calls": result.get("model_calls"),
+            "tool_calls": result.get("tool_calls"),
+            "repair_round": result.get("repair_round"),
+            "candidate_saved": result.get("candidate_saved"),
+        }
+        print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
+        return result
     except Exception as exc:
+        print(
+            json.dumps(
+                {
+                    "event": "agent_run_error",
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
         return {
             "status": "error",
             "error": str(exc),
