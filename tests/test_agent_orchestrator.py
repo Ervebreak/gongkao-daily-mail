@@ -73,7 +73,7 @@ def _patch_pipeline(gate_overall: str = "ok", p0_count: int = 0):
     for patcher in [
         mock.patch(
             "fetch_articles.get_candidate_articles_with_stats",
-            lambda: (_mock_articles(), {"source_fetch_status": {}, "count": 5}),
+            lambda test_mode=False: (_mock_articles(), {"source_fetch_status": {}, "count": 5}),
         ),
         mock.patch(
             "llm_client.generate_brief",
