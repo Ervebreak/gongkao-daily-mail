@@ -12,7 +12,11 @@ mkdir -p "$BUILD_DIR"
 
 # Copy source files and runtime assets.
 # Keep this list explicit so generated outputs, private data, and .git metadata never enter the package.
-find . -maxdepth 1 -type f \( -name "*.py" -o -name "requirements.txt" \) -exec cp {} "$BUILD_DIR" \;
+find . -maxdepth 1 -type f \( \
+  -name "*.py" -o \
+  -name "requirements.txt" -o \
+  -name "mock_articles.json" \
+\) -exec cp {} "$BUILD_DIR" \;
 
 for dir in agent content_harness knowledge knowledge_base scripts examples data; do
   if [ -d "$dir" ]; then

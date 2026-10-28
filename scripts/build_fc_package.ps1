@@ -48,8 +48,9 @@ New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
 # local outputs, candidates, tests, or dependencies already installed in the repo.
 Get-ChildItem -LiteralPath $root -File -Filter "*.py" | Copy-Item -Destination $BuildDir
 Copy-Item -LiteralPath (Join-Path $root "requirements.txt") -Destination $BuildDir
+Copy-Item -LiteralPath (Join-Path $root "mock_articles.json") -Destination $BuildDir
 
-foreach ($dir in @("content_harness", "knowledge", "knowledge_base", "scripts", "data")) {
+foreach ($dir in @("agent", "content_harness", "knowledge", "knowledge_base", "scripts", "data")) {
     $src = Join-Path $root $dir
     if (Test-Path -LiteralPath $src) {
         Copy-Item -LiteralPath $src -Destination (Join-Path $BuildDir $dir) -Recurse
@@ -109,6 +110,8 @@ try {
     Assert-Entry $zip @("weekly_typst_export.py")
     Assert-Entry $zip @("scripts/build_weekly_package.py")
     Assert-Entry $zip @("requirements.txt")
+    Assert-Entry $zip @("mock_articles.json")
+    Assert-Entry $zip @("agent/fc_entry.py")
     Assert-Entry $zip @("question_bank.py")
     Assert-Entry $zip @("scripts/validate_daily_brief.py")
     Assert-Entry $zip @("data/question_bank/shenlun_question_bank_v3_a.csv")

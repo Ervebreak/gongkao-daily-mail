@@ -19,7 +19,7 @@ Agent Orchestrator（agent/orchestrator.py）
    ├── 模型决策①：选文（select_articles）
    ├── 工具链：generate_brief → render_candidate → audit_candidate
    ├── 模型决策②：PASS / REPAIR / BLOCKED（修复最多 2 轮）
-   └── save_candidate（正式候选 OSS/本地）→ 发预览给自己 → PUBLISHED
+   └── 构建候选 → 发预览给自己 → save_candidate（正式 OSS/本地）→ PUBLISHED
                                                               ↓ 次日早晨 07:30
                                          现有发送链路（morning_send）自动群发
                                                               ↓
@@ -39,7 +39,7 @@ Agent Orchestrator（agent/orchestrator.py）
 | `render_candidate` | `email_renderer` | 渲染 subject/plain/html |
 | `audit_candidate` | `quality_gate.evaluate_all_quality` + `build_gate_from_quality_map` | 全量质检 + 门禁 |
 | `repair_candidate` | `llm_client.rewrite_failed_modules_once` | 定点修复失败模块 |
-| `save_candidate` | `candidate_store.build_candidate_payload` + `save_candidate` | 保存正式候选（次日发送用） |
+| `save_candidate` | `candidate_store.build_candidate_payload` + `save_candidate` | test 只构建工作区候选；production 在预览成功后保存正式候选 |
 | `get_run_status` | `agent.state` | 只读查询运行状态 |
 
 **发布 / 发送不注册为模型工具**——Agent 只负责生成并保存合格候选，发送完全
@@ -57,6 +57,7 @@ CREATED → SEARCHING → SELECTING → GENERATING → AUDITING → REPAIRING
 ```
 
 - `PUBLISHED` = 候选已保存到正式存储且预览已发，等待次日早晨自动发送（终态）
+- `VALIDATED` = test_mode 已完整跑通生成、渲染和门禁，但没有写正式候选、没有发预览（终态）
 - 异常态：`BLOCKED` / `FAILED`（终态）。所有迁移必须经过 `transition()` 校验，
   模型不能发明状态；`TERMINAL_STATES` 内不允许再次运行（幂等）
 
@@ -76,6 +77,7 @@ CREATED → SEARCHING → SELECTING → GENERATING → AUDITING → REPAIRING
 
 - 非法决策（如 `SEND_NOW_WITHOUT_APPROVAL`）一律回退为 `BLOCKED`
 - 门禁 `overall != ok` 时模型无权 PASS，只能修复或阻断
+- 工具执行只接收注册 schema 声明的参数；模型把 `reason` 等解释字段误放进 `arguments` 时会被过滤，不会穿透到 Python 函数签名
 
 ## 5. 安全控制
 
@@ -91,6 +93,11 @@ CREATED → SEARCHING → SELECTING → GENERATING → AUDITING → REPAIRING
   （state / repair_round / model_calls / tool_calls / history 事件轨迹）
 - 中间产物（articles / brief / rendered / quality / candidate）落盘同目录，
   支持断点续跑与事后审计
+- 每轮审核向 FC 日志输出 `agent_quality_audited`，包含修复轮次、门禁结果和完整 P0 列表；最终输出 `agent_run_complete`
+
+`agent-runs/` 位于 FC 本地临时目录，只用于单次运行审计，不能作为跨实例取消闸门
+的唯一依据。取消请求以正式候选存储为权威状态，即使 HTTP 请求落到另一个 FC
+实例、读不到原 `run.json`，仍可把 OSS 候选门禁置为 fail。
 
 ## 7. 测试策略
 

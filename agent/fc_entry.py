@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 from typing import Any
 
 
@@ -18,6 +19,19 @@ def _normalize(event: Any) -> dict[str, Any]:
         return {}
     if isinstance(event, dict):
         return event
+    if isinstance(event, (bytes, bytearray)):
+        try:
+            event = bytes(event).decode("utf-8")
+        except UnicodeDecodeError:
+            return {"raw": repr(event)}
+    if isinstance(event, str):
+        try:
+            parsed = json.loads(event)
+        except (TypeError, ValueError):
+            return {"raw": event}
+        if isinstance(parsed, dict):
+            return parsed
+        return {"raw": event}
     return {"raw": str(event)}
 
 
@@ -53,6 +67,16 @@ def _resolve_delivery_date(event: dict[str, Any]) -> str:
     return (dt.date.today() + dt.timedelta(days=1)).isoformat()
 
 
+def _candidate_saved_from_result(result: dict[str, Any]) -> Any:
+    """Read publication status from both direct and nested tool results."""
+    if result.get("candidate_saved") is not None:
+        return result.get("candidate_saved")
+    candidate = result.get("candidate")
+    if isinstance(candidate, dict):
+        return candidate.get("candidate_saved")
+    return None
+
+
 def handler(event: Any, context: Any = None) -> dict[str, Any]:
     payload = _normalize(event)
     try:
@@ -79,11 +103,36 @@ def handler(event: Any, context: Any = None) -> dict[str, Any]:
         delivery_date = _resolve_delivery_date(payload)
         from agent.orchestrator import run
 
-        return run(
+        result = run(
             delivery_date,
             test_mode=_is_test(payload),
         )
+        summary = {
+            "event": "agent_run_complete",
+            "delivery_date": delivery_date,
+            "status": result.get("status"),
+            "state": result.get("state"),
+            "model_calls": result.get("model_calls"),
+            "tool_calls": result.get("tool_calls"),
+            "repair_round": result.get("repair_round"),
+            "candidate_saved": _candidate_saved_from_result(result),
+            "error": result.get("error"),
+            "reason": result.get("reason"),
+        }
+        print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
+        return result
     except Exception as exc:
+        print(
+            json.dumps(
+                {
+                    "event": "agent_run_error",
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
         return {
             "status": "error",
             "error": str(exc),

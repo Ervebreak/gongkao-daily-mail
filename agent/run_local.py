@@ -6,8 +6,9 @@
   python -m agent.run_local --date 2026-09-16
     （生产模式：需要 DASHSCOPE_API_KEY 等环境变量）
 
-输出：状态机推进结果；候选通过门禁后保存到正式候选存储（OSS/本地），
-发送预览邮件到 SMTP_USER，进入 PUBLISHED（次日早晨由现有发送链路自动发送）。
+输出：状态机推进结果。test_mode 只在工作区构建候选并进入 VALIDATED；
+production 在预览送达后保存到正式候选存储（OSS/本地），进入 PUBLISHED
+（次日早晨由现有发送链路自动发送）。
 """
 from __future__ import annotations
 

@@ -47,6 +47,8 @@ GitHub Actions 的 `function-zip.zip` 是外层产物包装；解压后只部署
 发布包必须包含：
 
 - `requirements.txt`
+- `mock_articles.json`（Agent dry run 的确定性文章池）
+- `agent/fc_entry.py` 及完整 `agent/` 包
 - `content_harness/`
 - `knowledge/`
 - `knowledge_base/`
@@ -55,6 +57,8 @@ GitHub Actions 的 `function-zip.zip` 是外层产物包装；解压后只部署
 - 如启用题库轻接入，必须包含 `question_bank.py`
 - 如使用本地兜底题库，必须包含 `data/question_bank/shenlun_question_bank_v3_a.csv`
 - 如启用本地知识库，必须包含 `knowledge_base/policy_corpus/policy_statements_core.jsonl` 和 `knowledge_base/topic_knowledge/article_index.jsonl`
+
+独立 AI Agent 函数部署后，至少验证一次 `TEST_LLM_MODEL=mock` 的无副作用 dry run，以及一次隔离 `CANDIDATE_PREFIX` 的真实模型演练。真实演练必须同时确认管理员预览、`PUBLISHED`、日期候选与 `latest.json`、重复候选保护和两步取消闸门；未完成这些检查前不得把 Agent 切到生产候选前缀。
 
 ## 3. 典型 P0
 

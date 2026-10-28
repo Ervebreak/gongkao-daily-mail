@@ -76,6 +76,32 @@ def extract_json_object(text: str) -> dict[str, Any]:
     return json.loads(match.group(0))
 
 
+def _safe_dashscope_error_detail(response: requests.Response) -> str:
+    """Return a short provider error without leaking request credentials."""
+    detail: dict[str, Any] = {}
+    try:
+        body = response.json()
+    except (ValueError, json.JSONDecodeError):
+        body = None
+
+    if isinstance(body, dict):
+        for key in ("code", "message", "request_id", "requestId", "param", "type"):
+            value = body.get(key)
+            if value not in (None, ""):
+                detail[key] = value
+        if not detail:
+            detail["body"] = body
+        text = json.dumps(detail, ensure_ascii=False, default=str)
+    else:
+        text = re.sub(r"\s+", " ", (response.text or "")).strip()
+        if not text:
+            text = "empty response body"
+
+    # Defensive redaction in case an upstream proxy ever echoes credentials.
+    text = re.sub(r"\bsk-[A-Za-z0-9_-]{8,}\b", "sk-***", text)
+    return text[:2000]
+
+
 def chat_completion(
     model: str,
     user_prompt: str,
@@ -122,7 +148,13 @@ def chat_completion(
             json=payload,
             timeout=effective_timeout,
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            detail = _safe_dashscope_error_detail(response)
+            raise RuntimeError(
+                f"DashScope HTTP {response.status_code} for model={model}: {detail}"
+            ) from exc
         data = response.json()
         content = data["choices"][0]["message"]["content"]
         parsed = extract_json_object(content)
@@ -1141,7 +1173,13 @@ def generate_brief_two_stage(articles: list[Article], today: str, test_mode: boo
     featured_article = selected_articles[0] if selected_articles else None
     question_bank_refs, question_bank_meta, question_bank_context = _question_bank_context_for_article(featured_article)
     final_prompt = build_final_generation_prompt(selected_articles, today, selection, question_bank_context=question_bank_context)
-    brief = _call_with_fallback(final_prompt, test_mode, stage="writing", contract=True)
+    # The full-draft response is only an intermediate input.  Do not reject the
+    # entire draft (and burn the fallback model) merely because one high-risk
+    # submodule contains an ellipsis or a sentence that looks truncated.
+    # `refine_high_risk_modules` below regenerates takeaway/quick-read modules
+    # independently and applies the same strict contract to those final module
+    # responses.  Daily-question selection has its own validation/repair path.
+    brief = _call_with_fallback(final_prompt, test_mode, stage="writing", contract=False)
     brief["_source_evidence"] = build_evidence_bundle(selected_articles)
     # Preserve selection diagnostics for logging/debug; ensure_brief_schema will ignore unknown fields if needed.
     brief.setdefault("_llm_two_stage", {})

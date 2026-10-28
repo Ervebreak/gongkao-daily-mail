@@ -105,7 +105,7 @@ def tool_search_articles(delivery_date: str, test_mode: bool = False) -> dict[st
     """抓取当天候选文章池，返回文章摘要列表供模型决策选文。"""
     from fetch_articles import get_candidate_articles_with_stats
 
-    articles, article_stats = get_candidate_articles_with_stats()
+    articles, article_stats = get_candidate_articles_with_stats(test_mode=test_mode)
     items: list[dict[str, Any]] = []
     for idx, article in enumerate(articles):
         body = list(article.body or [])
@@ -163,8 +163,11 @@ def tool_select_articles(article_ids: list[Any], delivery_date: str) -> dict[str
             continue
         if value in valid_ids and value not in ids:
             ids.append(value)
-    if not ids:
-        raise RuntimeError(f"select_articles: no valid article ids in {article_ids!r}")
+    if not 3 <= len(ids) <= 6:
+        raise RuntimeError(
+            "select_articles requires 3 to 6 unique valid article ids; "
+            f"got {len(ids)} from {article_ids!r}"
+        )
     selected = [item for item in items if int(item["id"]) in ids]
     state = _state_for(delivery_date)
     state.selected_article_ids = ids
@@ -281,6 +284,23 @@ def tool_audit_candidate(delivery_date: str, test_mode: bool = False) -> dict[st
         p1_count=len([i for i in issues if i["severity"] == "P1"]),
     )
     save_run(state)
+    print(
+        json.dumps(
+            {
+                "event": "agent_quality_audited",
+                "delivery_date": delivery_date,
+                "repair_round": state.repair_round,
+                "overall": gate.get("overall"),
+                "p0_count": gate.get("p0_count", 0),
+                "p0_issues": gate.get("p0_issues") or [],
+                "issues": issues,
+            },
+            ensure_ascii=False,
+            default=str,
+            sort_keys=True,
+        ),
+        flush=True,
+    )
     return {
         "tool": "audit_candidate",
         "overall": gate.get("overall"),
@@ -386,12 +406,35 @@ def tool_save_candidate(delivery_date: str, test_mode: bool = False) -> dict[str
         article_stats=(articles_data or {}).get("stats") or {},
         final_selection=summarize_final_selection(brief),
     )
-    meta = save_candidate(payload)
     save_workspace(delivery_date, "candidate", payload)
-    state.candidate_saved = True
-    state.log_event("candidate_saved", meta=meta)
+    if test_mode:
+        # test_mode 必须只验证构建结果，不能写 candidates/ 或 OSS 正式候选。
+        # workspace 位于本轮 agent-runs 目录，可供人工检查和回归测试。
+        meta = {
+            "storage": "workspace_only",
+            "published": False,
+            "reason": "test_mode",
+        }
+        state.candidate_saved = False
+        state.log_event("candidate_built_for_test", meta=meta)
+    else:
+        meta = save_candidate(payload)
+        if settings.candidate_storage == "oss" and not meta.get(
+            "candidate_oss_write_ok"
+        ):
+            raise RuntimeError(
+                "formal candidate OSS write failed: "
+                f"daily={meta.get('candidate_oss_error') or meta.get('candidate_oss_write_ok')}"
+            )
+        state.candidate_saved = True
+        state.log_event("candidate_saved", meta=meta)
     save_run(state)
-    return {"tool": "save_candidate", "candidate_saved": True, "meta": meta}
+    return {
+        "tool": "save_candidate",
+        "candidate_saved": not test_mode,
+        "candidate_built": True,
+        "meta": meta,
+    }
 
 
 def tool_get_run_status(delivery_date: str) -> dict[str, Any]:
@@ -512,7 +555,16 @@ def execute_tool(name: str, arguments: dict[str, Any], *, delivery_date: str, te
     tool = TOOL_REGISTRY.get(name)
     if tool is None:
         raise RuntimeError(f"Unknown tool: {name!r}. Allowed: {sorted(TOOL_REGISTRY)}")
-    kwargs: dict[str, Any] = dict(arguments or {})
+    # Model output may place explanatory fields such as ``reason`` inside
+    # ``arguments`` even though they belong at the decision's top level.  Tool
+    # calls are schema-bound: forward only parameters declared by the selected
+    # tool so harmless model drift cannot become a Python signature error.
+    allowed_parameters = set(tool.parameters)
+    kwargs: dict[str, Any] = {
+        key: value
+        for key, value in dict(arguments or {}).items()
+        if key in allowed_parameters
+    }
     kwargs["delivery_date"] = delivery_date
     if tool.needs_test_mode:
         kwargs["test_mode"] = test_mode

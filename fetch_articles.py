@@ -561,12 +561,16 @@ def fetch_prod_articles() -> tuple[list[Article], dict[str, object]]:
     fetch_status["reserved_sources"] = {}
     return articles, fetch_status
 
-def get_candidate_articles_with_stats() -> tuple[list[Article], dict[str, object]]:
+def get_candidate_articles_with_stats(
+    test_mode: bool = False,
+) -> tuple[list[Article], dict[str, object]]:
     history, history_meta = load_history(settings.history_path)
     history_index = build_history_index(history)
     history_index["manual_block_titles"] = {normalize_title(title) for title in settings.blocked_titles}
     history_index["manual_block_urls"] = set(settings.blocked_urls)
-    if settings.run_mode == "test":
+    # Agent 的 test_mode 必须强制走 mock 池；不能只依赖全局 RUN_MODE，
+    # 否则 FC 生产环境里的干跑测试仍会抓取所有官媒网页并长时间阻塞。
+    if test_mode or settings.run_mode == "test":
         raw = load_mock_articles()
         for article in raw:
             article.evidence = build_source_evidence(

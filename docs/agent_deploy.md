@@ -37,6 +37,10 @@ tests/test_agent_orchestrator.py   # 编排集成测试（确定性 Planner + mo
 其余复用现有环境变量（`DASHSCOPE_API_KEY` / `SMTP_*` / `CANDIDATE_STORAGE` 等）。
 `CANDIDATE_STORAGE=oss` 时 `save_candidate` 写入正式 OSS 候选，次日发送链路读取。
 
+正式环境还必须满足：`RUN_MODE=prod`、`SEND_EMAIL=true`、`SMTP_USER` 可用。
+管理员预览没有成功送达时，Agent 返回 `BLOCKED`，不会写入正式候选；只有预览
+成功后才把通过门禁的候选写入本地/OSS 正式存储。
+
 ## 3. 部署步骤（阿里云 FC）
 
 ### 3.1 打包
@@ -54,13 +58,16 @@ bash scripts/build_fc_package.sh
 - 运行时：Python 3.10+
 - 入口：`agent.fc_entry.handler`
 - 内存：建议 ≥ 1024 MB（生成链路耗时较长）
-- 超时：建议 600 秒（FC 最大超时），一次运行通常 2~5 分钟
+- 超时：建议 1200 秒；真实模型、备用模型和模块定点重写叠加时，单次运行可能超过 10 分钟
 
 ### 3.3 环境变量
 
 在函数配置中填写第 2 节全部变量（复用生产环境的 `DASHSCOPE_API_KEY`、SMTP、OSS 等）。
 
 ### 3.4 触发器
+
+初次部署时**不要先创建定时触发器**。先完成第 5 节的本地 dry run 和第 6 节的
+隔离 OSS 演练，确认后再启用定时器。
 
 **定时触发器（每晚 20:00）**：
 - Cron：`0 20 * * *`（Asia/Shanghai）
@@ -82,7 +89,7 @@ bash scripts/build_fc_package.sh
    ↓
 Agent：搜索文章 → 模型选文 → 生成 brief → 渲染 → 质检
    ↓（P0 门禁失败自动定点修复，最多 2 轮）
-通过门禁 → 保存候选（正式存储）→ 发送【预览邮件】到你的邮箱（SMTP_USER）
+通过门禁 → 构建候选 → 发送【预览邮件】到你的邮箱（SMTP_USER）→ 保存正式候选
    ↓
 状态 PUBLISHED：等待次日早晨发送链路自动群发
    ↓
@@ -94,8 +101,14 @@ Agent：搜索文章 → 模型选文 → 生成 brief → 渲染 → 质检
 与方式一（FC 夜间流水线）、方式二（ChatGPT 技能）的发送完全一致：
 **都是生成候选 → 存正式候选 → 次日早晨 morning_send 自动群发**。
 
-运行状态与断点保存在 `agent-runs/{delivery_date}/run.json`
-（`OUTPUT_DIR` 下；若 `CANDIDATE_STORAGE=oss` 建议同步备份该目录）。
+三种方式可以共用标准，但不能在同一投递日期同时写同一个
+`CANDIDATE_PREFIX`。Agent 进入正式候选前，必须暂停原 FC 的
+`nightly_candidate` 触发器；原 `morning_send` 触发器保留。ChatGPT Skill
+当日如已发布候选，也不要再触发 Agent。
+
+运行状态与中间产物保存在 `agent-runs/{delivery_date}/`（`OUTPUT_DIR` 下），
+用于单次执行审计。FC 本地目录不是跨实例持久存储；取消链接直接以 OSS 候选
+为权威状态，不依赖另一个实例能否读取该 `run.json`。
 
 ## 5. 本地验证
 
@@ -108,23 +121,58 @@ python -m unittest tests.test_agent_state tests.test_agent_orchestrator
 ### 5.2 本地 dry run（mock 模型，不发送）
 
 ```bash
-TEST_LLM_MODEL=mock python -m agent.run_local --date 2026-09-16 --test
+RUN_MODE=test \
+TEST_LLM_MODEL=mock \
+SEND_EMAIL=false \
+CANDIDATE_STORAGE=local \
+OUTPUT_DIR=/tmp/gongkao-agent-smoke \
+python -m agent.run_local --date 2026-10-26 --test
 ```
 
 `TEST_LLM_MODEL=mock` 时 Orchestrator 自动使用确定性策略（选前 3 篇、质检放行），
-走完整个状态机但不调模型、不发邮件（预览发送在本地 dry run 中会真实执行，
-如需跳过可临时注释 `agent/orchestrator.py` 中 `send_preview_email` 调用）。
+走完整个“抓取 → 选文 → 生成 → 渲染 → 质检 → 候选构建”链路，但不调模型、
+不写 `candidates/` 或 OSS 正式候选、不发邮件。成功终态为 `VALIDATED`，返回
+`status=dry_run_complete`。禁止通过注释代码跳过安全逻辑。
 
-### 5.3 模拟取消（本地验证安全网）
+### 5.3 隔离 OSS 演练（不接晨间群发）
 
-```bash
-TEST_LLM_MODEL=mock python -m agent.run_local --date 2026-09-16 --test --cancel
-```
+1. 新建独立 Agent FC，但先不加定时触发器。
+2. 设置独立前缀，例如
+   `CANDIDATE_PREFIX=gongkao-morning-mailer/agent-staging/candidates`。
+3. 其余 OSS、模型和 SMTP 配置复用生产值，手动触发一次
+   `{"mode":"agent_nightly","delivery_date":"YYYY-MM-DD"}`。
+4. 预期：管理员收到预览，状态为 `PUBLISHED`，候选只写 staging 前缀；
+   生产 `morning_send` 不会读取该前缀。
+5. 点击取消链接后会先看到确认页；再次点击“确认取消”，确认 staging 候选
+   `quality_gate.overall=fail`。GET 请求不会直接改候选，避免邮件安全扫描器误取消。
 
-会模拟管理员点击取消链接，验证候选被标记、状态进入 BLOCKED。
+取消闸门的离线回归由 `tests.test_agent_orchestrator.TestConfirmFlow` 覆盖。
+
+日志验收时搜索 `agent_quality_audited`。每次初审或修复后复审都会输出一条结构化日志，包含 `repair_round`、`overall`、`p0_count`、`p0_issues` 和模块问题列表。最终 `agent_run_complete` 应显示 `status=published`、`state=PUBLISHED`、`candidate_saved=true` 和 `error=null`。
+
+### 5.4 正式切换
+
+1. 暂停原 FC 的 `nightly_candidate` 定时触发器，保留 `morning_send`。
+2. 把 Agent 的 `CANDIDATE_PREFIX` 切回生产候选前缀。
+3. 手动生成一个次日候选，确认预览、OSS 候选和取消闸门。
+4. 确认无误后再启用 Agent 每晚定时触发器。
+5. 首周每天检查 Agent 返回状态、管理员预览与早晨发送日志。
 
 ## 6. 回滚
 
 删除新函数 `fc_agent_orchestrator` 及其触发器即可，现有 `main.handler`
 流水线不受任何影响。Agent 仅写入自己的 `agent-runs/` 目录和正式候选
 （`save_candidate` 与夜间链路共用同一候选存储，写入前必须过门禁）。
+
+## 7. 验收状态（2026-10-28）
+
+第三条 AI Agent 路径已在阿里云 FC 使用真实模型和隔离 OSS 前缀完成端到端验收，状态为**生产就绪**。已验证：
+
+- 模型选文、结构化 brief 生成、Full/Lite 渲染和完整质量审核；
+- `quality_gate.overall=ok`、`p0_count=0` 后才允许继续；
+- 管理员预览邮件成功送达；
+- 隔离前缀成功写入日期候选与 `latest.json`；
+- 同日期通过门禁的候选不会被重复覆盖；
+- 取消链接 GET 只展示确认页，显式 POST 才将候选写成 `_agent_cancelled=true`、`quality_gate.overall=fail`，阻断次日发送。
+
+验收使用的隔离前缀不会被生产 `morning_send` 读取。生产切换必须按 5.4 节操作：暂停原夜间候选生成器、保留早晨发送器、切换到生产候选前缀，首周持续检查预览、P0 日志、OSS 对象和早晨发送结果。

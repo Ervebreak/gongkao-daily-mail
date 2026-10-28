@@ -69,10 +69,17 @@ GitHub Star 是对代码项目的支持，**不会自动订阅邮件**。本仓�
 
 | 入口 | 调用方式 | 用途 |
 | --- | --- | --- |
+| `agent.fc_entry.handler` | FC 定时事件 + 带签名的 HTTP 取消链接 | 独立 AI Agent 生成、审核、预览并保存次日候选；部署见 [Agent 部署说明](docs/agent_deploy.md) |
 | `fc_weekly_render.handler` | 自行部署后，带 Bearer Token 调用 `POST /weekly-render` | 用 6 份已生成的每日数据离线渲染周 PDF；请求示例见下文 |
 | `render_practice:app` | 订阅邮件中的专属签名链接 | 30 秒申论表达训练网页；部署见 [训练服务说明](docs/deploy_aliyun_fc.md) |
 
 模型 API 由服务端调用；自行部署时在运行环境中配置 `DASHSCOPE_API_KEY` 等参数，订阅邮件的读者无需提供 API Key。本仓库提供代码和调用约定，调用者需使用自己的部署地址与密钥。
+
+### AI Agent 路径状态
+
+截至 2026-10-28，第三条 AI Agent 路径已完成真实模型与隔离 OSS 的端到端验收，可以进入生产切换：真实选文与生成、P0 门禁、管理员预览、日期文件与 `latest.json` 保存、防重复保护，以及两步确认的取消发送闭环均已验证。验收状态和操作边界见 [Agent 部署说明](docs/agent_deploy.md#7-验收状态2026-10-28)。
+
+正式启用时不能让原 `nightly_candidate` 与 Agent 同时写同一日期、同一候选前缀。应暂停原夜间生成触发器、保留 `morning_send`，再把 Agent 从隔离前缀切到生产候选前缀并启用定时触发器。
 
 ## 开发维护说明
 

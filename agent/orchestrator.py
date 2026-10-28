@@ -2,7 +2,7 @@
 
 职责：接收 delivery_date → 按状态机推进 → 在「选文」和「质检放行」
 两个决策点调用模型 → 其余步骤全部执行受控工具（复用生产链路）→
-候选通过门禁后保存到正式候选存储并发送预览（PUBLISHED），次日早晨
+候选通过门禁后先发送管理员预览，送达后保存到正式候选存储（PUBLISHED），次日早晨
 由现有发送链路自动群发，与方式一/方式二完全一致。
 
 安全控制：
@@ -30,6 +30,7 @@ from agent.state import (
     STATE_SEARCHING,
     STATE_SELECTING,
     STATE_SENT,
+    STATE_VALIDATED,
     STATE_PUBLISHED,
     TERMINAL_STATES,
     load_run,
@@ -108,6 +109,7 @@ def _call_model(
     prompt: str,
     stage: str,
     context: dict[str, Any],
+    test_mode: bool,
     planner: Optional[Callable[[str, str, dict[str, Any]], ModelDecision]],
 ) -> ModelDecision:
     """调用一次模型（或确定性 Planner），返回结构化决策。"""
@@ -120,7 +122,7 @@ def _call_model(
     from llm_client import chat_completion
 
     system_prompt = instructions.build_system_prompt(tool_descriptions())
-    raw = chat_completion(_default_model(settings.run_mode != "test"), prompt, system_prompt=system_prompt)
+    raw = chat_completion(_default_model(test_mode), prompt, system_prompt=system_prompt)
     return parse_decision(raw)
 
 
@@ -182,6 +184,23 @@ def run(
     if not delivery_date:
         raise ValueError("delivery_date is required.")
 
+    if not test_mode:
+        from candidate_store import load_candidate
+
+        existing, _ = load_candidate(delivery_date)
+        existing_gate = (
+            existing.get("quality_gate")
+            if isinstance(existing, dict) and isinstance(existing.get("quality_gate"), dict)
+            else {}
+        )
+        if existing_gate.get("overall") == "ok":
+            return {
+                "status": "candidate_already_exists",
+                "delivery_date": delivery_date,
+                "state": "BLOCKED",
+                "message": "该日期已有通过门禁的正式候选，Agent 不覆盖其他路径的产物。",
+            }
+
     state = load_run(delivery_date)
     if state is not None and state.state == STATE_PUBLISHED:
         return {
@@ -209,15 +228,23 @@ def run(
         )
         save_run(state)
 
-    use_mock = test_mode and (settings.test_llm_model or "").strip().lower() == "mock"
+    test_models = {
+        (settings.test_selection_llm_model or "").strip().lower(),
+        (settings.test_llm_model or "").strip().lower(),
+    }
+    use_mock = test_mode and "mock" in test_models
     if planner is None and use_mock:
         planner = DeterministicPlanner()
-    if planner is None and not settings.dashscope_api_key:
-        raise RuntimeError("DASHSCOPE_API_KEY is required for agent orchestration.")
-
     try:
+        if planner is None and not settings.dashscope_api_key:
+            raise RuntimeError("DASHSCOPE_API_KEY is required for agent orchestration.")
+        if not test_mode:
+            _validate_production_runtime()
         return _run_pipeline(state, test_mode=test_mode, planner=planner)
     except Exception as exc:
+        # _run_pipeline 中的工具会持续刷新并保存 state；异常时必须重新读取，
+        # 否则入口持有的旧对象会把真实的调用计数和事件轨迹覆盖掉。
+        state = load_run(delivery_date) or state
         state.last_error = str(exc)[:2000]
         try:
             state.transition(STATE_FAILED, note=f"exception: {exc}")
@@ -274,6 +301,7 @@ def _run_pipeline(
         _select_prompt(delivery_date, search["articles"]),
         "select",
         {"articles": search["articles"]},
+        test_mode,
         planner,
     )
     if decision.decision != "CONTINUE" or decision.next_tool != "select_articles":
@@ -314,6 +342,7 @@ def _run_pipeline(
                     "issues": audit.get("issues") or [],
                     "repair_round": state.repair_round,
                 },
+                test_mode,
                 planner,
             )
         else:
@@ -357,18 +386,50 @@ def _run_pipeline(
         save_run(state)
         return _result(state, "blocked", decision.reason or "blocked by model")
 
-    # 6) PASS：保存候选到正式存储（OSS/本地）→ 发预览 → PUBLISHED（等次日早晨自动发送）
+    # 6) PASS：先只构建 workspace candidate。生产模式必须先成功发送预览，
+    # 再写正式候选存储，避免“预览失败但早晨仍会发送”的窗口。
     _guard()
-    execute_tool("save_candidate", {}, delivery_date=delivery_date, test_mode=test_mode)
+    built = execute_tool("save_candidate", {}, delivery_date=delivery_date, test_mode=True)
     _refresh()
+
+    if test_mode:
+        state.transition(
+            STATE_VALIDATED,
+            note="dry run passed; candidate kept in workspace only",
+        )
+        save_run(state)
+        return {
+            "status": "dry_run_complete",
+            "delivery_date": delivery_date,
+            "run_id": state.run_id,
+            "state": state.state,
+            "candidate": built,
+            "model_calls": state.model_calls,
+            "tool_calls": state.tool_calls,
+            "repair_round": state.repair_round,
+        }
+
     from agent.confirm import send_preview_email
 
-    preview = send_preview_email(delivery_date)
+    candidate = load_workspace(delivery_date, "candidate")
+    if not isinstance(candidate, dict):
+        raise RuntimeError("workspace candidate missing before preview")
+    preview = send_preview_email(delivery_date, candidate=candidate)
     _refresh()  # send_preview_email 会写入 cancel_token，必须重新加载
+    if not preview.get("preview_sent"):
+        state.transition(STATE_BLOCKED, note="preview delivery failed; candidate not published")
+        save_run(state)
+        return _result(state, "blocked", "preview delivery failed; candidate not published")
+
+    published = execute_tool(
+        "save_candidate", {}, delivery_date=delivery_date, test_mode=False
+    )
+    _refresh()
     state.transition(
         STATE_PUBLISHED,
         note="candidate saved and preview sent; morning send pipeline will deliver",
     )
+    state.published = True
     save_run(state)
     return {
         "status": "published",
@@ -376,6 +437,7 @@ def _run_pipeline(
         "run_id": state.run_id,
         "state": state.state,
         "preview": preview,
+        "candidate": published,
         "model_calls": state.model_calls,
         "tool_calls": state.tool_calls,
         "repair_round": state.repair_round,
@@ -393,3 +455,19 @@ def _result(state: RunState, status: str, reason: str) -> dict[str, Any]:
         "tool_calls": state.tool_calls,
         "repair_round": state.repair_round,
     }
+
+
+def _validate_production_runtime() -> None:
+    missing: list[str] = []
+    if not settings.send_email:
+        missing.append("SEND_EMAIL=true")
+    if not settings.smtp_user.strip():
+        missing.append("SMTP_USER")
+    if not (os.environ.get("AGENT_CONFIRM_SECRET") or settings.download_tracking_secret).strip():
+        missing.append("AGENT_CONFIRM_SECRET")
+    if not (os.environ.get("AGENT_CONFIRM_BASE_URL") or "").strip():
+        missing.append("AGENT_CONFIRM_BASE_URL")
+    if missing:
+        raise RuntimeError(
+            "Agent production runtime is incomplete: " + ", ".join(missing)
+        )
