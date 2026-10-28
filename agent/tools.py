@@ -284,6 +284,23 @@ def tool_audit_candidate(delivery_date: str, test_mode: bool = False) -> dict[st
         p1_count=len([i for i in issues if i["severity"] == "P1"]),
     )
     save_run(state)
+    print(
+        json.dumps(
+            {
+                "event": "agent_quality_audited",
+                "delivery_date": delivery_date,
+                "repair_round": state.repair_round,
+                "overall": gate.get("overall"),
+                "p0_count": gate.get("p0_count", 0),
+                "p0_issues": gate.get("p0_issues") or [],
+                "issues": issues,
+            },
+            ensure_ascii=False,
+            default=str,
+            sort_keys=True,
+        ),
+        flush=True,
+    )
     return {
         "tool": "audit_candidate",
         "overall": gate.get("overall"),
@@ -538,7 +555,16 @@ def execute_tool(name: str, arguments: dict[str, Any], *, delivery_date: str, te
     tool = TOOL_REGISTRY.get(name)
     if tool is None:
         raise RuntimeError(f"Unknown tool: {name!r}. Allowed: {sorted(TOOL_REGISTRY)}")
-    kwargs: dict[str, Any] = dict(arguments or {})
+    # Model output may place explanatory fields such as ``reason`` inside
+    # ``arguments`` even though they belong at the decision's top level.  Tool
+    # calls are schema-bound: forward only parameters declared by the selected
+    # tool so harmless model drift cannot become a Python signature error.
+    allowed_parameters = set(tool.parameters)
+    kwargs: dict[str, Any] = {
+        key: value
+        for key, value in dict(arguments or {}).items()
+        if key in allowed_parameters
+    }
     kwargs["delivery_date"] = delivery_date
     if tool.needs_test_mode:
         kwargs["test_mode"] = test_mode

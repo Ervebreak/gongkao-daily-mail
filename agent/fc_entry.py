@@ -67,6 +67,16 @@ def _resolve_delivery_date(event: dict[str, Any]) -> str:
     return (dt.date.today() + dt.timedelta(days=1)).isoformat()
 
 
+def _candidate_saved_from_result(result: dict[str, Any]) -> Any:
+    """Read publication status from both direct and nested tool results."""
+    if result.get("candidate_saved") is not None:
+        return result.get("candidate_saved")
+    candidate = result.get("candidate")
+    if isinstance(candidate, dict):
+        return candidate.get("candidate_saved")
+    return None
+
+
 def handler(event: Any, context: Any = None) -> dict[str, Any]:
     payload = _normalize(event)
     try:
@@ -105,7 +115,7 @@ def handler(event: Any, context: Any = None) -> dict[str, Any]:
             "model_calls": result.get("model_calls"),
             "tool_calls": result.get("tool_calls"),
             "repair_round": result.get("repair_round"),
-            "candidate_saved": result.get("candidate_saved"),
+            "candidate_saved": _candidate_saved_from_result(result),
             "error": result.get("error"),
             "reason": result.get("reason"),
         }

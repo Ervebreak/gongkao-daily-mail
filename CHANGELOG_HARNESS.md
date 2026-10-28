@@ -1,5 +1,22 @@
 # Harness Change Log
 
+## 2026-10-28 - Accept the independent AI Agent path for production rollout
+
+- Complete a real-model, isolated-OSS acceptance run for `fc_agent_orchestrator`: article search and model selection, brief generation, rendering, deterministic quality audit, administrator preview, dated/latest OSS candidate writes, duplicate-candidate protection, and the two-step cancellation gate all passed.
+- The accepted staging run reached `PUBLISHED` with `quality_gate.overall=ok`, `p0_count=0`, no repair round, a delivered administrator preview, and matching `2026-10-29.json` / `latest.json` objects under the isolated Agent prefix. The explicit cancellation POST then set `_agent_cancelled=true` and the gate to fail as designed.
+- Force Agent dry runs to use `mock_articles.json`, include `agent/` and the mock pool in Windows/Linux FC packages, and require both assets during ZIP validation.
+- Preserve safe DashScope provider diagnostics, expose terminal `error` / `reason`, and emit one structured `agent_quality_audited` log per audit round with the exact P0 list.
+- Treat the full generated draft as an intermediate result: high-risk takeaway and quick-read modules proceed to their existing targeted regeneration and strict final contracts instead of discarding the entire draft for one truncated subfield.
+- Bind model tool calls to each registered tool schema. Explanatory drift such as `reason` inside `arguments` is ignored instead of reaching Python functions as an unexpected keyword.
+- Report the nested publication result as `candidate_saved=true` in the FC completion summary after a successful formal candidate write.
+- The Agent path is production-ready. Live cutover still requires pausing the original `nightly_candidate` writer before switching the Agent to the production candidate prefix; keep `morning_send` enabled and monitor the first week. Non-blocking P1 findings remain visible and do not bypass the P0 gate.
+
+## 2026-10-27 - Preserve safe DashScope error details in Agent diagnostics
+
+- Replace opaque `400 Client Error` failures with a bounded, credential-redacted provider diagnostic containing the HTTP status and available DashScope `code`, `message`, request ID, parameter and type fields.
+- Keep API keys, request headers, prompts and arbitrary response fields out of logs. Non-JSON provider errors are whitespace-normalized, redacted and truncated.
+- This changes failure observability only. Model selection, prompts, quality gates, candidate storage, email delivery and test/production isolation are unchanged.
+
 ## 2026-10-25 - Make the independent Agent path safe to dry-run and stage
 
 - Add a `VALIDATED` terminal state for Agent test runs. `test_mode` now builds the complete candidate only inside the per-run workspace and never writes the formal local/OSS candidate or sends an administrator preview.

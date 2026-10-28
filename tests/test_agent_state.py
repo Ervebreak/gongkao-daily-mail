@@ -20,7 +20,7 @@ from agent.state import (
     save_run,
 )
 from agent.confirm import build_confirm_token, verify_confirm_token
-from agent.fc_entry import _normalize
+from agent.fc_entry import _candidate_saved_from_result, _normalize
 
 
 class TestFcEntryNormalization(unittest.TestCase):
@@ -38,6 +38,16 @@ class TestFcEntryNormalization(unittest.TestCase):
 
     def test_non_object_payload_remains_raw(self):
         self.assertEqual(_normalize('[1,2,3]'), {"raw": "[1,2,3]"})
+
+    def test_reads_candidate_saved_from_published_tool_result(self):
+        self.assertTrue(
+            _candidate_saved_from_result(
+                {
+                    "status": "published",
+                    "candidate": {"tool": "save_candidate", "candidate_saved": True},
+                }
+            )
+        )
 
 
 class TestParseDecision(unittest.TestCase):

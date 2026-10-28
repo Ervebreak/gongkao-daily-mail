@@ -58,7 +58,7 @@ bash scripts/build_fc_package.sh
 - 运行时：Python 3.10+
 - 入口：`agent.fc_entry.handler`
 - 内存：建议 ≥ 1024 MB（生成链路耗时较长）
-- 超时：建议 600 秒（FC 最大超时），一次运行通常 2~5 分钟
+- 超时：建议 1200 秒；真实模型、备用模型和模块定点重写叠加时，单次运行可能超过 10 分钟
 
 ### 3.3 环境变量
 
@@ -148,6 +148,8 @@ python -m agent.run_local --date 2026-10-26 --test
 
 取消闸门的离线回归由 `tests.test_agent_orchestrator.TestConfirmFlow` 覆盖。
 
+日志验收时搜索 `agent_quality_audited`。每次初审或修复后复审都会输出一条结构化日志，包含 `repair_round`、`overall`、`p0_count`、`p0_issues` 和模块问题列表。最终 `agent_run_complete` 应显示 `status=published`、`state=PUBLISHED`、`candidate_saved=true` 和 `error=null`。
+
 ### 5.4 正式切换
 
 1. 暂停原 FC 的 `nightly_candidate` 定时触发器，保留 `morning_send`。
@@ -161,3 +163,16 @@ python -m agent.run_local --date 2026-10-26 --test
 删除新函数 `fc_agent_orchestrator` 及其触发器即可，现有 `main.handler`
 流水线不受任何影响。Agent 仅写入自己的 `agent-runs/` 目录和正式候选
 （`save_candidate` 与夜间链路共用同一候选存储，写入前必须过门禁）。
+
+## 7. 验收状态（2026-10-28）
+
+第三条 AI Agent 路径已在阿里云 FC 使用真实模型和隔离 OSS 前缀完成端到端验收，状态为**生产就绪**。已验证：
+
+- 模型选文、结构化 brief 生成、Full/Lite 渲染和完整质量审核；
+- `quality_gate.overall=ok`、`p0_count=0` 后才允许继续；
+- 管理员预览邮件成功送达；
+- 隔离前缀成功写入日期候选与 `latest.json`；
+- 同日期通过门禁的候选不会被重复覆盖；
+- 取消链接 GET 只展示确认页，显式 POST 才将候选写成 `_agent_cancelled=true`、`quality_gate.overall=fail`，阻断次日发送。
+
+验收使用的隔离前缀不会被生产 `morning_send` 读取。生产切换必须按 5.4 节操作：暂停原夜间候选生成器、保留早晨发送器、切换到生产候选前缀，首周持续检查预览、P0 日志、OSS 对象和早晨发送结果。

@@ -40,7 +40,7 @@ jobs:
       - name: Run send-gate, weekly-renderer and deployment regressions
         shell: pwsh
         run: |
-          python -m pytest tests/test_agent_state.py tests/test_agent_orchestrator.py tests/test_morning_gate_drift.py tests/test_fc_weekly_render.py tests/test_build_weekly_package.py tests/test_weekly_typst_export_materials.py tests/test_fc_package_zip.py -q
+          python -m pytest tests/test_agent_state.py tests/test_agent_orchestrator.py tests/test_agent_tool_argument_filtering.py tests/test_initial_draft_contract.py tests/test_llm_client_http_error.py tests/test_morning_gate_drift.py tests/test_fc_weekly_render.py tests/test_build_weekly_package.py tests/test_weekly_typst_export_materials.py tests/test_fc_package_zip.py -q
           if ($LASTEXITCODE -ne 0) { throw "Regression tests failed" }
 
       - name: Build function.zip

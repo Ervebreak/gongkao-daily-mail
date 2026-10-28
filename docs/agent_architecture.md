@@ -77,6 +77,7 @@ CREATED → SEARCHING → SELECTING → GENERATING → AUDITING → REPAIRING
 
 - 非法决策（如 `SEND_NOW_WITHOUT_APPROVAL`）一律回退为 `BLOCKED`
 - 门禁 `overall != ok` 时模型无权 PASS，只能修复或阻断
+- 工具执行只接收注册 schema 声明的参数；模型把 `reason` 等解释字段误放进 `arguments` 时会被过滤，不会穿透到 Python 函数签名
 
 ## 5. 安全控制
 
@@ -92,6 +93,7 @@ CREATED → SEARCHING → SELECTING → GENERATING → AUDITING → REPAIRING
   （state / repair_round / model_calls / tool_calls / history 事件轨迹）
 - 中间产物（articles / brief / rendered / quality / candidate）落盘同目录，
   支持断点续跑与事后审计
+- 每轮审核向 FC 日志输出 `agent_quality_audited`，包含修复轮次、门禁结果和完整 P0 列表；最终输出 `agent_run_complete`
 
 `agent-runs/` 位于 FC 本地临时目录，只用于单次运行审计，不能作为跨实例取消闸门
 的唯一依据。取消请求以正式候选存储为权威状态，即使 HTTP 请求落到另一个 FC

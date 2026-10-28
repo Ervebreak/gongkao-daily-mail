@@ -95,3 +95,5 @@ def test_builders_share_zip_validation_and_fail_on_native_command_errors() -> No
     assert "CreateFromDirectory" not in powershell
     assert powershell.count("if ($LASTEXITCODE -ne 0)") >= 3
     assert "knowledge_base" in shell
+    assert "mock_articles.json" in powershell and "mock_articles.json" in shell
+    assert '"agent"' in powershell and "for dir in agent" in shell
