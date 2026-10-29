@@ -1,5 +1,13 @@
 # Harness Change Log
 
+## 2026-10-28 - Reframe the README as a product case study
+
+- Reorganize the public README for portfolio and hiring review while retaining the product experience and self-deployment sections.
+- Document the actual research inputs without inventing sample sizes: questionnaire/group feedback, email usage feedback, informal conversations, and founder-as-user observation.
+- Connect user findings to requirements, product priorities, major iterations, three delivery paths, operating controls, qualitative outcomes, and the project owner's end-to-end responsibilities.
+- Keep user counts and sensitive operating metrics private; make no change to generation, quality gates, deployment, subscriptions, OSS, or email delivery behavior.
+- Ground the research section in the owner's private feedback/communication workbook: summarize reading differences, answer usability, printable review, output practice, and access issues anonymously. Distinguish qualitative feedback from measured retention or learning outcomes; do not publish the original workbook or personal identifiers.
+
 ## 2026-10-28 - Accept the independent AI Agent path for production rollout
 
 - Complete a real-model, isolated-OSS acceptance run for `fc_agent_orchestrator`: article search and model selection, brief generation, rendering, deterministic quality audit, administrator preview, dated/latest OSS candidate writes, duplicate-candidate protection, and the two-step cancellation gate all passed.
